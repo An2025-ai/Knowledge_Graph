@@ -1,0 +1,294 @@
+# GEO 第一层通用知识层 — 来源权威规则
+# 版本: 1.0.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-07
+  updated_at: 2026-08-07
+  status: active
+  scope: shared
+  description: >
+    定义来源在不同场景下的适用性规则、证据链规则和信息质量规则。
+    覆盖事实/主张的证据要求、来源优先级和冲突处理。
+
+# ============================================================
+# 规则定义
+# ============================================================
+
+rules:
+
+  # --- 事实与主张规则 ---
+  - id: rule_fact_001
+    rule: 没有来源的内容不得标记为 fact
+    category: fact_claim
+    applies_to: [fact]
+    priority: critical
+    description: >
+      任何标记为 fact 的陈述必须至少关联一个来源。
+      无法提供来源的陈述应标记为 claim 或 observation。
+    positive_example:
+      statement: "Salesforce 成立于 1999 年"
+      source: 官方公司信息页面
+      classification: fact
+    negative_example:
+      statement: "Salesforce 是最好用的 CRM"
+      source: 无
+      classification: 不应标记为 fact，应标记为 claim
+    version: 1.0.0
+
+  - id: rule_fact_002
+    rule: 统计数字必须保存原始数字、单位、时间和适用范围
+    category: fact_claim
+    applies_to: [fact]
+    priority: critical
+    description: >
+      任何包含数值的 fact 必须记录完整的上下文信息：
+      原始数字（不能仅保留百分比）、单位、统计时间范围、
+      适用地理/行业范围。
+    positive_example:
+      statement: "2025 年全球 CRM 市场规模为 880 亿美元"
+      metadata:
+        original_value: 88,000,000,000
+        unit: USD
+        year: 2025
+        scope: 全球
+        source: IDC 2025 年报告
+    negative_example:
+      statement: "CRM 市场规模很大，超过 800 亿"
+      issue: 缺少精确数字、单位、年份和来源
+    version: 1.0.0
+
+  - id: rule_fact_003
+    rule: 品牌自述应标记为 claim，不能直接转成客观结论
+    category: fact_claim
+    applies_to: [claim, fact]
+    priority: critical
+    description: >
+      品牌官网或官方材料中的自我描述（如"行业领先"、"最安全"、
+      "市场第一"）是有立场的陈述，应标记为 self_claim，
+      不应直接转换为客观 fact。
+    positive_example:
+      statement: "我们是最安全的 CRM 平台"
+      source: 某品牌官网
+      classification: claim (self_claim)
+      evidence_level: unverifiable
+    negative_example:
+      statement: "某品牌是最安全的 CRM 平台"
+      classification: fact（错误：应标记为 claim）
+    version: 1.0.0
+
+  - id: rule_fact_004
+    rule: 过期内容必须有 valid_to 或降低可信度
+    category: fact_claim
+    applies_to: [fact, claim]
+    priority: high
+    description: >
+      有时效性的事实和主张必须标注有效期限。
+      超过有效期的信息应降低 confidence 或标记为 inactive。
+    positive_example:
+      statement: "2024 年 Q1 产品价格"
+      valid_from: 2024-01-01
+      valid_to: 2024-03-31
+      status: inactive
+    negative_example:
+      statement: 产品价格是每月 100 元（2022 年价格）
+      issue: 未标注有效期限，可能被误用为当前价格
+    version: 1.0.0
+
+  # --- 来源适用性规则 ---
+  - id: rule_source_001
+    rule: 官方来源适合证明产品能力和品牌立场
+    category: source_usage
+    applies_to: [official]
+    priority: high
+    description: >
+      官方来源（官网、产品文档、官方公告）是证明产品能力、
+      功能特性、品牌立场的最佳来源。但不能作为独立的客观评价。
+    suitable_scenarios:
+      - 产品功能列表
+      - 支持的部署方式
+      - 官方定价
+      - 公司基本信息
+    unsuitable_scenarios:
+      - 第三方客观评价
+      - 市场份额数据
+      - 与竞品的对比
+    version: 1.0.0
+
+  - id: rule_source_002
+    rule: 政府和标准机构适合证明政策、规范和合规要求
+    category: source_usage
+    applies_to: [government_regulatory]
+    priority: high
+    description: >
+      政府文件、监管规定、行业标准是证明合规要求和政策要求的
+      权威来源。其权威性来源于机构的法定地位。
+    version: 1.0.0
+
+  - id: rule_source_003
+    rule: 学术论文适合证明研究结论和技术机制
+    category: source_usage
+    applies_to: [academic]
+    priority: high
+    description: >
+      经过同行评议的学术论文是证明技术原理、算法机制、
+      研究结论的可靠来源。但需注意研究的时效性和适用范围。
+    version: 1.0.0
+
+  - id: rule_source_004
+    rule: 第三方评测适合比较体验，但不能单独证明市场份额
+    category: source_usage
+    applies_to: [third_party_review]
+    priority: medium
+    description: >
+      第三方评测提供有价值的用户体验比较和功能对比，
+      但其样本量和评测方法限制了其在市场数据方面的权威性。
+      市场份额需要多个来源交叉验证或行业报告支撑。
+    version: 1.0.0
+
+  - id: rule_source_005
+    rule: 社区内容适合发现用户问题，不适合单独作为行业事实
+    category: source_usage
+    applies_to: [community]
+    priority: medium
+    description: >
+      社区内容（论坛、社交媒体、用户评价）是发现用户痛点、
+      了解真实需求的重要渠道，但存在样本偏差和主观性，
+      需要多个来源交叉验证才能作为行业层面的结论。
+    version: 1.0.0
+
+  - id: rule_source_006
+    rule: 搜索观测是瞬时快照，需多次验证后才能晋升
+    category: source_usage
+    applies_to: [search_observation]
+    priority: high
+    description: >
+      搜索观测反映特定时间、特定条件下的搜索结果，
+      不应直接作为事实或趋势判断的依据。
+      需要至少 3 次不同时间的观测交叉验证后才能晋升。
+    promotion_requirements:
+      min_observations: 3
+      min_time_span_days: 7
+      verification_method: cross_time_consistency
+    version: 1.0.0
+
+  # --- 证据链规则 ---
+  - id: rule_evidence_001
+    rule: 事实、主张、观测和推断必须分开输出
+    category: evidence_chain
+    applies_to: [fact, claim, observation]
+    priority: critical
+    description: >
+      在生成任何输出时，必须明确区分信息的类型：
+      fact（有证据的事实）、claim（有来源的主张）、
+      observation（观测结果）、inference（推理结论）。
+      不得将不同类型的信息混合为同一类输出。
+    version: 1.0.0
+
+  - id: rule_evidence_002
+    rule: 需要外部证据的结论必须带引用
+    category: evidence_chain
+    applies_to: [fact, claim]
+    priority: critical
+    description: >
+      任何需要外部证据支撑的结论必须附带来源引用。
+      引用格式应包含来源 ID 和可追溯的 URL（如适用）。
+    version: 1.0.0
+
+  - id: rule_evidence_003
+    rule: 不自动生成无依据的绝对化表述
+    category: evidence_chain
+    applies_to: [content, claim]
+    priority: high
+    description: >
+      禁止自动生成"行业第一"、"最佳"、"绝对安全"等
+      无客观证据支撑的表述。如必须使用，需附带明确证据
+      和限定条件。
+    forbidden_patterns:
+      - 行业第一（无第三方数据）
+      - 最佳（无对比依据）
+      - 绝对安全（无安全认证）
+      - 100% 满意（无调查数据）
+    version: 1.0.0
+
+  - id: rule_evidence_004
+    rule: 不确定时输出待核验项
+    category: evidence_chain
+    applies_to: [fact, claim, observation]
+    priority: medium
+    description: >
+      当信息不确定或证据不足时，应明确标记为"待核验"，
+      而非给出模糊或可能错误的结论。
+    version: 1.0.0
+
+  # --- 质量规则 ---
+  - id: rule_quality_001
+    rule: 优先使用结构化事实和高权威来源
+    category: quality
+    applies_to: [fact, source]
+    priority: high
+    description: >
+      在检索和引用信息时，优先使用结构化存储的事实（fact）
+      和高权威来源（high authority_level）。
+      低权威来源仅在高权威来源不可用时作为补充。
+    source_priority_order:
+      - 结构化事实 (fact)
+      - 高权威来源 (high)
+      - 中权威来源 (medium)
+      - 低权威来源 (low)
+    version: 1.0.0
+
+  - id: rule_quality_002
+    rule: 同一事实的重复来源合并
+    category: quality
+    applies_to: [fact, source]
+    priority: medium
+    description: >
+      当多个来源支持同一事实时，合并来源引用而非创建多个重复事实。
+      合并时保留所有来源引用，优先展示高权威来源。
+    version: 1.0.0
+
+  - id: rule_quality_003
+    rule: 冲突信息显式标记
+    category: quality
+    applies_to: [fact, claim, source]
+    priority: high
+    description: >
+      当发现信息冲突时，必须显式标记冲突类型和冲突双方的信息，
+      保留双方来源，不自动合并为单一事实。
+    version: 1.0.0
+
+  - id: rule_quality_004
+    rule: 先过滤再检索
+    category: quality
+    applies_to: [fact, claim, content]
+    priority: medium
+    description: >
+      信息检索应先按 brand、industry、topic、time、permission
+      维度过滤，再在过滤后的范围内做语义检索。避免在全量数据中
+      盲目检索导致不相关结果。
+    version: 1.0.0
+
+  - id: rule_quality_005
+    rule: 默认先给摘要，需要时才取原文
+    category: quality
+    applies_to: [content, fact]
+    priority: medium
+    description: >
+      在输出中默认先给摘要和关键信息，仅在用户明确要求
+      或需要核验时才提供原文证据。避免信息过载。
+    version: 1.0.0
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-07
+    changes:
+      - 初始版本，定义 20 条质量规则
+      - 覆盖事实主张规则（4 条）、来源适用性规则（6 条）、证据链规则（4 条）、质量规则（5 条）
+      - 每条规则包含正反例
+    author: Brand Atlas Team

@@ -1,0 +1,276 @@
+# GEO 第一层通用知识层 — 来源类型定义
+# 版本: 1.0.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-07
+  updated_at: 2026-08-07
+  status: active
+  scope: shared
+  description: >
+    定义 GEO/Brand Atlas 系统中使用的全部来源类型（8 种）。
+    每种来源类型包含权威等级、适用场景、不适用场景和验证规则。
+
+# ============================================================
+# 来源类型定义
+# ============================================================
+
+source_types:
+
+  # --- 1. 官方来源 ---
+  - type: official
+    name: 官方来源
+    name_en: Official Source
+    definition: >
+      品牌或产品官方发布的网站、文档、公告和声明。
+      包括官网、产品文档、官方博客、新闻稿、官方社交媒体账号。
+    authority_level: high
+    suitable_for:
+      - 产品能力和功能描述
+      - 品牌立场和官方声明
+      - 价格和版本信息
+      - 公司基本信息
+    not_suitable_for:
+      - 独立的市场份额数据
+      - 客观的产品对比
+      - 第三方验证的声明
+    examples:
+      - 品牌官网 (www.salesforce.com)
+      - 产品文档和帮助中心
+      - 官方新闻稿
+      - 官方 GitHub 仓库
+    validation_rules:
+      - 验证 URL 归属品牌官方域名
+      - 记录访问时间和页面版本
+      - 品牌自述标记为 claim，非 fact
+      - 区分官方信息与用户生成内容
+    version: 1.0.0
+
+  # --- 2. 政府/监管来源 ---
+  - type: government_regulatory
+    name: 政府与监管机构
+    name_en: Government & Regulatory
+    definition: >
+      政府机构、监管机构、标准化组织发布的政策、法规、标准和统计数据。
+    authority_level: high
+    suitable_for:
+      - 政策和规范要求
+      - 合规要求
+      - 行业标准
+      - 官方统计数据
+    not_suitable_for:
+      - 产品功能评价
+      - 用户体验判断
+      - 商业趋势预测
+    examples:
+      - 工信部政策文件
+      - 国家统计局数据
+      - ISO 标准文档
+      - 行业监管规定
+    validation_rules:
+      - 验证发布机构资质
+      - 确认文件版本和生效日期
+      - 注意政策适用范围和地域限制
+      - 区分强制性规定和指导性建议
+    version: 1.0.0
+
+  # --- 3. 学术来源 ---
+  - type: academic
+    name: 学术研究
+    name_en: Academic Research
+    definition: >
+      学术论文、会议论文、学术期刊、研究机构报告等经过同行评议或学术审核的内容。
+    authority_level: high
+    suitable_for:
+      - 研究结论和技术机制
+      - 理论框架和模型
+      - 实验数据和统计方法
+      - 系统性综述
+    not_suitable_for:
+      - 实时产品评价
+      - 当前市场状态
+      - 商业可行性判断
+    examples:
+      - arXiv 论文
+      - 学术期刊论文
+      - 学术会议论文
+      - 研究机构白皮书
+    validation_rules:
+      - 检查同行评议状态
+      - 注意研究时效性
+      - 区分研究结论和作者观点
+      - 关注研究方法和样本限制
+    version: 1.0.0
+
+  # --- 4. 第三方评测 ---
+  - type: third_party_review
+    name: 第三方评测
+    name_en: Third-Party Review
+    definition: >
+      独立机构或个人对产品、服务的评测、对比和分析。
+      包括专业评测机构、行业分析师报告、独立博客评测。
+    authority_level: medium
+    suitable_for:
+      - 产品体验比较
+      - 功能对比分析
+      - 用户体验反馈
+      - 采购决策参考
+    not_suitable_for:
+      - 单独证明市场份额
+      - 作为唯一的产品能力证据
+      - 证明品牌整体声誉
+    examples:
+      - Gartner 魔力象限
+      - G2/Capterra 用户评价
+      - 独立科技博客评测
+      - 行业分析师报告
+    validation_rules:
+      - 检查评测方法和样本量
+      - 注意评测时间和版本
+      - 区分付费评测和独立评测
+      - 关注评测者的利益冲突声明
+    version: 1.0.0
+
+  # --- 5. 社区内容 ---
+  - type: community
+    name: 社区与用户内容
+    name_en: Community & User Content
+    definition: >
+      用户社区、论坛、社交媒体、问答平台上的用户讨论和内容。
+      包括技术社区、产品论坛、用户评价、社交媒体讨论。
+    authority_level: low
+    suitable_for:
+      - 发现用户问题和痛点
+      - 了解用户真实使用体验
+      - 收集产品反馈
+      - 识别热门话题
+    not_suitable_for:
+      - 单独作为行业事实
+      - 作为产品能力的权威证据
+      - 证明市场趋势
+    examples:
+      - 知乎讨论
+      - Reddit 社区
+      - Stack Overflow
+      - 产品用户论坛
+    validation_rules:
+      - 区分个人观点和群体共识
+      - 注意时效性和样本偏差
+      - 验证用户身份真实性（如可能）
+      - 多条来源交叉验证
+    version: 1.0.0
+
+  # --- 6. 媒体报道 ---
+  - type: media
+    name: 媒体报道
+    name_en: Media Coverage
+    definition: >
+      新闻媒体、行业媒体、财经媒体对品牌、产品、行业的报道和分析。
+    authority_level: medium
+    suitable_for:
+      - 品牌动态和事件
+      - 行业趋势报道
+      - 融资和财务信息
+      - 市场事件
+    not_suitable_for:
+      - 作为技术细节的唯一来源
+      - 证明产品实际能力
+      - 作为独立市场数据
+    examples:
+      - 36Kr 报道
+      - TechCrunch 新闻
+      - 行业媒体分析
+      - 财经媒体报道
+    validation_rules:
+      - 区分新闻报道和付费软文
+      - 验证信息来源
+      - 注意报道角度和立场
+      - 交叉验证关键事实
+    version: 1.0.0
+
+  # --- 7. 行业报告 ---
+  - type: industry_report
+    name: 行业研究报告
+    name_en: Industry Report
+    definition: >
+      专业的市场研究机构、咨询公司、行业协会发布的市场分析报告和行业数据。
+    authority_level: high
+    suitable_for:
+      - 市场规模和增长数据
+      - 竞争格局分析
+      - 行业趋势判断
+      - 用户行为研究
+    not_suitable_for:
+      - 单个产品的详细功能对比
+      - 实时市场变化
+      - 替代直接用户调研
+    examples:
+      - IDC 市场报告
+      - 艾瑞咨询报告
+      - 麦肯锡行业分析
+      - 中国信通院白皮书
+    validation_rules:
+      - 检查报告方法论和样本
+      - 注意报告发布时间
+      - 区分预测数据和历史数据
+      - 关注研究范围的地理和行业边界
+    version: 1.0.0
+
+  # --- 8. 搜索观测 ---
+  - type: search_observation
+    name: 搜索观测
+    name_en: Search Observation
+    definition: >
+      通过搜索引擎或 AI 搜索引擎获取的即时观测结果。
+      包括搜索结果排名、AI 回答内容、品牌提及等。
+    authority_level: low
+    suitable_for:
+      - 了解当前搜索可见度
+      - 发现 AI 回答中的品牌提及
+      - 监测竞品搜索表现
+      - 识别内容缺口
+    not_suitable_for:
+      - 作为客观事实
+      - 作为长期趋势判断
+      - 直接写入稳定规则
+    examples:
+      - 某次 AI 搜索的品牌提及
+      - 搜索结果页排名快照
+      - 搜索引擎的 AI 摘要
+    validation_rules:
+      - 记录观测时间和条件
+      - 单次观测不直接作为事实
+      - 多次观测验证后晋升
+      - 标注搜索引擎和地域
+    version: 1.0.0
+
+# ============================================================
+# 来源权威等级汇总
+# ============================================================
+
+authority_levels:
+  high:
+    - official
+    - government_regulatory
+    - academic
+    - industry_report
+  medium:
+    - third_party_review
+    - media
+  low:
+    - community
+    - search_observation
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-07
+    changes:
+      - 初始版本，定义 8 种来源类型
+      - 建立权威等级三层体系
+      - 每种来源包含适用场景、不适用场景和验证规则
+    author: Brand Atlas Team

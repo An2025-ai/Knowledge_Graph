@@ -1,0 +1,488 @@
+# GEO 第一层通用知识层 — 意图定义
+# 版本: 1.0.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-07
+  updated_at: 2026-08-07
+  status: active
+  scope: shared
+  description: >
+    定义用户搜索意图的双层分类模型：主意图（13 种）+ 决策阶段（7 种）。
+    每种意图类型包含问题模式、期望回答结构、偏好证据类型和内容类型建议。
+
+# ============================================================
+# 决策阶段定义
+# ============================================================
+
+decision_stages:
+  - id: awareness
+    name: 认知
+    name_en: Awareness
+    description: 用户首次意识到某个概念、问题或解决方案的存在
+    typical_behavior: 浏览式搜索、宽泛的问题、概念解释类查询
+    order: 1
+
+  - id: problem
+    name: 问题识别
+    name_en: Problem Identification
+    description: 用户明确识别到自己的痛点或需求
+    typical_behavior: 症状描述、问题诊断、痛点验证
+    order: 2
+
+  - id: solution
+    name: 方案探索
+    name_en: Solution Exploration
+    description: 用户主动寻找解决方案，了解有哪些可选方案
+    typical_behavior: 品类了解、方案对比、功能研究
+    order: 3
+
+  - id: evaluation
+    name: 比较评估
+    name_en: Evaluation
+    description: 用户在多个候选方案之间进行比较和评估
+    typical_behavior: 产品对比、评测查看、价格比较
+    order: 4
+
+  - id: decision
+    name: 购买决策
+    name_en: Decision
+    description: 用户准备做出最终选择，寻找购买或签约信息
+    typical_behavior: 价格查询、案例验证、供应商筛选
+    order: 5
+
+  - id: implementation
+    name: 使用实施
+    name_en: Implementation
+    description: 用户已购买/采用，正在实施或使用中
+    typical_behavior: 操作指南、故障排除、最佳实践
+    order: 6
+
+  - id: retention
+    name: 复购/替代
+    name_en: Retention / Replacement
+    description: 用户评估是否续用、升级或更换现有方案
+    typical_behavior: 替代方案、升级评估、续约决策
+    order: 7
+
+# ============================================================
+# 主意图类型定义
+# ============================================================
+
+intent_types:
+
+  # --- 1. definition ---
+  - id: intent_definition
+    name: 定义/是什么
+    name_en: Definition
+    decision_stage: awareness
+    description: 用户希望了解一个概念、术语或事物的基本定义和含义
+    question_patterns:
+      - "什么是 {term}？"
+      - "{term} 是什么意思？"
+      - "{term} 的定义是什么？"
+      - "What is {term}?"
+    expected_answer_blocks:
+      - definition
+      - key_characteristics
+      - related_concepts
+      - simple_examples
+    preferred_evidence:
+      - official_definitions
+      - academic_sources
+      - authoritative_standards
+    content_types:
+      - definition_article
+      - glossary_entry
+      - concept_explainer
+    quality_checks:
+      - must_provide_clear_definition
+      - must_distinguish_from_similar_terms
+      - must_avoid_oversimplification
+    version: 1.0.0
+
+  # --- 2. education ---
+  - id: intent_education
+    name: 教育/原理
+    name_en: Education
+    decision_stage: awareness
+    description: 用户希望深入理解某个概念的原理、机制或背景
+    question_patterns:
+      - "{term} 的原理是什么？"
+      - "{term} 是如何工作的？"
+      - "为什么 {statement}？"
+      - "How does {term} work?"
+    expected_answer_blocks:
+      - background_context
+      - mechanism_explanation
+      - key_principles
+      - practical_implications
+    preferred_evidence:
+      - academic_sources
+      - authoritative_explanations
+      - industry_standards
+    content_types:
+      - educational_article
+      - whitepaper
+      - video_tutorial
+    quality_checks:
+      - must_explain_mechanism
+      - must_provide_context
+      - must_avoid_unsupported_claims
+    version: 1.0.0
+
+  # --- 3. problem_solving ---
+  - id: intent_problem_solving
+    name: 问题解决
+    name_en: Problem Solving
+    decision_stage: problem
+    description: 用户遇到了具体问题，希望找到解决方案
+    question_patterns:
+      - "如何解决 {problem}？"
+      - "{problem} 怎么办？"
+      - "{problem} 的原因是什么？"
+      - "How to fix {problem}?"
+    expected_answer_blocks:
+      - problem_diagnosis
+      - solution_steps
+      - root_causes
+      - prevention_tips
+    preferred_evidence:
+      - official_documentation
+      - expert_guides
+      - community_solutions
+    content_types:
+      - troubleshooting_guide
+      - how_to_article
+      - faq
+    quality_checks:
+      - must_identify_root_cause
+      - must_provide_actionable_steps
+      - must_acknowledge_limitations
+    version: 1.0.0
+
+  # --- 4. how_to ---
+  - id: intent_how_to
+    name: 操作方法
+    name_en: How-To
+    decision_stage: implementation
+    description: 用户希望获得完成特定任务的分步操作指导
+    question_patterns:
+      - "如何 {action}？"
+      - "{action} 的步骤是什么？"
+      - "怎么 {action}？"
+      - "How to {action}?"
+    expected_answer_blocks:
+      - step_by_step_instructions
+      - prerequisites
+      - expected_outcome
+      - common_mistakes
+    preferred_evidence:
+      - official_documentation
+      - verified_tutorials
+      - expert_guides
+    content_types:
+      - step_by_step_guide
+      - video_tutorial
+      - quick_start_guide
+    quality_checks:
+      - must_include_all_steps
+      - must_list_prerequisites
+      - must_warn_about_common_pitfalls
+    version: 1.0.0
+
+  # --- 5. comparison ---
+  - id: intent_comparison
+    name: 对比选择
+    name_en: Comparison
+    decision_stage: evaluation
+    description: 用户希望在多个选项之间进行对比，以做出选择
+    question_patterns:
+      - "{A} 和 {B} 哪个更好？"
+      - "{A} 和 {B} 有什么区别？"
+      - "{category} 产品应该怎么选？"
+      - "{A} vs {B} for {use_case}?"
+    expected_answer_blocks:
+      - comparison_dimensions
+      - applicable_audience
+      - strengths_and_limits
+      - recommendation_conditions
+    preferred_evidence:
+      - official_product_docs
+      - independent_reviews
+      - customer_case
+    content_types:
+      - comparison_article
+      - buyer_guide
+      - evaluation_table
+    quality_checks:
+      - must_define_comparison_dimensions
+      - must_avoid_unverified_superlatives
+      - must_note_conditions_for_each_recommendation
+    version: 1.0.0
+
+  # --- 6. review ---
+  - id: intent_review
+    name: 评测验证
+    name_en: Review
+    decision_stage: evaluation
+    description: 用户希望了解产品或服务的实际表现、优缺点和用户反馈
+    question_patterns:
+      - "{product} 怎么样？"
+      - "{product} 好用吗？"
+      - "{product} 的优缺点？"
+      - "{product} review?"
+    expected_answer_blocks:
+      - overall_assessment
+      - pros_and_cons
+      - real_user_experiences
+      - performance_metrics
+    preferred_evidence:
+      - independent_reviews
+      - user_testimonials
+      - benchmark_data
+    content_types:
+      - product_review
+      - test_report
+      - user_rating_summary
+    quality_checks:
+      - must_include_both_pros_and_cons
+      - must_distinguish_verified_from_unverified
+      - must_disclose_test_conditions
+    version: 1.0.0
+
+  # --- 7. recommendation ---
+  - id: intent_recommendation
+    name: 推荐
+    name_en: Recommendation
+    decision_stage: solution
+    description: 用户希望获得产品、方案或服务的推荐建议
+    question_patterns:
+      - "有什么好的 {category} 推荐？"
+      - "最适合 {use_case} 的 {category} 是什么？"
+      - "推荐几个 {category}？"
+      - "Best {category} for {use_case}?"
+    expected_answer_blocks:
+      - recommended_options
+      - selection_criteria
+      - fit_for_different_needs
+      - pricing_overview
+    preferred_evidence:
+      - independent_reviews
+      - market_analysis
+      - expert_opinions
+    content_types:
+      - recommendation_list
+      - top_picks_article
+      - buyer_guide
+    quality_checks:
+      - must_disclose_selection_criteria
+      - must_provide_options_for_different_needs
+      - must_avoid_undisclosed_sponsorship
+    version: 1.0.0
+
+  # --- 8. pricing ---
+  - id: intent_pricing
+    name: 价格/成本
+    name_en: Pricing
+    decision_stage: decision
+    description: 用户希望了解产品或服务的价格、成本和性价比
+    question_patterns:
+      - "{product} 多少钱？"
+      - "{product} 价格是多少？"
+      - "{category} 的收费标准？"
+      - "{product} pricing?"
+    expected_answer_blocks:
+      - price_range
+      - pricing_model
+      - cost_breakdown
+      - value_comparison
+    preferred_evidence:
+      - official_pricing_pages
+      - third_party_cost_analysis
+    content_types:
+      - pricing_guide
+      - cost_comparison
+      - roi_calculator
+    quality_checks:
+      - must_note_pricing_source_and_date
+      - must_distinguish_list_price_from_actual_cost
+      - must_warn_about_hidden_costs
+    version: 1.0.0
+
+  # --- 9. alternative ---
+  - id: intent_alternative
+    name: 替代方案
+    name_en: Alternative
+    decision_stage: retention
+    description: 用户希望寻找当前方案的替代品或备选方案
+    question_patterns:
+      - "{product} 的替代品有哪些？"
+      - "有没有类似 {product} 的工具？"
+      - "{product} alternatives?"
+      - "除了 {product} 还有什么选择？"
+    expected_answer_blocks:
+      - alternative_options
+      - migration_considerations
+      - feature_parity
+      - switching_cost
+    preferred_evidence:
+      - product_comparisons
+      - migration_guides
+      - user_experiences
+    content_types:
+      - alternative_list
+      - migration_guide
+      - comparison_table
+    quality_checks:
+      - must_explain_why_each_is_an_alternative
+      - must_address_switching_costs
+      - must_avoid_biased_comparisons
+    version: 1.0.0
+
+  # --- 10. risk ---
+  - id: intent_risk
+    name: 风险/限制
+    name_en: Risk / Limitations
+    decision_stage: evaluation
+    description: 用户希望了解某个方案的风险、限制、缺点或潜在问题
+    question_patterns:
+      - "{product} 有什么缺点？"
+      - "使用 {product} 有什么风险？"
+      - "{product} 的局限性？"
+      - "{product} risks and limitations?"
+    expected_answer_blocks:
+      - identified_risks
+      - known_limitations
+      - mitigation_strategies
+      - when_not_to_use
+    preferred_evidence:
+      - independent_audits
+      - user_reported_issues
+      - technical_analyses
+    content_types:
+      - risk_analysis
+      - limitation_guide
+      - security_advisory
+    quality_checks:
+      - must_balance_risks_with_context
+      - must_cite_specific_evidence
+      - must_provide_mitigation_where_possible
+    version: 1.0.0
+
+  # --- 11. case ---
+  - id: intent_case
+    name: 案例/证明
+    name_en: Case / Proof
+    decision_stage: decision
+    description: 用户希望看到实际应用案例、成功故事或效果证明
+    question_patterns:
+      - "{product} 的客户案例？"
+      - "谁在用 {product}？"
+      - "{product} 的实际效果怎么样？"
+      - "{product} case studies?"
+    expected_answer_blocks:
+      - case_overview
+      - before_after_comparison
+      - measurable_results
+      - implementation_details
+    preferred_evidence:
+      - verified_case_studies
+      - customer_testimonials
+      - third_party_reports
+    content_types:
+      - case_study
+      - customer_story
+      - roi_report
+    quality_checks:
+      - must_include_measurable_outcomes
+      - must_verify_case_authenticity
+      - must_note_conditions_that_may_differ
+    version: 1.0.0
+
+  # --- 12. trend ---
+  - id: intent_trend
+    name: 趋势/行业变化
+    name_en: Trend
+    decision_stage: awareness
+    description: 用户希望了解行业趋势、市场变化和未来发展方向
+    question_patterns:
+      - "{industry} 的未来趋势是什么？"
+      - "{industry} 2025 年有什么变化？"
+      - "{topic} 的最新发展？"
+      - "{industry} trends?"
+    expected_answer_blocks:
+      - current_state
+      - emerging_trends
+      - driving_forces
+      - future_outlook
+    preferred_evidence:
+      - industry_reports
+      - market_data
+      - expert_analysis
+    content_types:
+      - trend_report
+      - market_analysis
+      - future_outlook
+    quality_checks:
+      - must_distinguish_trend_from_hype
+      - must_cite_timeline_and_data
+      - must_acknowledge_uncertainty
+    version: 1.0.0
+
+  # --- 13. brand ---
+  - id: intent_brand
+    name: 品牌认知
+    name_en: Brand Awareness
+    decision_stage: awareness
+    description: 用户希望了解某个品牌的基本信息、定位、信誉和背景
+    question_patterns:
+      - "{brand} 是什么公司？"
+      - "{brand} 靠谱吗？"
+      - "{brand} 的口碑怎么样？"
+      - "What is {brand}?"
+    expected_answer_blocks:
+      - brand_overview
+      - key_products
+      - market_position
+      - reputation_summary
+    preferred_evidence:
+      - official_brand_info
+      - third_party_ratings
+      - media_coverage
+    content_types:
+      - brand_profile
+      - company_overview
+      - reputation_analysis
+    quality_checks:
+      - must_distinguish_fact_from_claim
+      - must_use_multiple_independent_sources
+      - must_avoid_promotional_language
+    version: 1.0.0
+
+# ============================================================
+# 意图-决策阶段映射矩阵
+# ============================================================
+
+intent_stage_matrix:
+  awareness: [intent_definition, intent_education, intent_trend, intent_brand]
+  problem: [intent_problem_solving]
+  solution: [intent_recommendation]
+  evaluation: [intent_comparison, intent_review, intent_risk]
+  decision: [intent_pricing, intent_case]
+  implementation: [intent_how_to]
+  retention: [intent_alternative]
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-07
+    changes:
+      - 初始版本，定义 7 种决策阶段和 13 种主意图
+      - 建立意图-决策阶段映射矩阵
+      - 每种意图包含问题模式、期望回答结构、偏好证据和质量检查
+    author: Brand Atlas Team

@@ -1,0 +1,141 @@
+# GEO 第一层通用知识层 — 任务模板：品牌导入
+# 版本: 1.0.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-07
+  updated_at: 2026-08-07
+  status: active
+  scope: shared
+
+task:
+  id: task_brand_onboarding
+  name: 品牌导入
+  name_en: Brand Onboarding
+  version: 1.0.0
+  purpose: >
+    将新品牌接入知识图谱系统，建立品牌的基础实体、
+    关系和初始认知画像。这是所有后续分析任务的前提。
+  description: >
+    品牌导入任务负责为新品牌创建所有必要的实体记录和关系连接，
+    包括品牌基本信息、产品列表、行业归属、目标用户、核心能力等。
+    导入完成后，品牌即具备参与后续分析（搜索诊断、主题规划等）的条件。
+
+  required_context:
+    - brand_profile:
+        description: 品牌基本信息（名称、简介、官网、成立时间等）
+        source: 品牌官网、企业信息平台
+        fields: [canonical_name, aliases, description, website, industry, headquarters]
+    - product_catalog:
+        description: 产品和服务列表
+        source: 品牌官网产品页、产品文档
+        fields: [canonical_name, description, category, pricing_model, deployment_type]
+    - industry_classification:
+        description: 行业和品类归属
+        source: 行业分类标准、市场报告
+        fields: [industry_id, category_ids]
+    - target_audience:
+        description: 目标用户角色
+        source: 品牌官网、产品定位文档
+        fields: [canonical_name, description, decision_authority]
+
+  optional_context:
+    - competitor_list:
+        description: 已知竞品列表
+        source: 品牌提供的竞品分析、市场报告
+    - brand_claims:
+        description: 品牌核心主张
+        source: 品牌官网、宣传材料
+    - existing_content:
+        description: 现有内容资产列表
+        source: 品牌官网、博客、资源中心
+    - authoritative_sources:
+        description: 品牌相关的权威来源
+        source: 行业报告、第三方评测
+
+  output_schema: brand_onboarding_report
+  output_fields:
+    - created_entities:
+        type: array
+        description: 新创建的实体列表
+        items: [brand, product, audience, use_case]
+    - created_relations:
+        type: array
+        description: 新创建的关系列表
+        items: [operates_in, belongs_to, serves, supports_use_case, solves]
+    - onboarding_summary:
+        type: object
+        description: 导入摘要
+        fields: [entity_count, relation_count, coverage_score, missing_fields]
+    - recommended_actions:
+        type: array
+        description: 建议的后续操作
+        items: [competitor_discovery, topic_planning, content_audit]
+
+  rules:
+    - rule: brand_profile_completeness
+      description: 品牌基本信息必须包含 canonical_name、industry 和至少一个 product
+      severity: critical
+
+    - rule: entity_id_format
+      description: 所有实体 ID 必须遵循 ent_{type}_{short_name} 格式
+      severity: critical
+
+    - rule: source_required_for_facts
+      description: 所有事实性信息必须有来源引用
+      severity: critical
+
+    - rule: brand_claims_as_claims
+      description: 品牌自述必须标记为 claim，不标记为 fact
+      severity: high
+
+    - rule: duplicate_check
+      description: 创建前检查是否已存在同名品牌实体
+      severity: high
+
+    - rule: industry_validation
+      description: 行业分类必须引用 entities.yaml 中定义的 industry 类型
+      severity: medium
+
+    - rule: category_validation
+      description: 品类归属必须引用 entities.yaml 中定义的 category 类型
+      severity: medium
+
+  failure_mode: incomplete_brand_profile
+  failure_handling:
+    condition: 缺少必需的品牌基本信息
+    action: 生成部分导入报告，标记缺失字段，暂停后续分析任务
+    recovery: 补充缺失信息后重新执行导入
+
+  quality_checks:
+    - check: entity_uniqueness
+      description: 确认没有重复创建实体
+      method: 按 canonical_name + type 检查唯一性
+
+    - check: relation_consistency
+      description: 确认所有关系的 subject 和 object 实体均已创建
+      method: 遍历所有关系，验证 subject_id 和 object_id 存在
+
+    - check: source_completeness
+      description: 确认所有 fact 类型信息有来源引用
+      method: 检查所有 fact 实体的 source_refs 不为空
+
+    - check: industry_coverage
+      description: 确认品牌至少关联一个 industry
+      method: 检查 operates_in 关系是否存在
+
+    - check: product_coverage
+      description: 确认品牌至少关联一个 product
+      method: 检查是否存在品牌下的 product 实体
+
+  metric_refs: []
+  # 预留：未来可添加 brand_completeness_score, onboarding_time 等指标
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-07
+    changes:
+      - 初始版本，定义品牌导入任务模板
+      - 包含必需/可选上下文、输出格式、规则和质量检查
+    author: Brand Atlas Team

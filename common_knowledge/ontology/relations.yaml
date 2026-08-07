@@ -1,0 +1,397 @@
+# GEO 第一层通用知识层 — 关系定义
+# 版本: 1.0.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-07
+  updated_at: 2026-08-07
+  status: active
+  scope: shared
+  description: >
+    定义 GEO/Brand Atlas 系统中实体之间可以建立的全部关系类型。
+    关系控制在 20 种以内，每种关系定义主体类型、客体类型、基数、
+    方向性和约束条件。
+
+# ============================================================
+# 关系类型定义
+# ============================================================
+
+relation_types:
+
+  # --- 1. belongs_to: 产品归属品类 ---
+  - relation: belongs_to
+    description: 产品属于某品类
+    description_en: Product belongs to a category
+    subject_types: [product]
+    object_types: [category]
+    cardinality: many-to-one
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    examples:
+      - subject: Salesforce Sales Cloud
+        relation: belongs_to
+        object: CRM
+
+  # --- 2. operates_in: 品牌所在行业 ---
+  - relation: operates_in
+    description: 品牌在某个行业中运营
+    description_en: Brand operates in an industry
+    subject_types: [brand]
+    object_types: [industry]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    examples:
+      - subject: Salesforce
+        relation: operates_in
+        object: 企业软件
+
+  # --- 3. serves: 服务用户角色 ---
+  - relation: serves
+    description: 产品或品牌服务于某类用户角色
+    description_en: Product or brand serves an audience
+    subject_types: [product, brand]
+    object_types: [audience]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: false
+    version: 1.0.0
+    examples:
+      - subject: Salesforce Sales Cloud
+        relation: serves
+        object: 销售负责人
+
+  # --- 4. supports_use_case: 支持使用场景 ---
+  - relation: supports_use_case
+    description: 产品支持某个使用场景
+    description_en: Product supports a use case
+    subject_types: [product]
+    object_types: [use_case]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    examples:
+      - subject: Salesforce Sales Cloud
+        relation: supports_use_case
+        object: 管理销售线索
+
+  # --- 5. solves: 解决用户问题 ---
+  - relation: solves
+    description: 产品解决某个用户问题
+    description_en: Product solves a problem
+    subject_types: [product]
+    object_types: [problem]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: false
+    version: 1.0.0
+    examples:
+      - subject: CRM 系统
+        relation: solves
+        object: 销售线索分散
+
+  # --- 6. has_capability: 具备能力 ---
+  - relation: has_capability
+    description: 产品具备某项能力
+    description_en: Product has a capability
+    subject_types: [product]
+    object_types: [use_case]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    examples:
+      - subject: Salesforce Sales Cloud
+        relation: has_capability
+        object: AI 驱动的销售预测
+
+  # --- 7. competes_with: 竞争关系 ---
+  - relation: competes_with
+    description: 品牌或产品之间存在竞争关系
+    description_en: Brand or product competes with another
+    subject_types: [brand, product, competitor]
+    object_types: [brand, product, competitor]
+    cardinality: many-to-many
+    bidirectional: true
+    inverse_relation: competes_with
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    examples:
+      - subject: Salesforce
+        relation: competes_with
+        object: HubSpot
+
+  # --- 8. alternative_to: 替代关系 ---
+  - relation: alternative_to
+    description: 一个产品可以作为另一个产品的替代方案
+    description_en: Product is an alternative to another product
+    subject_types: [product]
+    object_types: [product]
+    cardinality: many-to-many
+    bidirectional: true
+    inverse_relation: alternative_to
+    confidence_required: true
+    source_refs_required: false
+    version: 1.0.0
+    examples:
+      - subject: Notion
+        relation: alternative_to
+        object: Confluence
+
+  # --- 9. partner_of: 合作关系 ---
+  - relation: partner_of
+    description: 品牌之间存在合作关系
+    description_en: Brand is a partner of another brand
+    subject_types: [brand]
+    object_types: [brand]
+    cardinality: many-to-many
+    bidirectional: true
+    inverse_relation: partner_of
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    examples:
+      - subject: Salesforce
+        relation: partner_of
+        object: AWS
+
+  # --- 10. has_topic: 关联主题 ---
+  - relation: has_topic
+    description: 内容或品牌关联到某个主题
+    description_en: Content or brand has a topic
+    subject_types: [content, brand]
+    object_types: [topic]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: false
+    source_refs_required: false
+    version: 1.0.0
+    examples:
+      - subject: 某篇 CRM 选型指南
+        relation: has_topic
+        object: CRM 选型
+
+  # --- 11. covers: 内容覆盖主题或问题 ---
+  - relation: covers
+    description: 内容覆盖某个主题或问题
+    description_en: Content covers a topic or problem
+    subject_types: [content]
+    object_types: [topic, problem]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: false
+    source_refs_required: false
+    version: 1.0.0
+    examples:
+      - subject: 某篇白皮书
+        relation: covers
+        object: 远程办公安全
+
+  # --- 12. targets: 面向用户角色 ---
+  - relation: targets
+    description: 内容或提问词面向特定用户角色
+    description_en: Content or prompt targets an audience
+    subject_types: [content, prompt]
+    object_types: [audience]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: false
+    source_refs_required: false
+    version: 1.0.0
+    examples:
+      - subject: 适合中小企业的 CRM 有哪些
+        relation: targets
+        object: 中小企业主
+
+  # --- 13. expresses_intent: 表达意图 ---
+  - relation: expresses_intent
+    description: 提问词表达某种搜索意图
+    description_en: Prompt expresses a search intent
+    subject_types: [prompt]
+    object_types: [intent]
+    cardinality: many-to-one
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: false
+    version: 1.0.0
+    examples:
+      - subject: CRM 系统哪个好
+        relation: expresses_intent
+        object: intent_comparison
+
+  # --- 14. mentions: 提及实体 ---
+  - relation: mentions
+    description: 内容或观测中提及某个实体
+    description_en: Content or observation mentions an entity
+    subject_types: [content, observation]
+    object_types: [brand, product, competitor, topic, problem]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: false
+    source_refs_required: false
+    version: 1.0.0
+    examples:
+      - subject: 某篇 AI 生成的回答
+        relation: mentions
+        object: Salesforce
+
+  # --- 15. cites: 引用来源 ---
+  - relation: cites
+    description: 内容或观测引用某个来源
+    description_en: Content or observation cites a source
+    subject_types: [observation, content]
+    object_types: [source]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    examples:
+      - subject: 某次搜索结果
+        relation: cites
+        object: Gartner 报告
+
+  # --- 16. supports: 来源支持事实或主张 ---
+  - relation: supports
+    description: 来源为事实或主张提供证据支撑
+    description_en: Source supports a fact or claim
+    subject_types: [source]
+    object_types: [fact, claim]
+    cardinality: one-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    examples:
+      - subject: 品牌官网产品页
+        relation: supports
+        object: 产品支持私有化部署
+
+  # --- 17. contradicts: 信息冲突 ---
+  - relation: contradicts
+    description: 来源、事实或主张之间存在信息冲突
+    description_en: Source, fact, or claim contradicts another
+    subject_types: [source, fact, claim]
+    object_types: [fact, claim]
+    cardinality: many-to-many
+    bidirectional: true
+    inverse_relation: contradicts
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    conflict_type: required
+    examples:
+      - subject: 第三方评测报告
+        relation: contradicts
+        object: 品牌自述的市场份额数据
+
+  # --- 18. derived_from: 推导来源 ---
+  - relation: derived_from
+    description: 主题或机会从观测中推导得出
+    description_en: Topic or opportunity is derived from an observation
+    subject_types: [topic]
+    object_types: [observation]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    examples:
+      - subject: AI 搜索可见度优化
+        relation: derived_from
+        object: 某次品牌提及率下降的观测
+
+  # --- 19. recommended_for: 推荐场景或人群 ---
+  - relation: recommended_for
+    description: 产品被推荐用于特定场景或人群
+    description_en: Product is recommended for a use case or audience
+    subject_types: [product]
+    object_types: [use_case, audience]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: false
+    source_refs_required: false
+    version: 1.0.0
+    examples:
+      - subject: 企业微信
+        relation: recommended_for
+        object: 中小企业日常沟通
+
+  # --- 20. has_content_gap: 品牌主题缺口 ---
+  - relation: has_content_gap
+    description: 品牌在某个主题上存在内容缺口
+    description_en: Brand has a content gap in a topic
+    subject_types: [brand]
+    object_types: [topic]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.0.0
+    examples:
+      - subject: 某品牌
+        relation: has_content_gap
+        object: AI 在行业中的应用
+
+# ============================================================
+# 关系记录格式
+# ============================================================
+
+relation_record_format:
+  subject_id:
+    type: string
+    description: 主体实体 ID
+  relation:
+    type: string
+    description: 关系类型标识符
+  object_id:
+    type: string
+    description: 客体实体 ID
+  confidence:
+    type: float
+    description: 置信度 0.0-1.0
+    required: false
+  source_refs:
+    type: array[string]
+    description: 支持此关系的来源引用
+    required: false
+  valid_from:
+    type: date
+    description: 关系生效时间
+    required: false
+  valid_to:
+    type: date
+    description: 关系失效时间
+    required: false
+  status:
+    type: string
+    description: 关系状态
+    values: [active, inactive, deprecated]
+  conflict_type:
+    type: string
+    description: 仅用于 contradicts 关系，标记冲突类型
+    values: [time, value, definition, brand_vs_third_party, capability]
+    required: false
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-07
+    changes:
+      - 初始版本，定义全部 20 种关系类型
+      - 定义关系记录格式
+    author: Brand Atlas Team

@@ -1,0 +1,199 @@
+# GEO 第一层通用知识层 — 冲突处理策略
+# 版本: 1.0.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-07
+  updated_at: 2026-08-07
+  status: active
+  scope: shared
+  description: >
+    定义信息冲突的识别、分类、记录和处理策略。
+    核心原则：发现冲突后保留双方来源，标记冲突类型，
+    不自动合并为单一事实。
+
+# ============================================================
+# 冲突类型定义
+# ============================================================
+
+conflict_types:
+
+  - id: time_conflict
+    name: 时间冲突
+    name_en: Time Conflict
+    description: >
+      同一事实在不同时间点有不同的值，但未明确标注有效期限。
+      例如：产品价格在不同时间有变化，但两个版本都标记为有效。
+    detection:
+      - 同一 subject 和 predicate 有多个不同值
+      - 多个值的 valid_from/valid_to 范围重叠
+      - 来源时间戳不同但内容矛盾
+    resolution:
+      - 保留所有版本，标注各自的有效时间范围
+      - 最新版本标记为 active，旧版本标记为 inactive
+      - 不删除历史数据
+    example:
+      description: >
+        产品价格 100 元/月（来源：2024 年官网）与 产品价格 120 元/月（来源：2025 年官网）存在冲突，
+        解决方案：fact_a 标记 valid_to: 2024-12-31，fact_b 标记 valid_from: 2025-01-01
+    version: 1.0.0
+
+  - id: value_conflict
+    name: 数值冲突
+    name_en: Value Conflict
+    description: >
+      不同来源对同一事实给出不同的数值，且差异超出合理范围。
+      例如：不同报告对同一市场规模给出相差很大的数字。
+    detection:
+      - 同一事实的不同来源给出差异 > 20% 的数值
+      - 来源权威等级不同但都声称准确
+    resolution:
+      - 保留所有来源和数值
+      - 标注来源权威等级和方法论差异
+      - 优先引用高权威来源，但保留低权威来源供参考
+      - 如无法确定，标记为"存在争议"
+    example:
+      source_a: "2025 年市场规模 880 亿美元（IDC）"
+      source_b: "2025 年市场规模 650 亿美元（某分析机构）"
+      resolution: 保留双方数据，标注来源和方法论差异，优先引用 IDC
+    version: 1.0.0
+
+  - id: definition_conflict
+    name: 定义冲突
+    name_en: Definition Conflict
+    description: >
+      不同来源对同一概念或术语给出不同的定义或分类。
+      例如：不同标准对"中小企业"的定义不同。
+    detection:
+      - 同一术语有多个不兼容的定义
+      - 不同来源的分类标准不同
+    resolution:
+      - 保留所有定义，标注各自来源和适用范围
+      - 明确本系统使用的定义，并说明理由
+      - 在引用时标注使用的定义标准
+    example:
+      standard_a: "中小企业：员工 < 500 人（中国标准）"
+      standard_b: "SME: employees < 250 (EU standard)"
+      resolution: 保留两种定义，系统默认使用中国标准，但支持按需切换
+    version: 1.0.0
+
+  - id: brand_vs_third_party
+    name: 品牌自述与第三方观点冲突
+    name_en: Brand vs. Third-Party Conflict
+    description: >
+      品牌自述（claim）与第三方独立来源的信息存在矛盾。
+      例如：品牌声称"市场领先"，但第三方报告显示市场份额不高。
+    detection:
+      - brand self_claim 与 third_party fact/claim 矛盾
+      - 品牌声称与第三方评测结果不一致
+    resolution:
+      - 保留品牌自述（标记为 self_claim）和第三方信息（标记为 fact/claim）
+      - 建立 contradicts 关系
+      - 标注双方立场和证据强度
+      - 不自动采信任一方
+    example:
+      description: 品牌自述"行业领先"与第三方报告"份额第三"冲突，建立 contradicts 关系并保留双方信息
+    version: 1.0.0
+
+  - id: capability_conflict
+    name: 产品能力冲突
+    name_en: Capability Conflict
+    description: >
+      不同来源对产品功能或能力给出矛盾的描述。
+      例如：官方文档说支持某功能，但用户评测说该功能不可用。
+    detection:
+      - 官方产品文档与第三方评测/用户反馈矛盾
+      - 不同版本的官方文档描述不一致
+    resolution:
+      - 保留所有来源的功能描述
+      - 标注版本和测试条件
+      - 官方文档作为主要参考，但标注第三方发现的问题
+      - 如可能，标记为"需要验证"
+    example:
+      description: 官方文档称产品支持私有化部署，但用户反馈私有化部署需额外付费且配置复杂，保留双方信息并标注差异
+    version: 1.0.0
+
+# ============================================================
+# 冲突记录规则
+# ============================================================
+
+recording_rules:
+
+  - rule: 保留双方来源
+    description: >
+      发现冲突后，必须保留冲突双方的所有来源信息，
+      不删除、不合并、不隐藏任何一方的信息。
+    rationale: 冲突信息本身具有分析价值，删除会导致信息丢失
+
+  - rule: 建立 contradicts 关系
+    description: >
+      使用 contradicts 关系显式连接冲突的信息对，
+      标注冲突类型（time/value/definition/brand_vs_third_party/capability）。
+    relation_format:
+      subject_id: 冲突方 A 的 ID
+      relation: contradicts
+      object_id: 冲突方 B 的 ID
+      conflict_type: 冲突类型
+      source_refs: 双方来源
+
+  - rule: 标注冲突元数据
+    description: >
+      每个冲突记录应包含：发现时间、冲突类型、双方证据强度、
+      当前处理状态和后续建议。
+    metadata_fields:
+      - detected_at: 发现冲突的时间
+      - conflict_type: 冲突类型
+      - party_a_evidence: A 方证据强度
+      - party_b_evidence: B 方证据强度
+      - resolution_status: 处理状态
+      - resolution_note: 处理说明
+
+  - rule: 禁止自动合并
+    description: >
+      严禁自动将冲突信息合并为单一事实。
+      即使一方权威等级更高，也不能自动覆盖另一方。
+      合并决定必须由人工审核后执行。
+    rationale: 自动合并可能导致重要信息丢失或错误结论
+
+# ============================================================
+# 冲突处理状态
+# ============================================================
+
+resolution_statuses:
+  - status: unresolved
+    description: 冲突已发现但未处理
+    action: 等待人工审核
+
+  - status: under_review
+    description: 正在人工审核中
+    action: 收集更多证据
+
+  - status: resolved_prefer_a
+    description: 已解决，采信 A 方
+    action: 标注解决方案和理由
+
+  - status: resolved_prefer_b
+    description: 已解决，采信 B 方
+    action: 标注解决方案和理由
+
+  - status: resolved_keep_both
+    description: 已解决，保留双方（适用不同条件）
+    action: 标注适用条件
+
+  - status: resolved_obsolete
+    description: 冲突因信息过期而自然解决
+    action: 标记旧信息为 inactive
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-07
+    changes:
+      - 初始版本，定义 5 种冲突类型
+      - 建立冲突检测、记录和处理规则
+      - 定义 6 种冲突处理状态
+    author: Brand Atlas Team

@@ -1,0 +1,255 @@
+# GEO 第一层通用知识层 — 上下文检索策略
+# 版本: 1.0.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-07
+  updated_at: 2026-08-07
+  status: active
+  scope: shared
+  description: >
+    定义信息检索、过滤、排序和输出的上下文策略。
+    确保系统在正确的时间、以正确的优先级、向正确的任务提供正确的信息。
+
+# ============================================================
+# 过滤规则
+# ============================================================
+
+filtering_rules:
+
+  - rule: brand_filtering
+    name: 品牌过滤
+    priority: 1
+    description: >
+      在检索信息前，先按目标品牌进行过滤。
+      仅加载与目标品牌直接相关或品牌中立（scope: shared）的信息。
+    filter_dimensions:
+      - brand_id: 目标品牌 ID
+      - scope: shared / brand_specific
+    logic: >
+      1. 先加载 scope: shared 的通用知识
+      2. 再加载与目标品牌相关的 brand_specific 信息
+      3. 排除其他品牌的 brand_specific 信息（除非进行竞品分析）
+
+  - rule: industry_filtering
+    name: 行业过滤
+    priority: 2
+    description: >
+      按行业过滤信息，仅加载与目标行业相关的知识。
+    filter_dimensions:
+      - industry_id: 目标行业 ID
+      - operates_in 关系
+    logic: >
+      1. 加载目标行业范围内的行业知识
+      2. 加载跨行业的通用知识
+      3. 排除不相关行业的具体信息
+
+  - rule: topic_filtering
+    name: 主题过滤
+    priority: 3
+    description: >
+      按主题过滤信息，仅加载与当前任务主题相关的内容。
+    filter_dimensions:
+      - topic_id: 目标主题 ID
+      - has_topic / covers 关系
+    logic: >
+      1. 加载目标主题及其子主题
+      2. 加载主题关联的内容和实体
+      3. 排除主题不相关的内容
+
+  - rule: time_filtering
+    name: 时间过滤
+    priority: 4
+    description: >
+      按时间范围过滤信息，优先加载当前有效的信息。
+    filter_dimensions:
+      - valid_from: 不晚于当前时间
+      - valid_to: 不早于当前时间（或为 null）
+      - status: active
+    logic: >
+      1. 优先加载 status: active 且 valid_to 为 null 或未过期
+      2. 历史信息仅在需要时加载
+      3. 过期信息标记为 inactive 并在引用时标注
+
+  - rule: permission_filtering
+    name: 权限过滤
+    priority: 5
+    description: >
+      按访问权限过滤信息，确保不暴露受限内容。
+    filter_dimensions:
+      - scope: shared / brand_specific
+      - access_level: public / internal / restricted
+    logic: >
+      1. 公开信息（scope: shared）对所有任务可用
+      2. 品牌特有信息（scope: brand_specific）仅该品牌相关任务可用
+      3. 受限信息需要额外权限验证
+
+# ============================================================
+# 检索规则
+# ============================================================
+
+retrieval_rules:
+
+  - rule: structured_first
+    name: 结构化事实优先
+    priority: 1
+    description: >
+      在检索信息时，优先使用结构化存储的事实（fact 实体），
+      而非从原始内容中重新提取。
+    logic: >
+      1. 先查询结构化 fact 实体
+      2. 再查询结构化 claim 实体
+      3. 最后才从原始 content 中提取
+    rationale: >
+      结构化事实已经过验证和标准化，比原始内容更可靠、更高效
+
+  - rule: authority_priority
+    name: 高权威来源优先
+    priority: 2
+    description: >
+      在多个来源提供相同信息时，优先使用高权威来源。
+    priority_order:
+      - 高权威 (high): official, government_regulatory, academic, industry_report
+      - 中权威 (medium): third_party_review, media
+      - 低权威 (low): community, search_observation
+    logic: >
+      1. 优先使用高权威来源的信息
+      2. 低权威来源仅在高权威来源不可用时作为补充
+      3. 使用低权威来源时必须标注权威等级
+
+  - rule: recency_weight
+    name: 时效性加权
+    priority: 3
+    description: >
+      在同等权威等级下，优先使用更新的信息。
+    logic: >
+      1. 按 updated_at 降序排列
+      2. 优先使用 valid_to 为 null（当前有效）的信息
+      3. 历史信息在引用时标注时间
+
+  - rule: semantic_retrieval
+    name: 语义检索补充
+    priority: 4
+    description: >
+      在结构化过滤后，使用语义检索补充相关信息。
+      语义检索不替代结构化过滤，而是作为补充。
+    logic: >
+      1. 先完成结构化过滤
+      2. 在过滤后的范围内进行语义检索
+      3. 语义检索结果标注相关度分数
+
+# ============================================================
+# 输出规则
+# ============================================================
+
+output_rules:
+
+  - rule: summary_first
+    name: 摘要优先
+    description: >
+      在输出中默认先给摘要和关键信息，仅在用户明确要求
+      或需要核验时才提供原文证据。
+    logic: >
+      1. 首段提供摘要（2-3 句话）
+      2. 主体部分提供结构化信息
+      3. 文末或折叠区提供来源引用
+      4. 仅在核验时展开原文
+
+  - rule: evidence_on_demand
+    name: 证据按需提供
+    description: >
+      默认不输出完整原文证据，但提供可追溯的来源引用。
+      用户可以通过引用追溯到原始来源。
+    output_format:
+      summary: 一句话结论
+      evidence_summary: 证据类型和来源
+      source_ref: 来源 ID 和 URL
+      full_evidence: 仅在核验时提供
+
+  - rule: separate_output_classes
+    name: 分类输出
+    description: >
+      事实、主张、观测和推断必须在输出中分开呈现，
+      使用不同的视觉标记或格式区分。
+    output_labels:
+      fact: "📋 事实"
+      claim: "💬 主张"
+      observation: "🔍 观测"
+      inference: "🧠 推断"
+      unverified: "⚠️ 待核验"
+
+  - rule: citation_required
+    name: 外部证据必须引用
+    description: >
+      任何需要外部证据支撑的结论必须附带引用标记。
+      引用格式：`[S#]` 或 `[来源: source_id]`。
+
+# ============================================================
+# 去重规则
+# ============================================================
+
+deduplication_rules:
+
+  - rule: same_fact_dedup
+    name: 同事实来源合并
+    description: >
+      当多个来源支持同一事实时，合并为一个事实实体，
+      将所有来源引用合并到 source_refs 列表中。
+    logic: >
+      1. 通过 subject_entity_id + predicate + object_value 匹配相同事实
+      2. 合并 source_refs 列表
+      3. 保留最早的 created_at 和最新的 updated_at
+      4. 优先展示高权威来源
+
+  - rule: near_duplicate_detection
+    name: 近似重复检测
+    description: >
+      检测语义相似但表述不同的事实，标记为潜在重复，
+      由人工审核决定是否合并。
+    detection_method:
+      - 语义相似度 > 0.85
+      - 相同 subject_entity_id
+      - 相同 predicate 或相似 predicate
+    action: 标记为 potential_duplicate，等待人工审核
+
+# ============================================================
+# 冲突标记规则
+# ============================================================
+
+conflict_marking_rules:
+
+  - rule: explicit_conflict_marking
+    name: 显式冲突标记
+    description: >
+      当检索到的信息存在冲突时，必须在输出中显式标记，
+      不能隐藏或自动选择一方。
+    output_format:
+      conflict_banner: "⚠️ 以下信息存在冲突"
+      party_a: 信息 A + 来源
+      party_b: 信息 B + 来源
+      conflict_type: 冲突类型
+      recommendation: 建议（如有）
+
+  - rule: conflict_escalation
+    name: 冲突升级
+    description: >
+      当冲突影响关键决策时，应升级到人工审核。
+    escalation_triggers:
+      - 冲突涉及核心产品能力
+      - 冲突涉及市场份额数据
+      - 冲突涉及合规或安全问题
+      - 冲突双方均为高权威来源
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-07
+    changes:
+      - 初始版本，定义 5 类过滤规则、4 类检索规则、4 类输出规则
+      - 建立去重和冲突标记规则
+      - 定义信息检索优先级体系
+    author: Brand Atlas Team

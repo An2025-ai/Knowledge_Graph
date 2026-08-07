@@ -1,0 +1,417 @@
+# GEO 第一层通用知识层 — 提问词模式
+# 版本: 1.0.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-07
+  updated_at: 2026-08-07
+  status: active
+  scope: shared
+  description: >
+    定义与各意图类型对应的提问词模式和具体示例。
+    模式用于提问词自动生成、意图分类和搜索诊断。
+
+# ============================================================
+# 提问词模式
+# ============================================================
+
+patterns:
+
+  # --- definition ---
+  - id: pat_def_01
+    pattern: "什么是 {entity}？"
+    intent_id: intent_definition
+    expected_entities: [topic, category]
+    language: zh
+    examples:
+      - 什么是 CRM？
+      - 什么是生成式引擎优化？
+      - 什么是 SaaS？
+
+  - id: pat_def_02
+    pattern: "{entity} 是什么意思？"
+    intent_id: intent_definition
+    expected_entities: [topic, category]
+    language: zh
+    examples:
+      - GEO 是什么意思？
+      - AEO 是什么意思？
+      - 私域运营是什么意思？
+
+  - id: pat_def_03
+    pattern: "What is {entity}?"
+    intent_id: intent_definition
+    expected_entities: [topic, category]
+    language: en
+    examples:
+      - What is Generative Engine Optimization?
+      - What is CRM software?
+
+  # --- education ---
+  - id: pat_edu_01
+    pattern: "{entity} 的原理是什么？"
+    intent_id: intent_education
+    expected_entities: [topic, problem]
+    language: zh
+    examples:
+      - AI 搜索引擎的原理是什么？
+      - RAG 的原理是什么？
+
+  - id: pat_edu_02
+    pattern: "{entity} 是如何工作的？"
+    intent_id: intent_education
+    expected_entities: [topic, product]
+    language: zh
+    examples:
+      - GraphRAG 是如何工作的？
+      - 知识图谱是如何工作的？
+
+  - id: pat_edu_03
+    pattern: "How does {entity} work?"
+    intent_id: intent_education
+    expected_entities: [topic, product]
+    language: en
+    examples:
+      - How does GraphRAG work?
+      - How does AI search work?
+
+  # --- problem_solving ---
+  - id: pat_prob_01
+    pattern: "如何解决 {problem}？"
+    intent_id: intent_problem_solving
+    expected_entities: [problem]
+    language: zh
+    examples:
+      - 如何解决销售线索分散的问题？
+      - 如何解决团队协作效率低的问题？
+
+  - id: pat_prob_02
+    pattern: "{problem} 怎么办？"
+    intent_id: intent_problem_solving
+    expected_entities: [problem]
+    language: zh
+    examples:
+      - 客户流失严重怎么办？
+      - 数据不准确怎么办？
+
+  - id: pat_prob_03
+    pattern: "How to fix {problem}?"
+    intent_id: intent_problem_solving
+    expected_entities: [problem]
+    language: en
+    examples:
+      - How to fix low sales conversion?
+      - How to fix data silos?
+
+  # --- how_to ---
+  - id: pat_how_01
+    pattern: "如何 {action}？"
+    intent_id: intent_how_to
+    expected_entities: [use_case, product, topic]
+    language: zh
+    examples:
+      - 如何搭建 CRM 系统？
+      - 如何提高品牌在 AI 搜索中的可见度？
+      - 如何选择适合的 CRM？
+
+  - id: pat_how_02
+    pattern: "怎么 {action}？"
+    intent_id: intent_how_to
+    expected_entities: [use_case, product]
+    language: zh
+    examples:
+      - 怎么导入客户数据？
+      - 怎么设置自动化工作流？
+
+  - id: pat_how_03
+    pattern: "How to {action}?"
+    intent_id: intent_how_to
+    expected_entities: [use_case, product]
+    language: en
+    examples:
+      - How to optimize for AI search engines?
+      - How to set up a CRM?
+
+  # --- comparison ---
+  - id: pat_cmp_01
+    pattern: "{product_a} 和 {product_b} 哪个更好？"
+    intent_id: intent_comparison
+    expected_entities: [product, competitor]
+    language: zh
+    examples:
+      - Salesforce 和 HubSpot 哪个更好？
+      - 企业微信和飞书哪个更好？
+
+  - id: pat_cmp_02
+    pattern: "{product_a} 和 {product_b} 有什么区别？"
+    intent_id: intent_comparison
+    expected_entities: [product, competitor]
+    language: zh
+    examples:
+      - CRM 和 ERP 有什么区别？
+      - 公有云和私有化部署有什么区别？
+
+  - id: pat_cmp_03
+    pattern: "{category} 应该怎么选？"
+    intent_id: intent_comparison
+    expected_entities: [category]
+    language: zh
+    examples:
+      - CRM 系统应该怎么选？
+      - 项目管理工具应该怎么选？
+
+  - id: pat_cmp_04
+    pattern: "{product_a} vs {product_b} for {use_case}?"
+    intent_id: intent_comparison
+    expected_entities: [product, competitor, use_case]
+    language: en
+    examples:
+      - Salesforce vs HubSpot for small business?
+      - Notion vs Confluence for documentation?
+
+  # --- review ---
+  - id: pat_rev_01
+    pattern: "{product} 怎么样？"
+    intent_id: intent_review
+    expected_entities: [product]
+    language: zh
+    examples:
+      - Salesforce 怎么样？
+      - 飞书怎么样？
+
+  - id: pat_rev_02
+    pattern: "{product} 好用吗？"
+    intent_id: intent_review
+    expected_entities: [product]
+    language: zh
+    examples:
+      - HubSpot 好用吗？
+      - 钉钉好用吗？
+
+  - id: pat_rev_03
+    pattern: "{product} 的优缺点？"
+    intent_id: intent_review
+    expected_entities: [product]
+    language: zh
+    examples:
+      - 企业微信的优缺点？
+      - Notion 的优缺点？
+
+  - id: pat_rev_04
+    pattern: "{product} review?"
+    intent_id: intent_review
+    expected_entities: [product]
+    language: en
+    examples:
+      - Salesforce review?
+      - HubSpot CRM review?
+
+  # --- recommendation ---
+  - id: pat_rec_01
+    pattern: "有什么好的 {category} 推荐？"
+    intent_id: intent_recommendation
+    expected_entities: [category]
+    language: zh
+    examples:
+      - 有什么好的 CRM 推荐？
+      - 有什么好的项目管理工具推荐？
+
+  - id: pat_rec_02
+    pattern: "最适合 {use_case} 的 {category} 是什么？"
+    intent_id: intent_recommendation
+    expected_entities: [category, use_case]
+    language: zh
+    examples:
+      - 最适合中小企业的 CRM 是什么？
+      - 最适合远程团队的项目管理工具是什么？
+
+  - id: pat_rec_03
+    pattern: "Best {category} for {use_case}?"
+    intent_id: intent_recommendation
+    expected_entities: [category, use_case]
+    language: en
+    examples:
+      - Best CRM for small business?
+      - Best project management tool for remote teams?
+
+  # --- pricing ---
+  - id: pat_prc_01
+    pattern: "{product} 多少钱？"
+    intent_id: intent_pricing
+    expected_entities: [product]
+    language: zh
+    examples:
+      - Salesforce 多少钱？
+      - 企业微信收费吗？
+
+  - id: pat_prc_02
+    pattern: "{product} 价格是多少？"
+    intent_id: intent_pricing
+    expected_entities: [product]
+    language: zh
+    examples:
+      - HubSpot 价格是多少？
+      - 飞书价格是多少？
+
+  - id: pat_prc_03
+    pattern: "{product} pricing?"
+    intent_id: intent_pricing
+    expected_entities: [product]
+    language: en
+    examples:
+      - Salesforce pricing?
+      - HubSpot pricing?
+
+  # --- alternative ---
+  - id: pat_alt_01
+    pattern: "{product} 的替代品有哪些？"
+    intent_id: intent_alternative
+    expected_entities: [product, competitor]
+    language: zh
+    examples:
+      - Salesforce 的替代品有哪些？
+      - Jira 的替代品有哪些？
+
+  - id: pat_alt_02
+    pattern: "有没有类似 {product} 的工具？"
+    intent_id: intent_alternative
+    expected_entities: [product, competitor]
+    language: zh
+    examples:
+      - 有没有类似 Slack 的工具？
+      - 有没有类似 Notion 的工具？
+
+  - id: pat_alt_03
+    pattern: "{product} alternatives?"
+    intent_id: intent_alternative
+    expected_entities: [product, competitor]
+    language: en
+    examples:
+      - Salesforce alternatives?
+      - Jira alternatives?
+
+  # --- risk ---
+  - id: pat_rsk_01
+    pattern: "{product} 有什么缺点？"
+    intent_id: intent_risk
+    expected_entities: [product]
+    language: zh
+    examples:
+      - SaaS CRM 有什么缺点？
+      - 公有云部署有什么缺点？
+
+  - id: pat_rsk_02
+    pattern: "使用 {product} 有什么风险？"
+    intent_id: intent_risk
+    expected_entities: [product, category]
+    language: zh
+    examples:
+      - 使用 AI 搜索有什么风险？
+      - 使用开源软件有什么风险？
+
+  - id: pat_rsk_03
+    pattern: "{product} risks and limitations?"
+    intent_id: intent_risk
+    expected_entities: [product]
+    language: en
+    examples:
+      - Cloud CRM risks and limitations?
+      - AI search risks and limitations?
+
+  # --- case ---
+  - id: pat_cas_01
+    pattern: "{product} 的客户案例？"
+    intent_id: intent_case
+    expected_entities: [product, brand]
+    language: zh
+    examples:
+      - Salesforce 的客户案例？
+      - 飞书的客户案例？
+
+  - id: pat_cas_02
+    pattern: "谁在用 {product}？"
+    intent_id: intent_case
+    expected_entities: [product, brand]
+    language: zh
+    examples:
+      - 谁在用 CRM 系统？
+      - 哪些大公司在用企业微信？
+
+  - id: pat_cas_03
+    pattern: "{product} case studies?"
+    intent_id: intent_case
+    expected_entities: [product, brand]
+    language: en
+    examples:
+      - Salesforce case studies?
+      - HubSpot success stories?
+
+  # --- trend ---
+  - id: pat_trd_01
+    pattern: "{industry} 的未来趋势是什么？"
+    intent_id: intent_trend
+    expected_entities: [industry, topic]
+    language: zh
+    examples:
+      - CRM 行业的未来趋势是什么？
+      - AI 搜索的未来趋势是什么？
+
+  - id: pat_trd_02
+    pattern: "{industry} 2025 年有什么变化？"
+    intent_id: intent_trend
+    expected_entities: [industry, topic]
+    language: zh
+    examples:
+      - 企业软件行业 2025 年有什么变化？
+      - 营销技术 2025 年有什么变化？
+
+  - id: pat_trd_03
+    pattern: "{industry} trends {year}?"
+    intent_id: intent_trend
+    expected_entities: [industry, topic]
+    language: en
+    examples:
+      - CRM industry trends 2025?
+      - AI search trends 2025?
+
+  # --- brand ---
+  - id: pat_brd_01
+    pattern: "{brand} 是什么公司？"
+    intent_id: intent_brand
+    expected_entities: [brand]
+    language: zh
+    examples:
+      - Salesforce 是什么公司？
+      - HubSpot 是什么公司？
+
+  - id: pat_brd_02
+    pattern: "{brand} 靠谱吗？"
+    intent_id: intent_brand
+    expected_entities: [brand]
+    language: zh
+    examples:
+      - 用友靠谱吗？
+      - 金蝶靠谱吗？
+
+  - id: pat_brd_03
+    pattern: "What is {brand}?"
+    intent_id: intent_brand
+    expected_entities: [brand]
+    language: en
+    examples:
+      - What is Salesforce?
+      - What is HubSpot?
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-07
+    changes:
+      - 初始版本，为 13 种意图定义共计 39 个提问词模式
+      - 每种意图至少 3 个模式，覆盖中英文
+      - 每个模式包含具体示例
+    author: Brand Atlas Team

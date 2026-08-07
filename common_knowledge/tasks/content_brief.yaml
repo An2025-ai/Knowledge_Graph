@@ -1,0 +1,173 @@
+# GEO 第一层通用知识层 — 任务模板：内容 Brief
+# 版本: 1.0.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-07
+  updated_at: 2026-08-07
+  status: active
+  scope: shared
+
+task:
+  id: task_content_brief
+  name: 内容 Brief 生成
+  name_en: Content Brief Generation
+  version: 1.0.0
+  purpose: >
+    基于主题机会、意图分析和搜索诊断，
+    生成结构化的内容创作 Brief，指导内容生产和优化。
+  description: >
+    内容 Brief 任务将主题机会转化为可执行的内容创作指南。
+    每个 Brief 包含目标受众、覆盖提问词、内容结构建议、
+    证据要求、质量标准和优化建议。
+
+  required_context:
+    - topic_opportunity:
+        description: 主题机会
+        source: 主题规划任务输出
+        fields: [topic_id, opportunity_score, priority, recommended_content_types]
+    - target_prompts:
+        description: 目标提问词
+        source: 提问词生成任务输出
+        fields: [prompt_id, canonical_name, intent_id, decision_stage, targets]
+    - target_audience:
+        description: 目标用户角色
+        source: 品牌导入任务输出
+        fields: [audience_id, canonical_name, pain_points, decision_authority]
+    - intent_definition:
+        description: 意图定义
+        source: intents/intent_types.yaml
+        fields: [intent_id, expected_answer_blocks, preferred_evidence, content_types, quality_checks]
+    - brand_capabilities:
+        description: 品牌相关能力
+        source: 品牌导入任务输出
+        fields: [product_id, capabilities, use_cases, facts]
+
+  optional_context:
+    - competitor_content:
+        description: 竞品相关内容的分析
+        source: 竞品发现任务输出
+        fields: [content_id, canonical_name, strengths, weaknesses, covers]
+    - search_diagnosis:
+        description: 搜索诊断结果
+        source: 搜索诊断任务输出
+        fields: [content_gaps, optimization_recommendations]
+    - existing_content:
+        description: 现有相关内容
+        source: 内容审计任务输出
+        fields: [content_id, canonical_name, content_type, performance]
+    - authoritative_sources:
+        description: 可引用的权威来源
+        source: 行业知识库
+        fields: [source_id, source_type, authority_level, url]
+
+  output_schema: content_brief
+  output_fields:
+    - brief:
+        type: object
+        description: 内容 Brief
+        fields:
+          - brief_id: Brief ID
+          - title_suggestions: 标题建议（3-5个）
+          - meta_description: 元描述建议
+          - content_type: 内容类型
+          - target_audience: 目标受众
+          - target_prompts: 目标提问词
+          - intent: 覆盖意图
+          - decision_stage: 决策阶段
+          - content_structure: 内容结构大纲
+          - key_points: 必须覆盖的关键点
+          - evidence_requirements: 证据要求
+          - source_suggestions: 推荐引用来源
+          - internal_linking: 内链建议
+          - differentiation_angle: 差异化角度
+          - quality_checklist: 质量检查清单
+          - word_count_range: 建议字数范围
+    - seo_guidance:
+        type: object
+        description: 搜索优化指导
+        fields:
+          - primary_keywords: 主要关键词
+          - secondary_keywords: 次要关键词
+          - semantic_entities: 语义实体
+          - structured_data_type: Schema.org 类型建议
+          - eeat_signals: E-E-A-T 信号建议
+    - competitive_context:
+        type: object
+        description: 竞争上下文
+        fields:
+          - competitor_content_gaps: 竞品内容缺口
+          - differentiation_points: 差异化要点
+          - content_angle: 内容角度建议
+
+  rules:
+    - rule: must_cover_target_prompts
+      description: 内容必须覆盖所有目标提问词的核心语义
+      severity: critical
+
+    - rule: evidence_requirements_by_intent
+      description: 证据要求必须匹配意图定义中的 preferred_evidence
+      severity: high
+
+    - rule: structure_matches_answer_blocks
+      description: 内容结构应覆盖意图定义中的 expected_answer_blocks
+      severity: high
+
+    - rule: audience_appropriate_tone
+      description: 内容语气和深度应匹配目标受众的决策角色
+      severity: medium
+
+    - rule: differentiate_from_competitors
+      description: 内容角度应体现与竞品的差异化
+      severity: medium
+
+    - rule: cite_all_claims
+      description: 所有主张和统计数据必须有来源引用
+      severity: high
+
+    - rule: avoid_unsupported_superlatives
+      description: 不使用无依据的绝对化表述
+      severity: high
+
+    - rule: freshness_requirement
+      description: 统计数据应标注时间，优先使用近期数据
+      severity: medium
+
+  failure_mode: insufficient_opportunity_data
+  failure_handling:
+    condition: 缺少主题机会或意图分析的足够信息
+    action: 生成基础 Brief，标记需要补充的信息，降低 Brief 完成度评分
+    recovery: 补充主题规划和意图分析后重新生成
+
+  quality_checks:
+    - check: prompt_coverage
+      description: Brief 覆盖了所有目标提问词
+      method: 逐条比对 target_prompts 与 content_structure 的覆盖情况
+
+    - check: evidence_plan
+      description: 每条关键主张规划了证据来源
+      method: 检查 key_points 与 source_suggestions 的对应关系
+
+    - check: intent_alignment
+      description: 内容类型和结构匹配目标意图
+      method: 与 intent_types.yaml 中的 content_types 和 expected_answer_blocks 比对
+
+    - check: audience_relevance
+      description: 内容深度和角度适合目标受众
+      method: 检查 target_audience 的 decision_authority 与内容复杂度匹配
+
+    - check: differentiation_quality
+      description: 差异化角度清晰且有依据
+      method: 检查 differentiation_angle 与 competitor_content_gaps 的一致性
+
+  metric_refs: []
+  # 预留：brief_completeness_score, content_performance_prediction
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-07
+    changes:
+      - 初始版本，定义内容 Brief 生成任务模板
+      - 包含搜索优化指导和竞争上下文
+    author: Brand Atlas Team

@@ -1,0 +1,157 @@
+# GEO 第一层通用知识层 — 任务模板：提问词生成
+# 版本: 1.0.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-07
+  updated_at: 2026-08-07
+  status: active
+  scope: shared
+
+task:
+  id: task_prompt_generation
+  name: 提问词生成
+  name_en: Prompt Generation
+  version: 1.0.0
+  purpose: >
+    基于品牌能力、行业主题、用户意图和搜索观测，
+    系统化生成面向搜索/生成式引擎的提问词。
+  description: >
+    提问词生成任务将品牌知识、意图分类和搜索模式结合起来，
+    自动生成覆盖不同意图类型和决策阶段的高质量提问词。
+    生成的提问词可用于内容策略规划、搜索诊断和竞品分析。
+
+  required_context:
+    - brand_profile:
+        description: 品牌基本信息
+        source: 品牌导入任务输出
+        fields: [brand_id, canonical_name, industry, products]
+    - product_capabilities:
+        description: 产品能力和使用场景
+        source: 品牌导入任务输出
+        fields: [product_id, use_cases, problems_solved, capabilities]
+    - target_audiences:
+        description: 目标用户角色
+        source: 品牌导入任务输出
+        fields: [audience_id, canonical_name, pain_points]
+    - industry_topics:
+        description: 行业核心主题
+        source: 主题规划任务输出或行业知识
+        fields: [topic_id, canonical_name, parent_topic_id]
+    - intent_definitions:
+        description: 意图类型定义
+        source: intents/intent_types.yaml
+        fields: [intent_id, name, question_patterns, decision_stage]
+
+  optional_context:
+    - competitor_prompts:
+        description: 竞品相关的提问词
+        source: 竞品发现任务输出
+    - search_observations:
+        description: 近期搜索观测数据
+        source: 搜索观测库
+        fields: [query, platform, result_snapshot, observed_at]
+    - keyword_data:
+        description: 搜索量和竞争度数据
+        source: SEO 工具（Semrush, Ahrefs 等）
+    - content_inventory:
+        description: 现有内容资产
+        source: 内容审计任务输出
+
+  output_schema: prompt_list
+  output_fields:
+    - generated_prompts:
+        type: array
+        description: 生成的提问词列表
+        item_fields:
+          - id: 提问词 ID
+          - canonical_name: 提问词文本
+          - intent_id: 关联意图
+          - decision_stage: 决策阶段
+          - language: 语言
+          - targets: 目标用户角色
+          - related_entities: 关联实体
+          - generation_source: 生成方式（pattern_based / ai_generated / hybrid）
+          - search_volume: 搜索量（如有）
+          - priority: 优先级（high / medium / low）
+    - coverage_summary:
+        type: object
+        description: 覆盖度摘要
+        fields:
+          - total_prompts: 提问词总数
+          - intents_covered: 覆盖的意图类型数
+          - stages_covered: 覆盖的决策阶段数
+          - intent_gaps: 未覆盖的意图类型
+    - prompt_clusters:
+        type: array
+        description: 按主题聚类的提问词组
+        item_fields:
+          - topic_id: 主题 ID
+          - prompts: 该主题下的提问词列表
+
+  rules:
+    - rule: intent_coverage
+      description: 生成的提问词应覆盖至少 8 种意图类型
+      severity: medium
+
+    - rule: stage_coverage
+      description: 提问词应覆盖从 awareness 到 decision 的完整决策链
+      severity: medium
+
+    - rule: audience_alignment
+      description: 每个提问词应关联到至少一个目标用户角色
+      severity: high
+
+    - rule: pattern_compliance
+      description: 基于模式生成的提问词应符合 prompt_patterns.yaml 中定义的模式
+      severity: medium
+
+    - rule: no_duplicate_prompts
+      description: 不应生成语义重复的提问词
+      severity: medium
+
+    - rule: language_appropriateness
+      description: 根据目标市场生成对应语言的提问词
+      severity: medium
+
+    - rule: avoid_branded_only
+      description: 提问词不应仅包含品牌词，应包含品类词和问题词
+      severity: high
+
+  failure_mode: insufficient_context
+  failure_handling:
+    condition: 缺少品牌能力或行业主题信息
+    action: 在可用信息范围内生成提问词，标记信息缺口，建议补充上下文
+    recovery: 补充品牌能力和行业主题后重新生成
+
+  quality_checks:
+    - check: intent_classification
+      description: 每个提问词可被明确分类到一种意图
+      method: 用 expresses_intent 关系验证提问词与意图的关联
+
+    - check: pattern_validity
+      description: 模式生成的提问词符合对应的问题模式
+      method: 与 prompt_patterns.yaml 中的模式比对
+
+    - check: diversity_score
+      description: 提问词在意图、阶段和受众维度上的分布均匀度
+      method: 计算各维度的信息熵
+
+    - check: real_world_relevance
+      description: 提问词反映真实用户的搜索行为
+      method: 与搜索观测数据中的实际查询比对
+
+    - check: content_gap_identification
+      description: 提问词能帮助识别内容缺口
+      method: 与现有内容资产的 covers/has_topic 关系比对
+
+  metric_refs: []
+  # 预留：prompt_diversity_score, intent_coverage_rate, search_volume_coverage
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-07
+    changes:
+      - 初始版本，定义提问词生成任务模板
+    author: Brand Atlas Team
