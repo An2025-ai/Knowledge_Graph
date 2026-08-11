@@ -1,0 +1,52 @@
+# Brand Atlas Knowledge Graph — L3 品牌接入需求：DeepCleer 试点
+# 版本: 1.0.0
+# 用途: DeepCleer 品牌接入需求，验证 L3 模型（不固定为本体）
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+  note: DeepCleer 仅用于验证模型，不属于固定本体
+
+request:
+  request_id: bor_deepcleer_20260811_v1
+  tenant_id: tenant_example
+  brand_input:
+    canonical_name: DeepCleer
+    known_aliases: [深澈智算]
+    official_domains: [deepcleer.ai, deepcleer.com.cn]
+  markets: [CN]
+  languages: [zh-CN]
+  industry_scope:
+    l2_industry_ids: [ind_enterprise_software, ind_ecommerce_services]
+    l2_category_candidates:
+      - ecommerce_finance_integration
+      - enterprise_settlement
+      - enterprise_ai_agent_platform
+  source_scope:
+    official_website: true
+    internal_documents: true
+    third_party_authoritative: false
+    community_sources: false
+  required_dimensions:
+    - identity
+    - product_portfolio
+    - audience_and_problem
+    - capability_and_use_case
+    - deployment_and_integration
+    - security_and_compliance
+    - proof_and_case
+    - service_and_poc
+    - messaging_and_content
+  output_policies:
+    default_access_level: internal
+    public_content_requires_approved_claims: true
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes: 初始版本，DeepCleer 试点品牌接入需求
+    author: Brand Atlas Team

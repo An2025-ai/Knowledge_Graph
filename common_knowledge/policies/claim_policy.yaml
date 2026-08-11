@@ -1,16 +1,17 @@
 # GEO 第一层通用知识层 — 事实与主张策略
-# 版本: 1.0.0
+# 版本: 1.2.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.0.0
+  version: 1.2.0
   created_at: 2026-08-07
-  updated_at: 2026-08-07
+  updated_at: 2026-08-11
   status: active
   scope: shared
   description: >
     定义事实(fact)、主张(claim)、观测(observation)和推断(inference)的
     区分标准、证据要求和处理策略。
+    v1.2.0 新增 L3 assertion_kind 到 L1 statement_class 的映射说明。
 
 # ============================================================
 # 信息分类定义
@@ -201,10 +202,57 @@ expiration_rules:
       - 监管政策
 
 # ============================================================
+# L3 assertion_kind 到 L1 statement_class 映射
+# ============================================================
+
+l3_assertion_kind_mapping:
+  description: >
+    L3 使用 assertion_kind 表达更细的业务语义，statement_class 保持 L1 的
+    fact/claim/observation/inference。以下是 L3 assertion_kind 与 L1 statement_class 的对应关系。
+  mapping:
+    - assertion_kind: identity_fact
+      statement_class: fact
+      public_output: true
+    - assertion_kind: product_spec
+      statement_class: fact_conditional
+      public_output: per_document_permission
+    - assertion_kind: self_claim
+      statement_class: claim
+      public_output: subject_to_claim_review
+    - assertion_kind: attributed_claim
+      statement_class: claim
+      public_output: upon_authorization
+    - assertion_kind: third_party_fact
+      statement_class: fact
+      public_output: per_source_license
+    - assertion_kind: internal_fact
+      statement_class: fact_conditional
+      public_output: false_by_default
+    - assertion_kind: draft_claim
+      statement_class: claim
+      public_output: false
+    - assertion_kind: inference
+      statement_class: inference
+      public_output: not_as_stable_fact
+
+  handling:
+    - internal_fact: 内部事实，仅限内部分析，默认不可公开输出
+    - product_spec: 产品规格，按文档权限决定输出
+    - draft_claim: 草稿主张（路线图、未发布功能），不可公开输出
+    - approved_claim: 批准主张，允许公开使用，需经口径审核
+
+# ============================================================
 # 变更记录
 # ============================================================
 
 changelog:
+  - version: 1.2.0
+    date: 2026-08-11
+    changes:
+      - 新增 L3 assertion_kind 到 L1 statement_class 映射
+      - 增加 internal_fact、product_spec、draft_claim、approved_claim 的处理说明
+      - 保持 L1 statement_class 四分类不变
+    author: Brand Atlas Team
   - version: 1.0.0
     date: 2026-08-07
     changes:

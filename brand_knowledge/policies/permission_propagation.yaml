@@ -1,0 +1,182 @@
+# Brand Atlas Knowledge Graph — L3 权限传播策略
+# 版本: 1.0.0
+# 范围: L3 品牌认知层
+# 参考: brand_knowledge/README.md §6.3 权限字段, §9.2 核心关系, §10.3 约束和索引
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+  description: >
+    定义 L3 品牌认知层中权限字段、权限沿证据链向下游传播、证据链升级
+    以及审计更新规则。每个 Document、Chunk、Evidence 和 Assertion 至少保存
+    access_level、allowed_task_types、allowed_output_channels、contains_pii、
+    contains_trade_secret、embargo_until 和 owner_department。权限必须沿证据链
+    向下游传播，公开网页不能引用只由 confidential 证据支持的结论。
+    所有更新采用 append + supersedes，不物理覆盖证据。
+
+# ============================================================
+# 权限字段
+# ============================================================
+
+permission_fields:
+  description: 每个 Document、Chunk、Evidence 和 Assertion 至少保存以下字段
+  fields:
+
+    - field: access_level
+      type: enum
+      values: [public, internal, confidential, restricted]
+      required: true
+      description: 资料或陈述的访问级别
+
+    - field: allowed_task_types
+      type: array
+      required: true
+      description: 允许用于哪些任务类型，空数组表示不限制
+
+    - field: allowed_output_channels
+      type: array
+      values: [internal_analysis, customer_report, public_content]
+      required: true
+      description: 允许输出到哪些渠道
+
+    - field: contains_pii
+      type: boolean
+      required: true
+      description: 是否包含个人可识别信息
+
+    - field: contains_trade_secret
+      type: boolean
+      required: true
+      description: 是否包含商业秘密
+
+    - field: embargo_until
+      type: timestamp | null
+      required: true
+      description: 解禁时间，在此时间之前禁止对外使用或发布
+
+    - field: owner_department
+      type: string | null
+      required: true
+      description: 负责该记录的业务部门
+
+# ============================================================
+# 访问级别语义
+# ============================================================
+
+access_levels:
+  - level: public
+    description: 可公开使用的资料或陈述
+    output_channels: [public_content, customer_report, internal_analysis]
+    requires_approved_claim: true
+
+  - level: internal
+    description: 仅限内部使用，默认品牌管理员可见
+    output_channels: [internal_analysis, customer_report]
+    note: customer_report 需按客户授权确认
+
+  - level: confidential
+    description: 机密资料，仅内部分析，禁止进入公开内容
+    output_channels: [internal_analysis]
+    note: 公开网页不得引用只由 confidential 证据支持的结论
+
+  - level: restricted
+    description: 受限资料，需明确授权方可使用
+    output_channels: []
+    note: 默认不可输出，使用前必须获得授权
+
+# ============================================================
+# 权限沿证据链传播
+# ============================================================
+
+propagation:
+  description: 权限必须沿证据链向下游传播
+
+  direction: downstream
+  chain: Document → Chunk → Evidence → Assertion → 直接关系边
+
+  rules:
+    - rule: inherit_downstream
+      description: 下游记录继承上游证据链中最严格（保密级别最高）的权限
+      example: 若某 Assertion 依赖一个 confidential 的 Evidence，该 Assertion 不得标记为 public
+
+    - rule: effective_permission
+      description: 记录的实际可用权限 = 自身权限 ∩ 证据链上一路权限的交集
+      computation: effective = min_over_chain(access_level)
+
+    - rule: public_requires_public_evidence
+      description: 公开网页只能引用由 public 或 internal-but-approved 证据支持的结论
+      forbidden: 只由 confidential 证据支持的结论出现在公开内容
+
+    - rule: output_channel_intersection
+      description: 实际可输出渠道 = 自身渠道 ∩ 证据链各节点渠道的交集
+      forbidden: 任一证据节点未授权某渠道，则下游不得输出到该渠道
+
+    - rule: embargo_propagation
+      description: 证据链上任一节点未解禁（embargo_until 未到），下游不得对外使用
+      computation: effective_embargo = max_over_chain(embargo_until)
+
+    - rule: pii_and_trade_secret_guard
+      description: 任一下游断言继承 contains_pii / contains_trade_secret 的并集
+      action: 命中 pii 或 trade_secret 的记录禁止进入 public_content，除非脱敏并经授权
+
+# ============================================================
+# 证据链升级约束
+# ============================================================
+
+evidence_chain_guard:
+  - guard: confidential_leak
+    condition: 某公开 Assertion 的证据链中出现 confidential Evidence
+    action: 阻止公开发布，标记权限冲突，进入人工审核
+
+  - guard: restricted_use
+    condition: restricted 记录被用于非授权任务
+    action: 阻止输出，记录越权访问
+
+  - guard: embargo_breach
+    condition: 在 embargo_until 之前尝试对外输出
+    action: 阻止输出并告警
+
+  - guard: cross_channel_leak
+    condition: 证据链授权渠道不足以覆盖请求的目标渠道
+    action: 降级为 internal_analysis 或拒绝
+
+# ============================================================
+# 审计与更新
+# ============================================================
+
+audit_updates:
+  description: 所有更新采用 append + supersedes，不物理覆盖证据
+
+  mode: append_and_supersedes
+  rules:
+    - rule: no_overwrite
+      description: 权限、证据或状态变更不得原地覆盖历史记录
+    - rule: supersede_chain
+      description: 变更时创建新版本记录，旧记录标记 superseded
+    - rule: audit_trail
+      description: 每次权限变更记录变更人、变更时间、变更前后值和原因
+    - rule: evidence_immutable
+      description: 已写入的证据原文不可修改，勘误以新证据追加
+
+  never:
+    - overwrite_in_place
+    - delete_evidence_history
+    - silent_permission_change
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义 7 个权限字段
+      - 定义 4 级访问级别语义和可输出渠道
+      - 建立权限沿证据链向下游传播规则
+      - 定义证据链升级约束和审计更新规则
+    author: Brand Atlas Team

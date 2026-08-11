@@ -1,0 +1,133 @@
+# Brand Atlas Knowledge Graph — L3 抽取 Profile 定义
+# 版本: 1.0.0
+# 范围: L3 品牌认知层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+  note: >
+    每个抽取任务使用固定的 Extraction Profile 约束 LLM 输出维度。
+    模型可以提出 unknown_candidate，但不能自行创建新的实体类型或关系类型。
+
+profiles:
+  - profile_id: l3_identity_v1
+    applies_to_domains: [identity]
+    allowed_entity_types: [organization, brand, product]
+    allowed_relation_types: [owns_brand, offers]
+    required_assertion_fields:
+      - subject_ref
+      - predicate
+      - object_ref_or_value
+      - statement_class
+      - evidence_span
+    reject_if:
+      - organization_brand_conflated
+      - no_direct_evidence
+
+  - profile_id: l3_product_portfolio_v1
+    applies_to_domains: [product_portfolio]
+    allowed_entity_types: [product, product_version]
+    allowed_relation_types: [offers, version_of, supersedes]
+    required_assertion_fields:
+      - subject_ref
+      - predicate
+      - object_ref_or_value
+      - statement_class
+      - product_version_scope
+    reject_if:
+      - product_identity_ambiguous
+      - version_only_in_filename
+
+  - profile_id: l3_capability_mapping_v1
+    applies_to_domains: [positioning_and_category, capability_and_use_case]
+    allowed_entity_types: [product, capability, use_case, problem, outcome]
+    allowed_relation_types:
+      - has_capability
+      - capability_supports_use_case
+      - solves
+      - produces_outcome
+    required_assertion_fields:
+      - subject_ref
+      - predicate
+      - object_ref_or_value
+      - statement_class
+      - evidence_span
+      - product_version_scope
+      - limitations
+    reject_if:
+      - no_direct_evidence
+      - product_identity_ambiguous
+      - capability_only_inferred_from_category
+
+  - profile_id: l3_audience_decision_v1
+    applies_to_domains: [audience_and_decision]
+    allowed_entity_types: [audience, problem, job_to_be_done, outcome, decision_factor]
+    allowed_relation_types:
+      - serves
+      - solves
+      - has_problem
+      - performs
+      - has_decision_factor
+    required_assertion_fields:
+      - subject_ref
+      - predicate
+      - object_ref_or_value
+      - statement_class
+      - l2_reference
+    reject_if:
+      - no_direct_evidence
+
+  - profile_id: l3_security_compliance_v1
+    applies_to_domains: [security_compliance]
+    allowed_entity_types: [product, certification]
+    allowed_relation_types: [has_certification]
+    required_assertion_fields:
+      - subject_ref
+      - predicate
+      - object_ref_or_value
+      - statement_class
+      - cert_number
+      - cert_scope
+      - cert_validity
+    reject_if:
+      - cert_marketing_claim_only
+      - no_cert_traceability
+
+  - profile_id: l3_proof_case_v1
+    applies_to_domains: [proof_and_case]
+    allowed_entity_types: [case_study, customer, metric_result]
+    allowed_relation_types: [references, produces_result]
+    required_assertion_fields:
+      - subject_ref
+      - predicate
+      - quantified_value
+      - population
+      - measurement_period
+      - methodology
+      - statement_class
+      - publishability
+    reject_if:
+      - no_measurement_context
+      - inferred_as_general_result
+
+  - profile_id: l3_messaging_content_v1
+    applies_to_domains: [messaging_and_content]
+    allowed_entity_types: [content, topic, claim]
+    allowed_relation_types: [covers, expresses]
+    required_assertion_fields:
+      - subject_ref
+      - predicate
+      - object_ref_or_value
+      - claim_policy_type
+      - access_level
+    reject_if:
+      - unapproved_public_claim
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes: 初始版本，定义 7 个 L3 抽取 Profile
+    author: Brand Atlas Team

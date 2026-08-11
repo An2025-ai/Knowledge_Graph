@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brand-atlas.dev/schemas/l3_source_instance.schema.json",
+  "title": "L3 Source Instance",
+  "description": "Schema for L3 source instances (Section 8.1 of L3 spec).",
+  "type": "object",
+  "required": ["source_id", "tenant_id", "brand_id", "source_type", "publisher", "status"],
+  "properties": {
+    "source_id": {"type": "string"},
+    "tenant_id": {"type": "string"},
+    "brand_id": {"type": "string"},
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "enterprise_registry_record", "official_website", "official_product_docs",
+        "official_certification_certificate", "internal_approved_material",
+        "internal_draft", "customer_case_testimonial",
+        "l2_authoritative_third_party", "search_result"
+      ]
+    },
+    "publisher": {"type": "string"},
+    "canonical_url": {"type": "string", "format": "uri"},
+    "external_path": {"type": "string"},
+    "retrieved_at": {"type": "string", "format": "date"},
+    "published_at": {"type": "string", "format": "date"},
+    "document_version": {"type": "string"},
+    "language": {"type": "string"},
+    "mime_type": {"type": "string"},
+    "content_hash": {"type": "string"},
+    "access_level": {"type": "string", "enum": ["public", "internal", "confidential", "restricted"]},
+    "allowed_task_types": {"type": "array", "items": {"type": "string"}},
+    "license": {"type": "string"},
+    "owner": {"type": "string"},
+    "status": {"type": "string", "enum": ["registered", "gate_passed", "parsing", "extracted", "rejected"]}
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brand-atlas.dev/schemas/l3_brand_snapshot.schema.json",
+  "title": "L3 Brand Snapshot",
+  "description": "Schema for L3 brand knowledge snapshots (Section 13.3 of L3 spec).",
+  "type": "object",
+  "required": ["snapshot_id", "tenant_id", "brand_id", "l1_version", "entity_count", "assertion_count", "published_at"],
+  "properties": {
+    "snapshot_id": {"type": "string"},
+    "tenant_id": {"type": "string"},
+    "brand_id": {"type": "string"},
+    "l1_version": {"type": "string"},
+    "l2_snapshot_id": {"type": "string"},
+    "source_manifest_hash": {"type": "string"},
+    "entity_count": {"type": "integer"},
+    "assertion_count": {"type": "integer"},
+    "conflict_count": {"type": "integer"},
+    "approved_by": {"type": "string"},
+    "published_at": {"type": "string", "format": "date-time"},
+    "previous_snapshot_id": {"type": "string"}
+  }
+}

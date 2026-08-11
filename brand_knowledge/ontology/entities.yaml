@@ -1,0 +1,119 @@
+# Brand Atlas Knowledge Graph — L3 图谱实体定义
+# 版本: 1.0.0
+# 范围: L3 品牌认知层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+
+# ============================================================
+# L3 核心实体
+# ============================================================
+
+core_entities:
+  - entity_type: organization
+    name: 组织
+    name_en: Organization
+    definition: 法律或运营主体。一个组织可运营多个品牌。
+    l1_status: semantic_subtype_candidate  # pending L1 v1.2.0
+    fields:
+      required: [id, tenant_id, brand_id, entity_type, canonical_name, status]
+      optional: [aliases, legal_name, registration_number, headquarters, official_domains, description]
+    note: 与 brand 必须分开。一个公司可运营多个品牌。
+
+  - entity_type: brand
+    name: 品牌
+    name_en: Brand
+    definition: 品牌身份，被组织拥有，提供产品。
+    l1_status: shared  # L1 existing
+    fields:
+      required: [id, tenant_id, brand_id, entity_type, canonical_name, status]
+      optional: [aliases, description, logo, positioning_statement]
+
+  - entity_type: product
+    name: 产品
+    name_en: Product
+    definition: 可独立购买或使用的产品/服务。
+    l1_status: shared  # L1 existing
+    fields:
+      required: [id, tenant_id, brand_id, entity_type, canonical_name, status]
+      optional: [aliases, description, product_line, deployment_type, pricing_model]
+
+  - entity_type: product_version
+    name: 产品版本
+    name_en: Product Version
+    definition: 能力与口径的版本边界。产品能力、定价、命名随版本变化。
+    l1_status: semantic_subtype_candidate  # pending L1 v1.2.0
+    fields:
+      required: [id, tenant_id, brand_id, entity_type, canonical_name, product_ref, status]
+      optional: [release_date, semantic_version, document_version, changelog_summary]
+    note: 版本级断言必须指向 product_version 或在 scope.product_version 限定。
+
+  - entity_type: content
+    name: 内容资产
+    name_en: Content Asset
+    definition: 官网页、说明书、案例、FAQ 等内容资产实例。
+    l1_status: shared  # L1 existing, L3 instance
+    fields:
+      required: [id, tenant_id, brand_id, entity_type, canonical_name, source_id, status]
+      optional: [content_type, covered_topic_ids, url, published_at, content_hash]
+
+  - entity_type: assertion
+    name: 断言
+    name_en: Assertion
+    definition: 存储为带证据和条件的陈述（fact/claim/observation/inference + assertion_kind）。
+    l1_status: storage_level  # not an L1 business entity
+    fields:
+      required: [id, tenant_id, brand_id, subject_id, predicate, statement_text, statement_class, status]
+      optional: [object_entity_id, object_value, assertion_kind, claimant_id, scope, limitations, evidence_refs]
+
+  - entity_type: source_instance
+    name: 来源实例
+    name_en: Source Instance
+    definition: 实际来源主体和载体。
+    l1_status: storage_level
+    fields:
+      required: [id, tenant_id, brand_id, source_type, publisher, status]
+      optional: [canonical_url, external_path, retrieved_at, published_at, document_version, content_hash]
+
+# ============================================================
+# L2 引用实体（按 ID 引用，不重复创建）
+# ============================================================
+
+reference_entities:
+  source: L2 entity IDs
+  list:
+    - audience       # 用户角色
+    - problem        # 用户问题
+    - job_to_be_done # 目标任务
+    - outcome        # 期望结果
+    - category       # 规范品类
+    - capability     # 行业共享能力
+    - use_case       # 使用情境
+    - decision_factor # 选型维度
+    - topic          # 内容主题
+  note: L3 引用这些实体 ID，不携带客户内部信息。
+
+# ============================================================
+# 存储对象（知识工程，不要求进入 L1 业务本体）
+# ============================================================
+
+storage_objects:
+  list:
+    - document
+    - chunk
+    - evidence
+    - conflict
+    - review_task
+    - context_package
+  note: 这些属于知识工程存储对象，不要求都进入 L1 业务本体。
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes: 初始版本，定义 L3 核心实体、L2 引用实体和存储对象
+    author: Brand Atlas Team

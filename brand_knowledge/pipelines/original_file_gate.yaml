@@ -1,0 +1,291 @@
+# Brand Atlas 第三层品牌认知层 — 管道定义：原件保存和门禁
+# 版本: 1.0.0
+# 范围: 保存原始文件并执行安全、权限、版权和来源核验门禁
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+
+pipeline:
+  id: pipeline_l3_original_file_gate
+  name: 原件保存和门禁
+  name_en: Original File Saving and Gates
+  version: 1.0.0
+  purpose: >
+    保存原始文件或网页快照并计算 SHA-256，执行 MIME、病毒、
+    密码保护和损坏检查，识别 PII、商业秘密、合同和未发布
+    路线图，确认来源域名、跳转链、发布日期和 canonical URL，
+    通过哈希和 URL 判定幂等或新版本，并仅对合规来源才能进入
+    解析，不满足权限或版权要求的资料只登记元数据。
+  description: >
+    原件保存和门禁管道是品牌资料进入解析前的安全与合规关卡。
+    管道首先保存原始文件或网页快照并计算 SHA-256 供完整性校验，
+    然后执行文件安全检查（MIME 类型、病毒、密码保护、损坏）。
+    接着识别文档中的 PII、商业秘密、合同和未发布路线图等敏感
+    内容，并确认来源域名、跳转链、发布日期和 canonical URL。
+    通过相同 Hash 判定幂等跳过，通过相同 URL 不同 Hash 判定新
+    文档版本。不满足权限或版权要求的资料只登记元数据，不进入
+    解析流程。
+
+  steps:
+    - step: 1
+      name: 保存原始文件并计算哈希
+      name_en: Save Original File and Compute SHA-256
+      description: 保存原始文件或网页快照，计算 SHA-256 内容哈希
+      inputs:
+        - original_file
+        - snapshot_retriever
+      outputs:
+        - saved_original: 已保存的原始文件/快照
+        - content_hash: SHA-256 内容哈希
+      rules:
+        - sha256_must_be_computed
+        - original_must_be_preserved_verbatim
+
+    - step: 2
+      name: 执行文件安全检查
+      name_en: Run File Safety Checks
+      description: 检查 MIME 类型、病毒、密码保护和文件损坏
+      inputs:
+        - saved_original
+        - mime_registry
+        - anti_virus_engine
+      outputs:
+        - safety_result: 安全检查结果（MIME、病毒、密码、损坏）
+        - blocked_flags: 阻止进入解析的标记（如病毒、损坏）
+      rules:
+        - mime_must_be_allowed
+        - virus_must_block
+        - password_protected_must_block
+        - corrupted_file_must_block
+
+    - step: 3
+      name: 识别敏感内容
+      name_en: Identify Sensitive Content
+      description: 识别 PII、商业秘密、合同和未发布路线图等敏感内容
+      inputs:
+        - saved_original
+        - sensitive_content_rules
+        - pii_detector
+      outputs:
+        - sensitivity_findings: 敏感内容识别结果（类型、位置、风险等级）
+        - sensitivity_flags: 敏感标记（限制使用或禁止输出）
+      rules:
+        - pii_must_be_identified
+        - trade_secrets_must_be_flagged
+        - contracts_must_be_flagged
+        - unpublished_roadmaps_must_be_flagged
+
+    - step: 4
+      name: 确认来源域和发布信息
+      name_en: Confirm Source Domain and Publication Info
+      description: 确认来源域名、跳转链、发布日期和网页 canonical URL
+      inputs:
+        - saved_original
+        - source_registry
+        - redirect_resolver
+      outputs:
+        - source_confirmation: 来源确认结果（域名、跳转链、发布日期、canonical URL）
+      rules:
+        - source_domain_must_be_confirmed
+        - canonical_url_must_resolve
+        - redirects_must_be_traced
+
+    - step: 5
+      name: 判定幂等或新版本
+      name_en: Determine Idempotent Skip or New Version
+      description: 通过哈希和 URL 判定幂等跳过或新文档版本
+      inputs:
+        - content_hash
+        - source_confirmation
+        - source_registry
+      outputs:
+        - version_decision: 版本判定（幂等跳过 / 新文档版本 / 首次登记）
+      rules:
+        - same_hash_is_idempotent
+        - same_url_diff_hash_is_new_version
+
+    - step: 6
+      name: 门禁放行或拒绝解析
+      name_en: Gate Release or Block Parsing
+      description: 对合规来源放行进入解析，对不合规来源只登记元数据
+      inputs:
+        - safety_result
+        - sensitivity_findings
+        - source_confirmation
+        - version_decision
+      outputs:
+        - gate_decision: 门禁决策（解析放行 / 只登记 / 完全拒绝）
+        - gated_source: 通过门禁的来源记录
+        - metadata_only_sources: 仅登记元数据的来源
+      rules:
+        - non_compliant_sources_register_metadata_only
+        - blocked_sources_must_not_enter_parsing
+
+  inputs:
+    - original_file:
+        description: 原始文件或网页快照（待保存和检查）
+        source: 品牌资料采集模块
+        fields: [file_path, file_content, file_name, mime_guess, source_url]
+    - snapshot_retriever:
+        description: 网页快照抓取器（用于保存无本地文件的网页快照）
+        source: 采集模块
+        fields: [retriever_id, url, snapshot_format, html_content]
+    - mime_registry:
+        description: 允许的 MIME 类型注册表
+        source: 品牌知识配置
+        fields: [mime_type, category, allowed, parser_mapping]
+    - anti_virus_engine:
+        description: 反病毒引擎（用于文件病毒扫描）
+        source: 安全模块
+        fields: [engine_id, scan_method, signature_version, result]
+    - sensitive_content_rules:
+        description: 敏感内容识别规则（PII、商业秘密、合同、路线图的判定标准）
+        source: 合规管理
+        fields: [rule_id, sensitive_type, detection_method, risk_level, action]
+    - pii_detector:
+        description: PII 检测器（识别个人身份信息）
+        source: 合规模块
+        fields: [detector_id, pii_types, regex_patterns, model_config]
+    - source_registry:
+        description: 品牌来源注册表（用于域名、URL 和哈希比对）
+        source: 来源管理系统
+        fields: [source_id, canonical_url, content_hash, domain, registered_at]
+    - redirect_resolver:
+        description: 跳转链解析器（用于确认最终 canonical URL）
+        source: 网络模块
+        fields: [resolver_id, redirect_chain, final_url, canonical_tag]
+
+  outputs:
+    output_schema: gated_source
+    output_fields:
+      - gate_id: 门禁批次唯一标识
+      - source_id: 关联的登记来源 ID
+      - content_hash: SHA-256 内容哈希
+      - safety_result: 安全检查结果（MIME、病毒、密码、损坏状态）
+      - sensitivity_findings: 敏感内容识别结果列表
+      - source_confirmation: 来源确认结果（域名、跳转链、发布日期、canonical URL）
+      - version_decision: 版本判定（idempotent / new_version / first_registration）
+      - gate_decision: 门禁决策（parse_release / metadata_only / full_reject）
+      - metadata_only: 是否仅登记元数据不进入解析
+
+  rules:
+    - rule: sha256_must_be_computed
+      description: 每个原始文件或快照必须计算并记录 SHA-256 内容哈希
+      severity: critical
+
+    - rule: original_must_be_preserved_verbatim
+      description: 保存的原始文件或快照必须与来源内容一致，不可被改写
+      severity: critical
+
+    - rule: mime_must_be_allowed
+      description: 文档 MIME 类型必须在允许列表中，未知 MIME 需人工确认
+      severity: high
+
+    - rule: virus_must_block
+      description: 检测到病毒的文件必须阻止进入解析流程
+      severity: critical
+
+    - rule: password_protected_must_block
+      description: 密码保护的文档必须阻止进入解析，除非取得授权
+      severity: critical
+
+    - rule: corrupted_file_must_block
+      description: 损坏的文件必须阻止进入解析，记录损坏位置
+      severity: critical
+
+    - rule: pii_must_be_identified
+      description: 文档中的 PII 必须被识别并标记，不可遗漏
+      severity: critical
+
+    - rule: trade_secrets_must_be_flagged
+      description: 涉及商业秘密的内容必须标记并限制使用
+      severity: critical
+
+    - rule: contracts_must_be_flagged
+      description: 合同类内容必须标记，其使用需符合授权范围
+      severity: high
+
+    - rule: unpublished_roadmaps_must_be_flagged
+      description: 未发布路线图必须标记为 internal，禁止公开输出
+      severity: critical
+
+    - rule: source_domain_must_be_confirmed
+      description: 来源域名必须与登记的品牌来源匹配，无法确认的域名需人工核验
+      severity: critical
+
+    - rule: canonical_url_must_resolve
+      description: 网页的 canonical URL 必须可解析并指向最终页面
+      severity: high
+
+    - rule: redirects_must_be_traced
+      description: 跳转链必须被完整追踪，记录最终落地 URL
+      severity: high
+
+    - rule: same_hash_is_idempotent
+      description: 相同内容哈希的来源应幂等跳过，不重复处理
+      severity: critical
+
+    - rule: same_url_diff_hash_is_new_version
+      description: 相同 URL 但不同哈希的来源应登记为新文档版本
+      severity: high
+
+    - rule: non_compliant_sources_register_metadata_only
+      description: 不满足权限或版权要求的资料只登记元数据，不进入解析
+      severity: critical
+
+    - rule: blocked_sources_must_not_enter_parsing
+      description: 被安全或权限门禁阻止的来源严禁进入后续解析流程
+      severity: critical
+
+  failure_mode: gate_rejection_high
+  failure_handling:
+    condition: 大量来源因安全、权限或版权不符合被拒绝，或病毒、损坏文件比例异常升高
+    action: 生成门禁拒绝报告，分类统计拒绝原因，暂停该批次的自动解析，将问题反馈给采集和安全模块
+    recovery: 采集模块修正资料来源或安全模块更新规则后重新执行门禁，仅放行合规来源
+
+  quality_checks:
+    - check: hash_integrity
+      description: 确认保存的原始文件与计算出的哈希一致
+      method: 对保存的原始文件重新计算哈希并与记录值比对
+
+    - check: safety_check_coverage
+      description: 确认所有来源都完成了 MIME、病毒、密码和损坏检查
+      method: 检查 safety_result 中四个检查项均有结果
+
+    - check: sensitivity_identification_rate
+      description: 确认敏感内容识别覆盖率
+      method: 抽样检查已识别为敏感的内容与敏感规则匹配的实际情况
+
+    - check: source_domain_alignment
+      description: 确认来源域名与登记品牌来源一致
+      method: 比对 source_confirmation 的域名与 source_registry 中的域名
+
+    - check: version_decision_consistency
+      description: 确认版本判定与哈希和 URL 逻辑一致
+      method: 检查 same_hash 的来源均判定为 idempotent，same_url_diff_hash 均判定为 new_version
+
+    - check: gate_compliance
+      description: 确认不合规来源未进入解析
+      method: 检查所有 metadata_only 来源的 gate_decision 均为非解析放行
+
+    - check: blocked_source_traceability
+      description: 确认所有被阻止的来源有完整的原因记录
+      method: 检查 blocked_flags 中每条记录包含具体的阻止原因
+
+  metric_refs: []
+  # 预留：gate_rejection_rate, virus_detection_rate, metadata_only_ratio, hash_verification_pass_rate
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义 L3 原件保存和门禁管道
+      - 实现原件保存、SHA-256、安全与敏感内容检查、来源确认和幂等/新版本判定
+      - 遵循 L3 规范 §8.2，不合规来源只登记元数据不进入解析
+      - 包含 6 个管道步骤、17 条规则和 7 项质量检查
+    author: Brand Atlas Team

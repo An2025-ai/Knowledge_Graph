@@ -1,0 +1,156 @@
+# Brand Atlas Knowledge Graph — L3 数据域注册表
+# 版本: 1.0.0
+# 范围: L3 品牌认知层 11 个数据域
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+
+domains:
+  - domain_code: identity
+    name: 品牌与组织身份域
+    purpose: 品牌、组织和法律主体的身份信息
+    extract_fields:
+      - 品牌规范名、中文名、英文名、历史名和常见写法
+      - 法律组织名、品牌与组织的所有或运营关系
+      - 官方域名、登录域名、地区、地址、电话和邮箱
+      - 品牌描述、成立时间、总部和团队信息
+      - 商标或品牌层级
+    semantic_rule: >
+      Organization、Brand 和 Product 必须分开。
+      一个公司可运营多个品牌，一个品牌可包含多个产品。
+    source_types_acceptable: [enterprise_registry_record, official_website]
+
+  - domain_code: product_portfolio
+    name: 产品组合与版本域
+    purpose: 产品、服务和版本目录
+    extract_fields:
+      - 产品和服务名称、别名、产品线、模块和套餐
+      - 产品状态：planned、beta、active、deprecated
+      - 产品版本、发布时间、文档版本和适用版本
+      - 部署方式：SaaS、私有化、本地、混合、桌面端
+      - 定价模式、试用、POC 和购买方式
+      - 产品依赖、可选模块和第三方集成
+    semantic_rule: 产品版本不能只存在于文档文件名中，版本级断言必须指向 ProductVersion
+    source_types_acceptable: [official_website, official_product_docs, internal_approved_material]
+
+  - domain_code: positioning_and_category
+    name: 定位与品类映射域
+    purpose: 品牌定位和 L2 品类映射
+    extract_fields:
+      - 品牌自定义产品类别和一句话定位
+      - L2 规范行业、品类和替代方案类型
+      - 核心市场、地域、企业规模和业务复杂度
+      - 与 ERP、BI、自研系统等替代路径的关系
+      - 品牌希望被关联或避免关联的概念
+    semantic_rule: 品牌原话作为 self_claim 保存；品类归一使用 L2 定义，二者不能互相覆盖
+    source_types_acceptable: [official_website, official_product_docs]
+
+  - domain_code: audience_and_decision
+    name: 用户、决策链和 JTBD 域
+    purpose: 用户角色、决策链和目标任务
+    extract_fields:
+      - 使用者、业务负责人、技术评估者、采购者、审批者和受益者
+      - 企业画像：行业、规模、业务模式、平台数量、组织复杂度
+      - 用户问题、严重程度、触发事件和现有替代方式
+      - Job to Be Done、期望结果、验收指标和决策因素
+      - 决策阶段
+    semantic_rule: 优先引用 L2 Audience、Problem、JobToBeDone、Outcome 和 DecisionFactor ID
+    source_types_acceptable: [official_website, internal_approved_material, customer_case_testimonial]
+
+  - domain_code: capability_and_use_case
+    name: 能力、功能和使用场景域
+    purpose: 产品能力和使用场景
+    extract_fields:
+      - 品牌原始功能名和 L2 规范能力 ID
+      - 能力状态、产品版本、部署条件和依赖
+      - 输入、处理、输出和边界条件
+      - 支持的使用场景、解决的问题和产生的结果
+      - 可核验方式
+    semantic_rule: >
+      三类概念必须区分：Capability（稳定能力）/ Feature（模块实现）/
+      UseCase（使用情境）。不允许仅因相似关键词就建立 HAS_CAPABILITY，
+      需至少一句直接支持的 Evidence Span。
+    source_types_acceptable: [official_product_docs, internal_approved_material]
+
+  - domain_code: deployment_integration
+    name: 技术、部署和集成域
+    purpose: 技术栈、部署方式和集成
+    extract_fields:
+      - 架构组件、数据存储、计算引擎和模型类型
+      - API、RPA、文件、ERP、OA、财务系统和电商平台集成
+      - 私有化、公有云、本地桌面端和混合部署
+      - 数据规模、并发、响应时间和历史数据范围
+      - 可用性、备份、恢复、扩缩容和厂商依赖
+      - 已验证性能与仅承诺性能的区分
+    semantic_rule: 技术栈名称可作为事实候选；性能数字若只来自品牌资料，仍为带测试条件的 self_claim
+    source_types_acceptable: [official_product_docs, internal_approved_material]
+
+  - domain_code: security_compliance
+    name: 安全、合规和权限域
+    purpose: 安全能力和合规要求
+    extract_fields:
+      - 数据访问控制、行列权限、角色权限和租户隔离
+      - 加密、审计日志、数据保留和删除策略
+      - 安全认证、证书编号、范围、颁发方和有效期
+      - 数据是否离开客户环境，模型训练和推理位置
+      - 适用法律、会计准则和监管要求
+    semantic_rule: '支持等保三级与已通过等保三级语义不同；认证事实必须能追溯到证书或可验证登记'
+    source_types_acceptable: [official_certification_certificate, official_product_docs, internal_approved_material]
+
+  - domain_code: proof_and_case
+    name: 证据、案例和量化结果域
+    purpose: 客户案例和量化结果
+    extract_fields:
+      - 客户案例主体、行业、规模、场景和授权状态
+      - 使用前基线、使用后结果、时间窗口、样本和测量方法
+      - 性能测试、POC 结果、客户证言和第三方测评
+      - 证书、奖项、专利、合作伙伴和媒体报道
+      - 可公开程度、是否匿名、是否允许引用客户名称
+    semantic_rule: 量化结果必须拆成结构化值（metric/before/after/population/measurement_period/methodology）
+    source_types_acceptable: [customer_case_testimonial, official_website, l2_authoritative_third_party]
+
+  - domain_code: service_and_poc
+    name: 实施、服务和商业域
+    purpose: 实施流程和服务承诺
+    extract_fields:
+      - 试用、POC、实施阶段、周期、客户配合项和验收标准
+      - 历史数据迁移、培训、上线保障和售后渠道
+      - SLA、响应时间、到场时间和服务时段
+      - 部署和服务定价模式，不保存无授权的具体报价
+      - 适合和不适合的客户、前置条件和退出机制
+    semantic_rule: 服务承诺按产品套餐、客户等级、合同版本和有效期限定，不能生成全局无条件事实
+    source_types_acceptable: [internal_approved_material, official_website]
+
+  - domain_code: messaging_and_content
+    name: 品牌信息与内容资产域
+    purpose: 品牌口径和内容资产
+    extract_fields:
+      - 标准品牌介绍、一句话定位、价值主张和差异化主张
+      - Approved Claim / Restricted Claim / Prohibited Claim
+      - 语气、术语、产品标准名、旧名称和禁用名称
+      - 官网页面、文章、白皮书、FAQ、案例、视频和下载资料
+      - 每个内容资产覆盖的 L2 主题、问题、用户、意图和决策阶段
+    semantic_rule: 内容资产不是证据的同义词；一篇内容可含多个 Evidence Span
+    source_types_acceptable: [official_website, internal_approved_material]
+
+  - domain_code: competition_mapping
+    name: 竞争映射域
+    purpose: 品牌竞争映射和口径
+    extract_fields:
+      - 直接竞品、间接竞品、替代方案和自研路径
+      - 竞争发生的品类、用户、预算、地区和决策因素
+      - 品牌自述的差异化和独立证据的比较结论
+      - 不可比较项和版本差异
+    semantic_rule: 同一篇对比材料中共同出现，不足以建立 COMPETES_WITH；需证明在同一需求形成替代
+    source_types_acceptable: [official_website, l2_authoritative_third_party, internal_approved_material]
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes: 初始版本，定义 L3 11 个数据域
+    author: Brand Atlas Team

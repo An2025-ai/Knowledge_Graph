@@ -3,15 +3,15 @@
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.1.0
+  version: 1.2.0
   created_at: 2026-08-07
   updated_at: 2026-08-11
   status: active
   scope: shared
   description: >
     定义信息检索、过滤、排序和输出的上下文策略。
-    v1.1.0 新增 industry_id、snapshot_id、requirement_id、market、
-    valid_at 和 verification_status 过滤维度，以支持 L2 行业知识层。
+    v1.2.0 新增品牌治理硬过滤规则：product_id、product_version、
+    output_channel、publication_status 和 allowed_task_types。
 
 # ============================================================
 # 过滤规则
@@ -119,6 +119,27 @@ filtering_rules:
       2. 优先使用 verification_status: verified 的知识
       3. 排除 status: deprecated 的知识
       4. 对 verification_status: disputed 的知识显式标记冲突
+
+  - rule: brand_governance_filtering
+    name: 品牌治理硬过滤（L3扩展）
+    priority: 8
+    description: >
+      按品牌产品、版本、输出渠道和发布状态进行硬过滤。
+      v1.2.0 新增，确保不同品牌和输出场景的权限隔离。
+      这是硬过滤：禁止当前任务+渠道的记录被排除，而非仅降权。
+    filter_dimensions:
+      - product_id: 产品标识
+      - product_version: 产品版本
+      - output_channel: internal_analysis / customer_report / public_content
+      - publication_status: approved / restricted / prohibited
+      - allowed_task_types: 允许的任务类型列表
+      - access_level: public / internal / confidential / restricted
+    logic: >
+      1. 记录必须允许当前任务（allowed_task_types 包含当前任务）
+      2. 记录必须允许当前输出渠道（allowed_output_channels 包含当前渠道）
+      3. publication_status: prohibited 的记录禁止任何公开输出
+      4. access_level 不满足当前上下文时排除
+      5. 权限沿证据链向下游传播，公开输出不能引用 confidential 证据
 
 # ============================================================
 # 检索规则
@@ -281,6 +302,14 @@ conflict_marking_rules:
 # ============================================================
 
 changelog:
+  - version: 1.2.0
+    date: 2026-08-11
+    changes:
+      - 新增 brand_governance_filtering 规则（product_id, product_version, output_channel, publication_status, allowed_task_types, access_level）
+      - 过滤规则总数从 7 增至 8
+      - 硬过滤语义：权限不满足时排除，而非仅降权
+      - 权限沿证据链向下游传播
+    author: Brand Atlas Team
   - version: 1.1.0
     date: 2026-08-11
     changes:

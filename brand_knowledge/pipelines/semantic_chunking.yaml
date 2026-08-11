@@ -1,0 +1,261 @@
+# Brand Atlas 第三层品牌认知层 — 管道定义：语义分块
+# 版本: 1.0.0
+# 范围: 按语义优先级将解析文档切分为章节块、证据跨度和上下文窗口
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+
+pipeline:
+  id: pipeline_l3_semantic_chunking
+  name: 语义分块
+  name_en: Semantic Chunking
+  version: 1.0.0
+  purpose: >
+    将解析后的文档按照语义优先级（产品或文档版本、章节、子标题、
+    表格或列表、段落、句子级 Evidence Span）切分为三种块类型：
+    Section Chunk、Evidence Span 和 Context Window。禁止使用固定
+    字符数切块破坏表格和问答结构，为下游抽取和证据回溯提供
+    语义完整的块。
+  description: >
+    语义分块管道负责将解析后的文档内容切分为语义完整的块。
+    分块遵循严格的优先级：产品或文档版本、章节、子标题、表格
+    或列表、段落，最后是句子级 Evidence Span。系统明确禁止使用
+    固定字符数切块，以保护表格和问答结构的语义完整性。管道生成
+    三种块类型：Section Chunk（约 300 至 900 中文字，用于章节级
+    抽取和实体消歧）、Evidence Span（直接支持一条陈述的最小连续
+    原文，通常 1 至 5 句或一行表格）、Context Window（Evidence
+    Span 前后相邻块，用于消歧，不直接作为引用）。
+
+  steps:
+    - step: 1
+      name: 加载分块配置
+      name_en: Load Chunking Configuration
+      description: 读取语义分块配置（块类型定义、优先级、字符范围）
+      inputs:
+        - chunking_config
+      outputs:
+        - parsed_config: 解析后的分块配置（块类型、优先级、范围）
+      rules:
+        - chunking_config_must_be_active
+
+    - step: 2
+      name: 识别分块边界
+      name_en: Identify Semantic Boundaries
+      description: 按优先级识别产品或文档版本、章节、子标题、表格或列表、段落边界
+      inputs:
+        - structured_content
+        - parsed_config
+      outputs:
+        - boundary_hierarchy: 语义边界层级（版本、章节、子标题、表格/列表、段落）
+      rules:
+        - boundaries_must_follow_priority
+        - section_boundaries_must_preserve_heading
+
+    - step: 3
+      name: 生成 Section Chunk
+      name_en: Generate Section Chunks
+      description: 生成约 300 至 900 中文字的章节块，用于章节级抽取和实体消歧
+      inputs:
+        - boundary_hierarchy
+        - parsed_config
+      outputs:
+        - section_chunks: 章节块列表（章节、内容、字符范围）
+      rules:
+        - section_chunk_must_be_in_character_range
+        - section_chunk_must_preserve_section_identity
+
+    - step: 4
+      name: 生成 Evidence Span
+      name_en: Generate Evidence Spans
+      description: 生成支持一条陈述的最小连续原文（1 至 5 句或一行表格）
+      inputs:
+        - boundary_hierarchy
+        - parsed_config
+      outputs:
+        - evidence_spans: 证据跨度列表（最小连续原文、句数、表格行引用）
+      rules:
+        - evidence_span_must_be_minimal_continuous
+        - evidence_span_must_support_one_statement
+        - evidence_span_must_not_break_tables_or_qa
+
+    - step: 5
+      name: 生成 Context Window
+      name_en: Generate Context Windows
+      description: 生成 Evidence Span 前后相邻块用于消歧，标记为不可引用
+      inputs:
+        - evidence_spans
+        - boundary_hierarchy
+        - parsed_config
+      outputs:
+        - context_windows: 上下文窗口列表（前后相邻块、关联的证据跨度）
+      rules:
+        - context_window_must_not_be_citation
+        - context_window_must_pair_with_evidence_span
+
+    - step: 6
+      name: 输出分块结果
+      name_en: Output Chunked Result
+      description: 输出三种块类型的分块结果和分块清单
+      inputs:
+        - section_chunks
+        - evidence_spans
+        - context_windows
+      outputs:
+        - chunked_document: 分块后的文档（三种块类型）
+        - chunking_manifest: 分块清单（块数量、块类型分布、字符范围）
+      rules:
+        - each_chunk_must_have_unique_id
+        - output_must_include_chunking_manifest
+
+  inputs:
+    - chunking_config:
+        description: 语义分块配置（块类型定义、优先级、字符范围）
+        source: 品牌知识配置
+        fields: [config_id, chunk_types, priority_order, section_chunk_range, evidence_span_rules]
+    - structured_content:
+        description: 解析后的结构化内容树
+        source: 版式感知解析管道输出
+        fields: [structure, node_id, node_type, content, page_number, bounding_box, heading_level]
+
+  outputs:
+    output_schema: chunked_document
+    output_fields:
+      - chunking_id: 分块批次唯一标识
+      - source_id: 关联的来源 ID
+      - section_chunks:
+          type: array
+          description: 章节块列表
+          item_fields:
+            - chunk_id: 块 ID
+            - chunk_type: section_chunk
+            - section_id: 所属章节
+            - content: 块内容
+            - char_count: 字符数
+            - evidence_span_ids: 关联的证据跨度 ID 列表
+      - evidence_spans:
+          type: array
+          description: 证据跨度列表
+          item_fields:
+            - span_id: 证据跨度 ID
+            - chunk_type: evidence_span
+            - content: 最小连续原文
+            - sentence_count: 句数
+            - table_row_ref: 表格行引用
+            - page_number: 页码
+            - bounding_box: 边界框
+      - context_windows:
+          type: array
+          description: 上下文窗口列表
+          item_fields:
+            - window_id: 上下文窗口 ID
+            - chunk_type: context_window
+            - content: 前后相邻块内容
+            - paired_span_id: 关联的证据跨度 ID
+            - is_citation: false
+      - chunking_manifest: 分块清单（块数量、块类型分布、字符范围）
+
+  rules:
+    - rule: chunking_config_must_be_active
+      description: 使用的分块配置必须处于 active 状态
+      severity: critical
+
+    - rule: boundaries_must_follow_priority
+      description: 分块边界必须严格遵循产品/文档版本、章节、子标题、表格/列表、段落的优先级
+      severity: critical
+
+    - rule: section_boundaries_must_preserve_heading
+      description: 章节边界必须保留标题，不可将标题与正文分离
+      severity: high
+
+    - rule: section_chunk_must_be_in_character_range
+      description: Section Chunk 必须落在约 300 至 900 中文字范围内
+      severity: high
+
+    - rule: section_chunk_must_preserve_section_identity
+      description: Section Chunk 必须保持所属章节的身份，不可跨章节混合
+      severity: critical
+
+    - rule: evidence_span_must_be_minimal_continuous
+      description: Evidence Span 必须是最小连续原文，不可拆分或合并
+      severity: critical
+
+    - rule: evidence_span_must_support_one_statement
+      description: Evidence Span 必须直接支持一条陈述
+      severity: critical
+
+    - rule: evidence_span_must_not_break_tables_or_qa
+      description: Evidence Span 切分不可破坏表格或问答结构
+      severity: critical
+
+    - rule: no_fixed_character_count_chunking
+      description: 禁止使用固定字符数切块破坏表格和问答结构
+      severity: critical
+
+    - rule: context_window_must_not_be_citation
+      description: Context Window 用于消歧，不可直接作为引用
+      severity: critical
+
+    - rule: context_window_must_pair_with_evidence_span
+      description: 每个 Context Window 必须与一个 Evidence Span 关联
+      severity: high
+
+    - rule: each_chunk_must_have_unique_id
+      description: 每个块必须具有唯一 ID
+      severity: critical
+
+    - rule: output_must_include_chunking_manifest
+      description: 输出必须包含分块清单记录块类型分布和字符范围
+      severity: high
+
+  failure_mode: chunking_quality_insufficient
+  failure_handling:
+    condition: 分块破坏了表格或问答结构、Section Chunk 超出字符范围或 Evidence Span 无法定位原文
+    action: 生成分块质量报告，标记被破坏的结构和越界块，暂停该文档的下游抽取，调整分块配置后重新分块
+    recovery: 调整语义边界识别规则、修正分块配置或由人工修复后重新分块
+
+  quality_checks:
+    - check: priority_adherence
+      description: 确认分块边界遵循了优先级
+      method: 检查每个块的边界是否与产品或文档版本、章节、子标题、表格/列表、段落层级一致
+
+    - check: section_chunk_range
+      description: 确认 Section Chunk 在字符范围内
+      method: 检查所有 section_chunk 的 char_count 落在 300 至 900 之间
+
+    - check: evidence_span_minimality
+      description: 确认 Evidence Span 是最小连续原文
+      method: 检查每个 evidence_span 的句数在 1 至 5 之间或为单行表格
+
+    - check: table_qa_integrity
+      description: 确认表格和问答结构未被破坏
+      method: 检查 table 和 QA 节点是否整体落入单个块，未被拆分
+
+    - check: context_window_pairing
+      description: 确认所有上下文窗口有配对证据跨度
+      method: 检查每个 context_window 的 paired_span_id 非空且有效
+
+    - check: chunk_uniqueness
+      description: 确认所有块 ID 唯一
+      method: 检查 section_chunks + evidence_spans + context_windows 中无重复 ID
+
+    - check: citation_restriction
+      description: 确认 Context Window 未被标记为可引用
+      method: 检查所有 context_window 的 is_citation 为 false
+
+  metric_refs: []
+  # 预留：chunks_per_document, evidence_span_density, section_chunk_range_adherence, chunk_duplication_rate
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义 L3 语义分块管道
+      - 实现按语义优先级的三种块类型切分，禁止固定字符数切块
+      - 遵循 L3 规范 §8.4，Section Chunk、Evidence Span 和 Context Window
+      - 包含 6 个管道步骤、13 条规则和 7 项质量检查
+    author: Brand Atlas Team

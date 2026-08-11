@@ -1,17 +1,17 @@
 # GEO 第一层通用知识层 — 关系定义
-# 版本: 1.1.0
+# 版本: 1.2.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.1.0
+  version: 1.2.0
   created_at: 2026-08-07
   updated_at: 2026-08-11
   status: active
   scope: shared
   description: >
     定义 GEO/Brand Atlas 系统中实体之间可以建立的全部关系类型。
-    v1.1.0 新增 7 种关系类型，总数增至 27 种。
-    扩展 has_capability 的客体类型以支持 capability 实体。
+    v1.2.0 新增 4 种关系类型，总数增至 31 种。
+    新增 owns_brand、offers、version_of、supersedes 以支持 L3 品牌认知层。
 
 # ============================================================
 # 关系类型定义
@@ -465,7 +465,74 @@ relation_types:
         relation: achieves_outcome
         object: 提升线索转化率 20%
 
-  # --- (original 20 ends above, new v1.1.0 additions: relations 21-27) ---
+  # --- 28. owns_brand: 组织拥有品牌 ---
+  - relation: owns_brand
+    description: 组织拥有或运营某个品牌
+    description_en: Organization owns a brand
+    subject_types: [organization]
+    object_types: [brand]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.2.0
+    examples:
+      - subject: 上海智算云图科技有限公司
+        relation: owns_brand
+        object: DeepCleer
+
+  # --- 29. offers: 品牌提供产品 ---
+  - relation: offers
+    description: 品牌向市场提供某个产品
+    description_en: Brand offers a product
+    subject_types: [brand]
+    object_types: [product]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.2.0
+    examples:
+      - subject: DeepCleer
+        relation: offers
+        object: AI业财财报平台
+
+  # --- 30. version_of: 产品版本属于产品 ---
+  - relation: version_of
+    description: 产品版本是某产品的具体版本
+    description_en: Product version is a version of a product
+    subject_types: [product_version]
+    object_types: [product]
+    cardinality: many-to-one
+    bidirectional: false
+    confidence_required: false
+    source_refs_required: false
+    version: 1.2.0
+    examples:
+      - subject: DeepCleer_QA_V2.1
+        relation: version_of
+        object: AI业财财报平台
+
+  # --- 31. supersedes: 版本或口径替代 ---
+  - relation: supersedes
+    description: 一个版本或口径替代先前的版本或口径
+    description_en: A version or assertion supersedes a prior one
+    subject_types: [product_version, assertion]
+    object_types: [product_version, assertion]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.2.0
+    note: >
+      用于表达版本替代链和口径替代链。能由版本或时间解释的差异用
+      supersedes/validity 表达，不视为冲突错误。
+    examples:
+      - subject: V2.1
+        relation: supersedes
+        object: V2.0
+
+  # --- (original 20 ends above; v1.1.0 additions: 21-27; v1.2.0 additions: 28-31) ---
 
 # ============================================================
 # 关系记录格式
@@ -504,7 +571,7 @@ relation_record_format:
   conflict_type:
     type: string
     description: 仅用于 contradicts 关系，标记冲突类型
-    values: [time, value, definition, brand_vs_third_party, capability]
+    values: [time, value, definition, brand_vs_third_party, capability, naming, document_version, sla, scope]
     required: false
 
 # ============================================================
@@ -512,6 +579,14 @@ relation_record_format:
 # ============================================================
 
 changelog:
+  - version: 1.2.0
+    date: 2026-08-11
+    changes:
+      - 新增 4 种关系类型：owns_brand（组织拥有品牌）、offers（品牌提供产品）、version_of（产品版本属于产品）、supersedes（版本或口径替代）
+      - 关系类型总数从 27 增至 31
+      - 支持 L3 品牌认知层的组织-品牌-产品-版本体系
+      - 向后兼容，未删除或修改已有关系
+    author: Brand Atlas Team
   - version: 1.1.0
     date: 2026-08-11
     changes:

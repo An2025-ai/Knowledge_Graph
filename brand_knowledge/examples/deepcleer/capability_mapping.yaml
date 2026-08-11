@@ -1,0 +1,63 @@
+# Brand Atlas Knowledge Graph — L3 DeepCleer 试点：能力映射样例
+# 版本: 1.0.0
+# 用途: DeepCleer 能力到 L2 的映射候选（Section 14.3）
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  status: example
+  scope: brand
+  layer: L3
+
+capability_mappings:
+  - brand_statement: 全平台账单自动拉取
+    l2_capability_candidate: 多源数据采集
+    assertion_class: self_claim
+    evidence_status: 官网和内部材料一致
+
+  - brand_statement: SKU/虚拟店铺分摊
+    l2_capability_candidate: 多维成本费用分摊
+    assertion_class: self_claim
+    evidence_status: 官网、QA、说明书一致
+
+  - brand_statement: 三大表与合并报表
+    l2_capability_candidate: 财务报表生成、合并核算
+    assertion_class: self_claim
+    evidence_status: 多个官方来源支持
+
+  - brand_statement: 静态归档与审计追踪
+    l2_capability_candidate: 审计追溯
+    assertion_class: self_claim
+    evidence_status: 多个官方来源支持
+
+  - brand_statement: Doris 万亿级实时计算
+    l2_capability_candidate: 大规模实时分析
+    assertion_class: quantified self_claim
+    evidence_status: 缺独立测试条件
+
+  - brand_statement: AI Agent 自然语言查数
+    l2_capability_candidate: 自然语言数据查询
+    assertion_class: self_claim
+    evidence_status: 官网和 QA 支持
+
+  - brand_statement: 多主体资金分发
+    l2_capability_candidate: 企业资金结算
+    assertion_class: self_claim
+    evidence_status: 官网智能结算产品页支持
+
+  - brand_statement: 多模型、多 Agent、Skills、MCP
+    l2_capability_candidate: 智能体编排与工具扩展
+    assertion_class: self_claim
+    evidence_status: 官网 DCCLaw/智能体页面支持
+
+# 映射约束
+mapping_notes:
+  - note: 多个官方来源一致可以提高"品牌口径一致性"，但不能自动把能力主张变成第三方验证事实
+  - note: 映射保存 mapping_type、confidence、mapper_version、review_status 和 mapping_note
+  - note: closeMatch 不能被下游当作完全等价
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes: 初始版本，DeepCleer 能力映射样例
+    author: Brand Atlas Team

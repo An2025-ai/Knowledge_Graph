@@ -1,11 +1,11 @@
 # GEO 第一层通用知识层 — 任务模板：品牌导入
-# 版本: 1.0.0
+# 版本: 1.2.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.0.0
+  version: 1.2.0
   created_at: 2026-08-07
-  updated_at: 2026-08-07
+  updated_at: 2026-08-11
   status: active
   scope: shared
 
@@ -13,32 +13,41 @@ task:
   id: task_brand_onboarding
   name: 品牌导入
   name_en: Brand Onboarding
-  version: 1.0.0
+  version: 1.2.0
   purpose: >
     将新品牌接入知识图谱系统，建立品牌的基础实体、
     关系和初始认知画像。这是所有后续分析任务的前提。
+    支持多租户品牌实例、产品版本、来源清单和 L2 映射。
   description: >
     品牌导入任务负责为新品牌创建所有必要的实体记录和关系连接，
     包括品牌基本信息、产品列表、行业归属、目标用户、核心能力等。
     导入完成后，品牌即具备参与后续分析（搜索诊断、主题规划等）的条件。
 
   required_context:
+    - tenant_config:
+        description: 多租户配置
+        source: 平台租户管理
+        fields: [tenant_id, brand_id, default_access_level]
     - brand_profile:
-        description: 品牌基本信息（名称、简介、官网、成立时间等）
+        description: 品牌和所属组织基本信息
         source: 品牌官网、企业信息平台
-        fields: [canonical_name, aliases, description, website, industry, headquarters]
+        fields: [canonical_name, aliases, description, website, organization, headquarters]
     - product_catalog:
-        description: 产品和服务列表
+        description: 产品、服务和版本列表
         source: 品牌官网产品页、产品文档
-        fields: [canonical_name, description, category, pricing_model, deployment_type]
+        fields: [canonical_name, description, category, pricing_model, deployment_type, product_version]
     - industry_classification:
         description: 行业和品类归属
-        source: 行业分类标准、市场报告
-        fields: [industry_id, category_ids]
+        source: 行业分类标准、市场报告、L2 行业知识层
+        fields: [industry_id, category_ids, l2_mapping]
     - target_audience:
         description: 目标用户角色
         source: 品牌官网、产品定位文档
         fields: [canonical_name, description, decision_authority]
+    - source_inventory:
+        description: 允许使用的来源清单和权限
+        source: 来源登记、权限分类
+        fields: [source_id, source_type, access_level, allowed_task_types]
 
   optional_context:
     - competitor_list:
@@ -59,15 +68,27 @@ task:
     - created_entities:
         type: array
         description: 新创建的实体列表
-        items: [brand, product, audience, use_case]
+        items: [organization, brand, product, product_version, audience, use_case]
     - created_relations:
         type: array
         description: 新创建的关系列表
-        items: [operates_in, belongs_to, serves, supports_use_case, solves]
+        items: [owns_brand, offers, version_of, supersedes, operates_in, belongs_to, serves, supports_use_case, solves]
+    - l2_mapping:
+        type: array
+        description: 品牌原始概念到 L2 规范实体的映射
+        items: [local_entity_id, l2_entity_id, mapping_type, confidence]
     - onboarding_summary:
         type: object
         description: 导入摘要
         fields: [entity_count, relation_count, coverage_score, missing_fields]
+    - conflicts:
+        type: array
+        description: 发现的冲突清单
+        items: [conflict_type, party_a, party_b, resolution_status]
+    - missing_information:
+        type: array
+        description: 缺失信息清单（不补齐）
+        items: [item, category, reason]
     - recommended_actions:
         type: array
         description: 建议的后续操作
@@ -88,6 +109,18 @@ task:
 
     - rule: brand_claims_as_claims
       description: 品牌自述必须标记为 claim，不标记为 fact
+
+    - rule: tenant_isolation_required
+      description: 所有 L3 记录必须携带 tenant_id 和 brand_id
+      severity: critical
+
+    - rule: organization_brand_separation
+      description: 组织与品牌必须分开，不得合并为同一实体
+      severity: critical
+
+    - rule: product_version_required_when_asserting
+      description: 能力、定价和命名随版本变化，断言必须限定 product_version
+      severity: high
       severity: high
 
     - rule: duplicate_check
@@ -133,6 +166,15 @@ task:
   # 预留：未来可添加 brand_completeness_score, onboarding_time 等指标
 
 changelog:
+  - version: 1.2.0
+    date: 2026-08-11
+    changes:
+      - 增加 tenant_config、source_inventory 到必需上下文
+      - 增加 organization、product_version 到输出实体
+      - 增加 owns_brand、offers、version_of、supersedes 到输出关系
+      - 增加 l2_mapping、conflicts、missing_information 输出字段
+      - 新增规则：tenant_isolation_required、organization_brand_separation、product_version_required_when_asserting
+    author: Brand Atlas Team
   - version: 1.0.0
     date: 2026-08-07
     changes:

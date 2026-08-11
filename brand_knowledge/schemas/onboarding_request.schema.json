@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brand-atlas.dev/schemas/l3_onboarding_request.schema.json",
+  "title": "L3 Brand Onboarding Request",
+  "description": "Schema for L3 brand onboarding requests (Section 5 of L3 spec).",
+  "type": "object",
+  "required": ["request_id", "tenant_id", "brand_input", "markets", "languages", "industry_scope", "source_scope", "required_dimensions", "output_policies"],
+  "properties": {
+    "request_id": {"type": "string"},
+    "tenant_id": {"type": "string"},
+    "brand_input": {
+      "type": "object",
+      "required": ["canonical_name", "official_domains"],
+      "properties": {
+        "canonical_name": {"type": "string"},
+        "known_aliases": {"type": "array", "items": {"type": "string"}},
+        "official_domains": {"type": "array", "items": {"type": "string", "format": "uri"}, "minItems": 1}
+      }
+    },
+    "markets": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "languages": {"type": "array", "items": {"type": "string"}},
+    "industry_scope": {
+      "type": "object",
+      "properties": {
+        "l2_industry_ids": {"type": "array", "items": {"type": "string"}},
+        "l2_category_candidates": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "source_scope": {
+      "type": "object",
+      "properties": {
+        "official_website": {"type": "boolean"},
+        "internal_documents": {"type": "boolean"},
+        "third_party_authoritative": {"type": "boolean"},
+        "community_sources": {"type": "boolean", "default": false}
+      }
+    },
+    "required_dimensions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "identity", "product_portfolio", "audience_and_problem",
+          "capability_and_use_case", "deployment_and_integration",
+          "security_and_compliance", "proof_and_case", "service_and_poc",
+          "messaging_and_content"
+        ]
+      },
+      "minItems": 1
+    },
+    "output_policies": {
+      "type": "object",
+      "properties": {
+        "default_access_level": {"type": "string", "enum": ["public", "internal", "confidential", "restricted"]},
+        "public_content_requires_approved_claims": {"type": "boolean"}
+      }
+    }
+  }
+}

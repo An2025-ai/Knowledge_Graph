@@ -1,0 +1,309 @@
+# Brand Atlas 第三层品牌认知层 — 管道定义：审核与晋升
+# 版本: 1.0.0
+# 范围: 将核验通过的候选品牌知识经过审核后晋升为 active 状态
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+
+pipeline:
+  id: pipeline_l3_review_promotion
+  name: 审核与晋升
+  name_en: Review and Promotion
+  version: 1.0.0
+  purpose: >
+    将支持核验通过的候选品牌知识按状态机 candidate、normalized、
+    evidence_verified、policy_checked、approved、active 逐级晋升，
+    并在策略检查阶段对强制人工审核的情形（认证合规安全税务会计、
+    绝对化主张、性能/ROI/结果/市场地位数值、竞品比较、内部转公开、
+    产品名/版本/来源冲突、L2 新映射）进行人工审核，最终将批准的
+    候选晋升为 active 状态。
+  description: >
+    审核与晋升管道是品牌知识构建的最后一道工序和质量把关环节。
+    管道按照状态机将候选逐级晋升：candidate、normalized、
+    evidence_verified、policy_checked、approved、active。在
+    policy_checked 阶段，管道对七类强制人工审核的情形引导人工
+    介入：认证/合规/安全/税务/会计相关陈述、"唯一/首个/领先/
+    最全/最准"等绝对化主张、性能/ROI/客户结果/市场地位数值、
+    竞品比较和替代建议、内部资料转为公开口径、产品名/产品版本/
+    来源之间的冲突、L2 新实体和新能力映射。只有通过全部检查并
+    得到相应批准（自动或人工）的候选才能晋升为 active。
+
+  steps:
+    - step: 1
+      name: 规范化候选
+      name_en: Normalize Candidate
+      description: 将支持核验的断言规范化为标准格式（candidate -> normalized）
+      inputs:
+        - verified_assertions
+        - normalization_rules
+      outputs:
+        - normalized_candidates: 规范化后的候选
+      rules:
+        - normalization_must_standardize_format
+
+    - step: 2
+      name: 复核证据验证
+      name_en: Reconfirm Evidence Verification
+      description: 复核候选已通过支持核验（normalized -> evidence_verified）
+      inputs:
+        - normalized_candidates
+        - verification_results
+      outputs:
+        - evidence_verified_candidates: 证据已验证的候选
+      rules:
+        - only_direct_or_accepted_partial_passes
+
+    - step: 3
+      name: 执行策略检查
+      name_en: Run Policy Check
+      description: 检查候选是否触发强制人工审核情形（policy_checked）
+      inputs:
+        - evidence_verified_candidates
+        - policy_check_rules
+      outputs:
+        - policy_checked_candidates: 策略检查后的候选（通过或进入审核）
+        - forced_review_items: 强制人工审核条目
+      rules:
+        - forced_review_conditions_must_be_detected
+        - absolute_claims_must_be_reviewed
+        - performance_numbers_must_be_reviewed
+
+    - step: 4
+      name: 执行强制人工审核
+      name_en: Execute Forced Human Review
+      description: 对强制人工审核条目进行人工审核并记录决定
+      inputs:
+        - forced_review_items
+        - review_queue
+      outputs:
+        - review_decisions: 人工审核决定（approve / reject / amend）
+        - approved_candidates: 批准通过的候选
+      rules:
+        - human_review_must_approve_before_promotion
+        - review_decisions_must_be_recorded
+
+    - step: 5
+      name: 晋升为 active
+      name_en: Promote to Active
+      description: 将批准的候选晋升为 active 状态并写入品牌知识库
+      inputs:
+        - approved_candidates
+        - brand_knowledge_store
+      outputs:
+        - active_knowledge: 晋升为 active 的品牌知识
+        - promotion_log: 晋升日志
+      rules:
+        - promotion_must_be_atomic
+        - version_must_increment
+        - audit_log_must_be_written
+
+    - step: 6
+      name: 记录拒绝与复核
+      name_en: Record Rejections and Revisions
+      description: 记录被拒绝或需修订的候选及原因
+      inputs:
+        - rejected_items
+        - amended_items
+      outputs:
+        - rejection_report: 拒绝与修订报告（含原因和可重提标记）
+        - promotion_summary: 晋升摘要（批准/拒绝/审核统计）
+      rules:
+        - every_rejection_must_have_reason
+        - resubmission_eligible_must_be_marked
+
+  inputs:
+    - verified_assertions:
+        description: 支持核验通过的断言批次
+        source: 支持关系核验管道输出
+        fields: [statement_id, support_status, eligible_for_promotion, statement_class, assertion_kind, evidence_span_id]
+    - normalization_rules:
+        description: 规范化规则（将断言格式化为标准结构）
+        source: 品牌知识配置
+        fields: [rule_id, field_mapping, format_standard, required_fields]
+    - verification_results:
+        description: 支持核验结果
+        source: 支持关系核验管道输出
+        fields: [statement_id, support_status, verification_note, eligible_for_promotion]
+    - policy_check_rules:
+        description: 策略检查规则（强制人工审核情形）
+        source: 质量管理
+        fields:
+          - rule_id: 规则 ID
+          - condition: 触发条件
+          - review_type: 审核类型
+          - priority: 优先级
+        forced_review_conditions:
+          - certification_compliance_security_tax_accounting: 认证、合规、安全、税务和会计准则相关陈述
+          - absolute_claims: "唯一、首个、领先、最全、最准等绝对化主张"
+          - performance_roi_result_market_numbers: 性能、ROI、客户结果和市场地位数值
+          - competitive_comparison: 竞品比较和替代建议
+          - internal_to_public: 内部资料转为公开口径
+          - product_version_source_conflicts: 产品名、产品版本或来源之间存在冲突
+          - l2_new_entity_capability_mapping: L2 新实体和新能力映射
+    - review_queue:
+        description: 人工审核队列接口
+        source: 审核管理系统
+        fields: [review_id, item_type, priority, assignee, status, decision]
+    - brand_knowledge_store:
+        description: 品牌知识存储接口
+        source: 品牌知识层存储
+        fields: [store_id, connect_config, write_permissions, versioning_strategy]
+
+  outputs:
+    output_schema: promotion_result
+    output_fields:
+      - promotion_batch_id: 晋升批次唯一标识
+      - activated_knowledge:
+          type: array
+          description: 晋升为 active 的品牌知识
+          item_fields:
+            - knowledge_id: 知识 ID
+            - statement_id: 关联陈述 ID
+            - status: active
+            - assertion_kind: 业务断言种类
+            - promotion_path: 晋升路径（自动 / 人工批准）
+            - promoted_at: 晋升时间
+      - forced_review_items:
+          type: array
+          description: 强制人工审核条目
+          item_fields:
+            - review_id: 审核 ID
+            - statement_id: 陈述 ID
+            - review_condition: 触发的审核条件
+            - decision: 审核决定
+            - status: 审核状态
+            - assigned_to: 指派人
+      - rejected_items:
+          type: array
+          description: 被拒绝的条目
+          item_fields:
+            - rejection_id: 拒绝 ID
+            - statement_id: 陈述 ID
+            - rejection_reason: 拒绝原因
+            - resubmission_eligible: 是否可重新提交
+      - promotion_summary:
+          type: object
+          description: 晋升摘要
+          fields:
+            - approved_count: 批准数量
+            - rejected_count: 拒绝数量
+            - queued_count: 排队审核数量
+            - promotion_rate: 晋升率
+
+  rules:
+    - rule: normalization_must_standardize_format
+      description: 候选必须规范化为标准格式
+      severity: high
+
+    - rule: only_direct_or_accepted_partial_passes
+      description: 只有 direct 或经人工接受的 partial 支持状态才能通过复核
+      severity: critical
+
+    - rule: forced_review_conditions_must_be_detected
+      description: 七类强制人工审核情形必须被检测
+      severity: critical
+
+    - rule: absolute_claims_must_be_reviewed
+      description: "唯一、首个、领先、最全、最准等绝对化主张必须人工审核"
+      severity: critical
+
+    - rule: performance_numbers_must_be_reviewed
+      description: 性能、ROI、客户结果和市场地位数值必须人工审核
+      severity: critical
+
+    - rule: competitive_comparison_must_be_reviewed
+      description: 竞品比较和替代建议必须人工审核
+      severity: high
+
+    - rule: internal_to_public_must_be_reviewed
+      description: 内部资料转为公开口径必须人工审核
+      severity: critical
+
+    - rule: conflicts_must_be_reviewed
+      description: 产品名、产品版本或来源之间的冲突必须人工审核
+      severity: critical
+
+    - rule: l2_new_mapping_must_be_reviewed
+      description: L2 新实体和新能力映射必须人工审核
+      severity: critical
+
+    - rule: human_review_must_approve_before_promotion
+      description: 强制审核条目必须经人工批准后才能晋升
+      severity: critical
+
+    - rule: review_decisions_must_be_recorded
+      description: 每个人工审核决定必须被记录
+      severity: high
+
+    - rule: promotion_must_be_atomic
+      description: 晋升为 active 的写入必须原子化
+      severity: critical
+
+    - rule: version_must_increment
+      description: 更新已有知识时必须递增版本号
+      severity: critical
+
+    - rule: audit_log_must_be_written
+      description: 所有晋升或写入操作必须记录审计日志
+      severity: critical
+
+    - rule: every_rejection_must_have_reason
+      description: 每个被拒绝的候选必须附带明确原因
+      severity: critical
+
+    - rule: resubmission_eligible_must_be_marked
+      description: 每个被拒绝的候选必须标记是否可重新提交
+      severity: high
+
+  failure_mode: promotion_rate_below_threshold
+  failure_handling:
+    condition: 晋升率过低或审核队列积压严重，表明上游抽取或核验存在系统性问题
+    action: 生成晋升报告，分析拒绝分布和审核队列，暂停该批次自动晋升，将问题反馈给上游管道
+    recovery: 上游管道优化后重新抽取和核验，或调整审核阈值和人力资源后重新晋升
+
+  quality_checks:
+    - check: state_machine_transition
+      description: 确认候选按状态机完整流转
+      method: 检查每个候选经历了 candidate、normalized、evidence_verified、policy_checked、approved、active 的状态
+
+    - check: forced_review_coverage
+      description: 确认所有强制审核条件被检测
+      method: 检查七类强制条件的抽查命中情况
+
+    - check: absolute_claim_guard
+      description: 确认绝对化主张均进入审核
+      method: 检查含"唯一、首个、领先、最全、最准"字样的陈述均进入 forced_review_items
+
+    - check: number_claim_review
+      description: 确认性能、ROI、市场地位数值经过审核
+      method: 检查含这些数值的陈述的 review 记录
+
+    - check: internal_public_transition_guard
+      description: 确认内部转公开口径的内容经过审核
+      method: 检查 internal_fact/internal_claim 转为 public 的陈述有 review 记录
+
+    - check: audit_log_integrity
+      description: 确认审计日志包含所有晋升操作
+      method: 检查 activated_knowledge 数量与 promotion_log 记录数一致
+
+    - check: rejection_reason_completeness
+      description: 确认所有拒绝有完整原因
+      method: 检查 rejected_items 中每条记录的 rejection_reason 非空
+
+  metric_refs: []
+  # 预留：promotion_rate, forced_review_ratio, review_queue_backlog, avg_review_latency, active_knowledge_growth
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义 L3 审核与晋升管道
+      - 实现六状态晋升状态机和七类强制人工审核
+      - 遵循 L3 规范 §8.10，candidate 至 active 逐级晋升
+      - 包含 6 个管道步骤、16 条规则和 7 项质量检查
+    author: Brand Atlas Team

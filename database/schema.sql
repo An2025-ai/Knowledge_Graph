@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS entity_type (
 CREATE INDEX idx_et_type_code ON entity_type(type_code);
 CREATE INDEX idx_et_status ON entity_type(status);
 
-COMMENT ON TABLE entity_type IS '实体类型定义，系统支持的 15 种实体类型';
+COMMENT ON TABLE entity_type IS '实体类型定义，系统支持的 21 种实体类型';
 
 -- ============================================================================
 -- 4. relation_type — 关系类型注册表
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS relation_type (
 
 CREATE INDEX idx_rt_relation_code ON relation_type(relation_code);
 
-COMMENT ON TABLE relation_type IS '关系类型定义，系统支持的 20 种关系类型';
+COMMENT ON TABLE relation_type IS '关系类型定义，系统支持的 31 种关系类型';
 
 -- ============================================================================
 -- 5. intent_definition — 意图定义
@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS task_template (
 
 CREATE INDEX idx_tt_task_code ON task_template(task_code);
 
-COMMENT ON TABLE task_template IS '任务模板定义，系统支持的 5 种任务类型';
+COMMENT ON TABLE task_template IS '任务模板定义，系统支持的 9 种任务类型';
 
 -- ============================================================================
 -- 7. source_policy — 来源策略
@@ -324,8 +324,8 @@ $$ LANGUAGE plpgsql;
 -- 初始数据：插入 knowledge_definition 记录
 -- ============================================================================
 INSERT INTO knowledge_definition (file_path, file_name, category, version, description) VALUES
-    ('ontology/entities.yaml', 'entities.yaml', 'ontology', '1.0.0', '15 种实体类型定义'),
-    ('ontology/relations.yaml', 'relations.yaml', 'ontology', '1.0.0', '20 种关系类型定义'),
+    ('ontology/entities.yaml', 'entities.yaml', 'ontology', '1.2.0', '21 种实体类型定义'),
+    ('ontology/relations.yaml', 'relations.yaml', 'ontology', '1.2.0', '31 种关系类型定义'),
     ('intents/intent_types.yaml', 'intent_types.yaml', 'intents', '1.0.0', '13 种意图类型 + 7 个决策阶段'),
     ('intents/prompt_patterns.yaml', 'prompt_patterns.yaml', 'intents', '1.0.0', '39 个提问词模式'),
     ('sources/source_types.yaml', 'source_types.yaml', 'sources', '1.0.0', '8 种来源类型'),

@@ -1,0 +1,150 @@
+# Brand Atlas Knowledge Graph — L3 人工审核与晋升策略
+# 版本: 1.0.0
+# 范围: L3 品牌认知层
+# 参考: brand_knowledge/README.md §8.10 审核与晋升, §6.3 权限字段, §8.9 支持关系核验
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+  description: >
+    定义 L3 品牌认知层中强制人工审核的触发条件、审核升级规则和晋升状态流转。
+    认证/合规/安全/税务/会计、绝对化主张、性能/ROI/结果/市场地位数值、
+    竞品比较、内部转公开、产品名/版本/来源冲突、L2 新实体与新能力映射等
+    情况强制人工审核。晋升状态流转为 candidate → normalized →
+    evidence_verified → policy_checked → approved → active。
+
+# ============================================================
+# 强制人工审核触发条件
+# ============================================================
+
+forced_review_triggers:
+  - trigger: cert_compliance_security_tax_accounting
+    description: 认证、合规、安全、税务和会计准则相关陈述
+    severity: critical
+    note: 认证事实必须可追溯到证书或可验证登记，不得根据营销页自动认定
+
+  - trigger: absolute_claims
+    description: 唯一/首个/领先/最全/最准 等绝对化主张
+    severity: critical
+    requires: legal_and_brand_admin
+    note: 除非有独立证据和法务批准，否则禁止公开复用
+
+  - trigger: performance_roi_result_market_position
+    description: 性能、ROI、客户结果和市场地位数值
+    severity: high
+    note: 量化结果必须拆成结构化值，缺少样本/时间/方法降低证据等级
+
+  - trigger: competitive_comparison
+    description: 竞品比较和替代建议
+    severity: high
+    note: 需证明在统一需求/预算/采购决策中形成替代，且获法务批准
+
+  - trigger: internal_to_public
+    description: 内部资料转为公开口径
+    severity: high
+    note: 权限沿证据链传播，public_content 需 approved_claim
+
+  - trigger: product_name_version_source_conflict
+    description: 产品名、产品版本或来源之间存在冲突
+    severity: high
+    note: 按 revision_conflict 处理，不自动合并或覆盖
+
+  - trigger: l2_new_entity_capability_mapping
+    description: L2 新实体和新能力映射
+    severity: high
+    requires: domain_expert
+
+  - trigger: entity_merge_suspicious
+    description: 品牌、组织、产品疑似错误合并
+    severity: critical
+    requires: senior_reviewer
+    note: 品牌和产品不得仅凭向量相似度自动合并
+
+  - trigger: high_risk_entity_confirm
+    description: 品牌、组织、产品和认证等高风险实体人工确认
+    severity: high
+
+# ============================================================
+# 晋升状态流转
+# ============================================================
+
+promotion_status_flow:
+  description: 候选知识晋升的完整状态链
+
+  statuses:
+    - status: candidate
+      description: 从解析和抽取产生的初始候选
+      allowed_transitions: [normalized, rejected]
+
+    - status: normalized
+      description: 实体已消歧、版本已识别、字段已标准化
+      allowed_transitions: [evidence_verified, rejected]
+
+    - status: evidence_verified
+      description: 支持关系核验通过（direct 或经人工接受的 partial）
+      allowed_transitions: [policy_checked, rejected]
+      note: 只有 direct 或经人工接受的 partial 可晋升
+
+    - status: policy_checked
+      description: 通过权限传播、口径治理和冲突检查
+      allowed_transitions: [approved, rejected]
+
+    - status: approved
+      description: 人工审核通过，具备直接证据、有效期和发布状态
+      allowed_transitions: [active, rejected]
+
+    - status: active
+      description: 当前有效，可投影为可用图关系
+      allowed_transitions: [superseded, needs_review, disputed]
+
+  first_build_target: 发布 brand_snapshot_v1
+
+# ============================================================
+# 审核升级规则
+# ============================================================
+
+escalation_rules:
+  - condition: sla_exceeded
+    action: 自动升级至上一级审核员
+
+  - condition: reviewer_disagreement
+    action: 升级至 senior_reviewer
+
+  - condition: legal_required
+    action: 由法务评审（绝对化主张、竞品比较、公开口径）
+
+  - condition: repeated_rejection
+    action: 标记为 blocked，通知品牌管理员
+
+  - condition: cross_department
+    action: 由 owner_department 和品牌管理员共同确认
+
+# ============================================================
+# 审核与页面消失联动
+# ============================================================
+
+freshness_linkage:
+  description: 与 freshness.yaml 联动的审核动作
+  conditions:
+    - condition: page_disappearance
+      action: 相关 Assertion 进入 needs_review，保留历史证据
+    - condition: semantic_change
+      action: 变更内容重新进入 policy_checked 或 approved 审核
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义 9 类强制人工审核触发条件
+      - 建立 6 阶段晋升状态流转（candidate → active）
+      - 定义审核升级与法务联动规则
+      - 建立与 freshness 的 needs_review 联动
+    author: Brand Atlas Team

@@ -20,11 +20,36 @@ evidence_chain_model:
   description: 从原始网页到最终知识陈述的完整证据追溯链
 
   chain:
-    - {step: original_page, name: 原始网页, order: 1, description: 信息最初出现的网页或文档, attributes: [url, captured_at, http_status, content_hash, content_type], preservation: 原始文件归档保存记录SHA-256哈希值}
-    - {step: browser_record, name: 浏览器记录, order: 2, description: 浏览器渲染后的页面快照和抓取记录, attributes: [snapshot_path, render_status, access_method], preservation: 渲染截图和DOM快照保存}
-    - {step: evidence_package, name: 证据包, order: 3, description: 从原始页面中提取的组装为证据包的文本片段, attributes: [package_id, extracted_text, text_location, extraction_method, extraction_date, extracted_by], preservation: 提取的文本片段和位置信息保存}
-    - {step: report_citation, name: 报告引用, order: 4, description: 在报告中使用[S#]格式的引用标记, attributes: [citation_id, package_id, citation_context, citation_type], preservation: 引用ID和证据包ID的映射关系保存}
-    - {step: extracted_statement, name: 提取陈述, order: 5, description: 从证据中提取的最终知识陈述, attributes: [statement_id, statement_text, evidence_refs, information_class], preservation: 陈述文本和证据关系的完整记录}
+    - step: original_page
+      name: 原始网页
+      order: 1
+      description: 信息最初出现的网页或文档
+      attributes: [url, captured_at, http_status, content_hash, content_type]
+      preservation: 原始文件归档保存记录 SHA-256 哈希值
+    - step: browser_record
+      name: 浏览器记录
+      order: 2
+      description: 浏览器渲染后的页面快照和抓取记录
+      attributes: [snapshot_path, render_status, access_method]
+      preservation: 渲染截图和 DOM 快照保存
+    - step: evidence_package
+      name: 证据包
+      order: 3
+      description: 从原始页面中提取的组装为证据包的文本片段
+      attributes: [package_id, extracted_text, text_location, extraction_method, extraction_date, extracted_by]
+      preservation: 提取的文本片段和位置信息保存
+    - step: report_citation
+      name: 报告引用
+      order: 4
+      description: 在报告中使用 [S#] 格式的引用标记
+      attributes: [citation_id, package_id, citation_context, citation_type]
+      preservation: 引用 ID 和证据包 ID 的映射关系保存
+    - step: extracted_statement
+      name: 提取陈述
+      order: 5
+      description: 从证据中提取的最终知识陈述
+      attributes: [statement_id, statement_text, evidence_refs, information_class]
+      preservation: 陈述文本和证据关系的完整记录
 
 # ============================================================
 # 引用解析规则

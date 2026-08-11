@@ -1,17 +1,18 @@
 # GEO 第一层通用知识层 — 冲突处理策略
-# 版本: 1.0.0
+# 版本: 1.2.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.0.0
+  version: 1.2.0
   created_at: 2026-08-07
-  updated_at: 2026-08-07
+  updated_at: 2026-08-11
   status: active
   scope: shared
   description: >
     定义信息冲突的识别、分类、记录和处理策略。
     核心原则：发现冲突后保留双方来源，标记冲突类型，
     不自动合并为单一事实。
+    v1.2.0 新增命名、文档版本、SLA 和范围冲突类型。
 
 # ============================================================
 # 冲突类型定义
@@ -114,6 +115,64 @@ conflict_types:
       description: 官方文档称产品支持私有化部署，但用户反馈私有化部署需额外付费且配置复杂，保留双方信息并标注差异
     version: 1.0.0
 
+  - id: naming_conflict
+    name: 命名冲突
+    name_en: Naming Conflict
+    description: >
+      同一产品或概念存在不同命名，或命名之间存在歧义。
+      例如 DCCLaw 与 AI 智能体构建工厂的定位不同，或店铺建议出现 50 家以上和 100 家以上。
+    detection:
+      - 多个名称可能指向同一实体，但定位/描述不一致
+      - 不同资料对同一产品命名不同
+    resolution:
+      - 不自动合并产品实体
+      - 建立 possible_same_product 候选，由产品负责人确认
+      - 保留所有命名和证据
+    version: 1.2.0
+
+  - id: document_version_conflict
+    name: 文档版本冲突
+    name_en: Document Version Conflict
+    description: >
+      文件名版本与内容版本不一致，或同一文档存在多版本信号。
+      例如 QA 文件名 V2.1 但封面写 V2.0。
+    detection:
+      - 文件名、封面、页眉、元数据中的版本号不一致
+    resolution:
+      - 保留所有版本信号，创建冲突记录
+      - 不默认选择任一版本
+      - 交由人工确认
+    version: 1.2.0
+
+  - id: sla_conflict
+    name: SLA 冲突
+    name_en: SLA Conflict
+    description: >
+      不同来源或不同客户等级的服务响应时间承诺不一致。
+      例如 P0 15 分钟电话响应与 30 分钟故障响应。
+    detection:
+      - 同一 SLA 类型在不同资料中响应时间不同
+      - 同一服务水平对不同客户等级的承诺不同
+    resolution:
+      - 按 SLA 类型、客户等级和材料版本拆分
+      - 保留条件化 Assertion
+      - 待确认公开口径
+    version: 1.2.0
+
+  - id: scope_conflict
+    name: 范围冲突
+    name_en: Scope Conflict
+    description: >
+      同一指标在不同适用阈值、客户画像或验证条件下数值不同。
+      例如目标规模出现月 GMV 1000 万以上、5000 万+已验证、年 GMV 1 亿以上。
+    detection:
+      - 同一指标存在多个数值，且适用条件不同
+    resolution:
+      - 拆分成适用阈值、验证案例和目标画像三个不同谓词
+      - 不做数值覆盖
+      - 建立条件化 Assertion
+    version: 1.2.0
+
 # ============================================================
 # 冲突记录规则
 # ============================================================
@@ -190,6 +249,13 @@ resolution_statuses:
 # ============================================================
 
 changelog:
+  - version: 1.2.0
+    date: 2026-08-11
+    changes:
+      - 新增 4 种冲突类型：naming_conflict、document_version_conflict、sla_conflict、scope_conflict
+      - 冲突类型总数从 5 增至 9
+      - 支持品牌命名、文档版本、SLA 和范围冲突的处理
+    author: Brand Atlas Team
   - version: 1.0.0
     date: 2026-08-07
     changes:

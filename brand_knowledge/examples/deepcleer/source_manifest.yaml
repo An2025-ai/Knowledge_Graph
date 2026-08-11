@@ -1,0 +1,75 @@
+# Brand Atlas Knowledge Graph — L3 DeepCleer 试点：来源清单
+# 版本: 1.0.0
+# 用途: DeepCleer 试点资料来源清单（Section 14.1）
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  status: example
+  scope: brand
+  layer: L3
+  note: DeepCleer 仅用于验证模型，不属于固定本体
+
+sources:
+  - source_id: src_dc_site_001
+    url: https://www.deepcleer.ai/
+    fetched_date: 2026-08-11
+    permission: public
+    document_version: null
+    primary_use: 当前公开品牌、产品、能力、FAQ 和联系信息
+
+  - source_id: src_dc_site_finance
+    url: https://www.deepcleer.ai/product-detail.html?product=smart-reconciliation
+    fetched_date: 2026-08-11
+    permission: public
+    document_version: null
+    primary_use: 产品定位、能力、场景和 POC（AI 业财财报平台）
+
+  - source_id: src_dc_site_settlement
+    url: https://www.deepcleer.ai/product-detail.html?product=ai-settlement-hub
+    fetched_date: 2026-08-11
+    permission: public
+    document_version: null
+    primary_use: 第二产品线和结算能力（智能结算系统）
+
+  - source_id: src_dc_site_agent
+    url: https://www.deepcleer.ai/product-detail.html?product=ecommerce-agent-platform
+    fetched_date: 2026-08-11
+    permission: public
+    document_version: null
+    primary_use: 智能体产品线（AI 智能体构建工厂）；需与 DCCLaw 名称消歧
+
+  - source_id: src_dc_qa_pdf
+    filename: DeepCleer_QA_V2.1.pdf
+    permission: confidential
+    document_version: V2.1 (文件名) / V2.0 AI 增强版 (封面)
+    version_conflict: true
+    primary_use: 售前问答、性能、实施、ROI、竞品和 POC 主张
+
+  - source_id: src_dc_whitepaper_pdf
+    filename: 智算云图-DeepCleer-深澈智算 V2006.03.pdf
+    permission: internal
+    document_version: 页尾日期 2026-05-07
+    primary_use: 公司、架构、能力、服务和认证主张
+
+  - source_id: src_dc_spec_md
+    filename: DeepCleer 深澈智算 - 产品说明书.md
+    permission: internal, 待确认
+    document_version: 未见明确版本
+    primary_use: 详细产品设计和能力口径
+
+version_conflicts:
+  - source_id: src_dc_qa_pdf
+    description: QA 文件名与封面版本不一致
+    conflict_type: document_version_conflict
+    handling: 创建 document_version_conflict，不能默认选择 V2.1 或 V2.0
+
+missing_from_manifest:
+  - 品牌与公司法律关系的正式登记或商标依据
+  - 各产品的正式产品边界、当前版本和命名策略
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes: 初始版本，DeepCleer 试点来源清单
+    author: Brand Atlas Team

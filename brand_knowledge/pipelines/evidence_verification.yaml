@@ -1,0 +1,254 @@
+# Brand Atlas 第三层品牌认知层 — 管道定义：支持关系核验
+# 版本: 1.0.0
+# 范围: 核验每条候选陈述与证据的支持关系，输出支持状态
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+
+pipeline:
+  id: pipeline_l3_evidence_verification
+  name: 支持关系核验
+  name_en: Evidence Verification
+  version: 1.0.0
+  purpose: >
+    核验每条候选陈述是否被其证据跨度直接支持。对每条候选陈述
+    回答一系列问题：原文是否直接表达该陈述而非仅谈同一主题、
+    主体是否正确（品牌、产品或具体版本）、谓词是否被条件、否定
+    或未来时态限定、数值的单位/样本/时间/测试环境是否完整、证据
+    是否有权限用于当前任务和输出渠道。输出 support_status（direct、
+    partial、context_only、contradictory、not_found），只有 direct
+    或经人工接受的 partial 可晋升。
+  description: >
+    支持关系核验管道是品牌知识晋升前的关键质量关卡。它逐条核验
+    候选陈述与其证据跨度的支持关系。管道针对每条候选回答五个核心
+    问题：原文是否直接表达该陈述（而非只谈同一主题）、主体是否
+    正确（是品牌、产品还是具体版本）、谓词是否被条件、否定或未来
+    时态限定、数值的单位/样本/时间/测试环境是否完整、证据是否有
+    权限用于当前任务和输出渠道。核验结果输出为 support_status：
+    direct、partial、context_only、contradictory、not_found。只有
+    标记为 direct 或经人工接受的 partial 的陈述才有资格晋升。
+
+  steps:
+    - step: 1
+      name: 加载核验规则
+      name_en: Load Verification Rules
+      description: 加载支持关系核验规则和 support_status 定义
+      inputs:
+        - verification_rules
+      outputs:
+        - parsed_rules: 解析后的核验规则（五类问题、五级支持状态）
+      rules:
+        - verification_rules_must_be_active
+
+    - step: 2
+      name: 核验直接表达
+      name_en: Check Direct Expression
+      description: 核验原文是否直接表达该陈述，而非只谈同一主题
+      inputs:
+        - classified_assertions
+        - evidence_spans
+      outputs:
+        - direct_expression: 直接表达核验结果
+      rules:
+        - original_text_must_directly_support
+
+    - step: 3
+      name: 核验主体与谓词
+      name_en: Check Subject and Predicate
+      description: 核验主体是否正确（品牌、产品、版本），谓词是否被条件、否定或未来时态限定
+      inputs:
+        - classified_assertions
+        - evidence_spans
+        - entity_registry
+      outputs:
+        - subject_predicate_check: 主体与谓词核验结果
+      rules:
+        - subject_must_be_correct
+        - predicate_conditioning_must_be_detected
+
+    - step: 4
+      name: 核验数值完整性
+      name_en: Check Numeric Completeness
+      description: 核验数值的单位、样本、时间和测试环境是否完整
+      inputs:
+        - classified_assertions
+        - evidence_spans
+        - numeric_completeness_rules
+      outputs:
+        - numeric_check: 数值完整性核验结果
+      rules:
+        - numeric_units_must_be_complete
+        - sample_time_env_must_be_recorded
+
+    - step: 5
+      name: 核验证据权限
+      name_en: Check Evidence Permission for Task and Channel
+      description: 核验证据是否有权限用于当前任务和输出渠道
+      inputs:
+        - classified_assertions
+        - evidence_spans
+        - access_policy
+      outputs:
+        - permission_check: 证据权限核验结果
+      rules:
+        - evidence_must_have_permission_for_channel
+
+    - step: 6
+      name: 输出支持状态
+      name_en: Output Support Status
+      description: 综合各类核验结果输出 support_status，标记可晋升的陈述
+      inputs:
+        - direct_expression
+        - subject_predicate_check
+        - numeric_check
+        - permission_check
+      outputs:
+        - support_statuses: 每条陈述的支持状态（direct / partial / context_only / contradictory / not_found）
+        - verified_assertions: 支持核验后的断言批次
+        - verification_manifest: 核验清单（支持状态分布）
+      rules:
+        - only_direct_or_human_accepted_partial_promotes
+
+  inputs:
+    - verification_rules:
+        description: 支持关系核验规则（五类问题、五级支持状态的定义）
+        source: 质量管理
+        fields: [rule_id, question_type, check_method, output_status, threshold]
+    - classified_assertions:
+        description: 分类后的断言（含 statement_class、assertion_kind、evidence_span）
+        source: 断言分类管道输出
+        fields: [statement_id, statement_class, assertion_kind, subject_ref, predicate, object_ref_or_value, evidence_span]
+    - evidence_spans:
+        description: 证据跨度（最小连续原文）
+        source: 语义分块管道输出
+        fields: [span_id, content, sentence_count, table_row_ref, page_number, bounding_box]
+    - entity_registry:
+        description: 规范实体注册表（用于核验主体是否正确）
+        source: 品牌实体管理
+        fields: [entity_id, canonical_name, entity_type, version, source_doc]
+    - numeric_completeness_rules:
+        description: 数值完整性规则（单位、样本、时间、测试环境）
+        source: 质量管理
+        fields: [rule_id, numeric_field, required_component, completeness_threshold]
+    - access_policy:
+        description: 权限策略（证据对当前任务和输出渠道的可用性）
+        source: 合规管理
+        fields: [policy_id, evidence_type, allowed_tasks, allowed_channels, authorization]
+
+  outputs:
+    output_schema: verified_assertions
+    output_fields:
+      - verification_batch_id: 核验批次唯一标识
+      - verified_statements:
+          type: array
+          description: 支持核验后的陈述列表
+          item_fields:
+            - statement_id: 陈述 ID
+            - evidence_span_id: 证据跨度 ID
+            - direct_expression: 直接表达核验结果
+            - subject_check: 主体核验结果
+            - predicate_check: 谓词核验结果
+            - numeric_check: 数值完整性核验结果
+            - permission_check: 权限核验结果
+            - support_status: 支持状态（direct / partial / context_only / contradictory / not_found）
+            - verification_note: 核验备注
+            - eligible_for_promotion: 是否可晋升
+      - verification_manifest: 核验清单（支持状态分布、可晋升统计）
+
+  rules:
+    - rule: verification_rules_must_be_active
+      description: 使用的核验规则必须处于 active 状态
+      severity: critical
+
+    - rule: original_text_must_directly_support
+      description: 原文必须直接表达该陈述，否则不能判为 direct
+      severity: critical
+
+    - rule: subject_must_be_correct
+      description: 主体必须是正确的品牌、产品或具体版本
+      severity: critical
+
+    - rule: predicate_conditioning_must_be_detected
+      description: 谓词被条件、否定或未来时态限定时必须被检测并降低支持度
+      severity: critical
+
+    - rule: numeric_units_must_be_complete
+      description: 数值的单位必须完整
+      severity: high
+
+    - rule: sample_time_env_must_be_recorded
+      description: 数值的样本、时间和测试环境必须被记录
+      severity: high
+
+    - rule: evidence_must_have_permission_for_channel
+      description: 证据必须有权限用于当前任务和输出渠道
+      severity: critical
+
+    - rule: only_direct_or_human_accepted_partial_promotes
+      description: 只有 direct 或经人工接受的 partial 支持状态才能晋升
+      severity: critical
+
+    - rule: contradictory_evidence_must_block
+      description: 证据与陈述矛盾（contradictory）时必须阻止晋升
+      severity: critical
+
+    - rule: not_found_and_context_only_must_not_promote
+      description: not_found 和 context_only 支持状态不得晋升
+      severity: critical
+
+    - rule: verification_note_must_be_recorded
+      description: 每条核验必须记录核验备注
+      severity: high
+
+  failure_mode: verification_gap_high
+  failure_handling:
+    condition: 大量陈述无法定位直接证据、主体错误比例过高或权限拒绝率高
+    action: 生成支持核验报告，标记未验证和低支持陈述，暂停该批次晋升，将问题反馈给上游抽取和语义分块
+    recovery: 修正证据跨度、补充原始证据或由人工复核后重新核验
+
+  quality_checks:
+    - check: verification_coverage
+      description: 确认所有分类断言都经过支持核验
+      method: 检查每个 classified_assertion 都有 support_status
+
+    - check: direct_expression_accuracy
+      description: 确认 direct 支持均为直接表达
+      method: 抽样检查 direct 陈述的证据跨度是否直接表达该陈述
+
+    - check: subject_correctness
+      description: 确认主体匹配正确
+      method: 比对 subject_ref 与证据跨度中提到的品牌/产品/版本
+
+    - check: numeric_completeness
+      description: 确认数值的单位、样本、时间、测试环境完整
+      method: 检查含数值陈述的 numeric_check 中各组件是否齐全
+
+    - check: permission_compliance
+      description: 确认证据权限满足任务和渠道要求
+      method: 检查 permission_check 通过与否与 access_policy 一致
+
+    - check: promotion_eligibility_consistency
+      description: 确认可晋升标记与支持状态一致
+      method: 检查 eligible_for_promotion 为 true 的陈述均为 direct 或人工接受的 partial
+
+    - check: contradictory_blocking
+      description: 确认 contradictory 陈述未晋升
+      method: 检查 support_status 为 contradictory 的陈述均未标记为可晋升
+
+  metric_refs: []
+  # 预留：support_status_distribution, direct_support_rate, partial_rate, contradictory_rate, verification_coverage
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义 L3 支持关系核验管道
+      - 实现直接表达、主体谓词、数值完整性和权限的五维核验
+      - 遵循 L3 规范 §8.9，只有 direct 或人工接受的 partial 可晋升
+      - 包含 6 个管道步骤、10 条规则和 7 项质量检查
+    author: Brand Atlas Team

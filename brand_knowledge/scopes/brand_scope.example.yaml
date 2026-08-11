@@ -1,0 +1,51 @@
+# Brand Atlas Knowledge Graph — L3 品牌接入范围模板
+# 版本: 1.0.0
+# 用途: 通用品牌接入范围模板，接入新品牌时复制并填充
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+
+scope:
+  request_id: bor_<brand_slug>_<date>_v1
+  mode: create
+  tenant_id: tenant_example
+  brand_input:
+    canonical_name: <品牌规范名>
+    known_aliases: [<品牌别名>]
+    official_domains: [<官网域名>]
+  markets: [CN]
+  languages: [zh-CN]
+  industry_scope:
+    l2_industry_ids: []
+    l2_category_candidates: []
+  source_scope:
+    official_website: true
+    internal_documents: true
+    third_party_authoritative: false
+    community_sources: false
+  required_dimensions:
+    - identity
+    - product_portfolio
+    - audience_and_problem
+    - capability_and_use_case
+    - deployment_and_integration
+    - security_and_compliance
+    - proof_and_case
+    - service_and_poc
+    - messaging_and_content
+  output_policies:
+    default_access_level: internal
+    public_content_requires_approved_claims: true
+  created_at: 2026-08-11
+  created_by: Brand Atlas Team
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes: 初始版本，通用品牌接入范围模板
+    author: Brand Atlas Team

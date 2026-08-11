@@ -1,0 +1,169 @@
+# Brand Atlas Knowledge Graph — L3 数据时效性策略
+# 版本: 1.0.0
+# 范围: L3 品牌认知层
+# 参考: brand_knowledge/README.md §13.1 首次构建, §13.2 增量更新, §13.3 快照
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+  description: >
+    定义 L3 品牌认知层的更新频率、语义差异保存、页面消失处理和快照规则。
+    官网产品/定价/FAQ 每日或每周变化检测，产品文档在新版本上传时更新，
+    案例/新闻/资质每周发现，内部产品口径按审批流触发，L2 映射每月复核，
+    品牌主题与内容覆盖每周校正。更新流程保存语义 Diff（新增/修改/删除/
+    版本/权限/证据变化）。页面消失不等于事实立即失效，应进入 needs_review
+    并保留历史证据。每次发布生成 brand_snapshot。
+
+# ============================================================
+# 更新频率
+# ============================================================
+
+update_frequencies:
+  - data_type: website_product_pricing_faq
+    frequency: daily_weekly
+    trigger: change_detection
+    detection: HTML Hash 或关键区块变化
+    description: 官网产品页、定价和 FAQ，每日或每周变化检测，变化后解析
+
+  - data_type: product_docs_manual
+    frequency: on_new_version_upload
+    trigger: document_version_or_hash_change
+    description: 产品说明书和版本说明，新版本上传触发，按文档版本或 Hash 变化
+
+  - data_type: cases_news_certs
+    frequency: weekly
+    trigger: discovery
+    description: 案例、新闻和资质，每周发现，新 URL、证书到期或新闻发布触发
+
+  - data_type: internal_product_wording
+    frequency: event_driven
+    trigger: approval_flow
+    description: 内部产品口径，按产品/销售/法务审批流事件触发
+
+  - data_type: l2_mapping
+    frequency: monthly
+    trigger: review
+    description: L2 映射每月复核，L2 本体版本变化或大量 unmapped 候选时触发
+
+  - data_type: brand_topic_content_coverage
+    frequency: weekly
+    trigger: review_or_post_publish
+    description: 品牌主题和内容覆盖每周校正，新内容发布或旧页面删除后校正
+
+# ============================================================
+# 变化检测
+# ============================================================
+
+change_detection:
+  - target: website_page
+    method: html_hash
+    description: 页面 HTML Hash 变化，幂等跳过相同 Hash
+    rules:
+      - 相同 Hash 幂等跳过
+      - 相同 URL 不同 Hash 进入新文档版本
+
+  - target: key_block
+    method: key_block_change
+    description: 关键区块（定价、FAQ 回答、产品特性表）变化
+    action: 仅对变化区块重新解析，保留未变区块
+
+  - target: document
+    method: version_and_hash
+    description: 文档版本和内容 Hash 变化
+    rules:
+      - 文件名不是版本唯一依据，需解析封面、页眉、元数据和正文版本号
+      - 版本信号冲突时按 revision_conflict 创建 document_version_conflict
+
+# ============================================================
+# 语义差异保存
+# ============================================================
+
+semantic_diff:
+  description: 更新流程保存语义 Diff，用于审计和回滚
+
+  diff_dimensions:
+    - added      # 新增事实/证据
+    - modified   # 修改内容
+    - deleted    # 删除内容
+    - version    # 版本变化
+    - permission # 权限变化
+    - evidence   # 证据变化
+
+  rules:
+    - rule: record_diff
+      description: 每次更新记录以上维度的变化，不静默覆盖
+    - rule: retain_historical_evidence
+      description: 变化后历史证据保留，不删除
+    - rule: append_and_supersedes
+      description: 新版本通过 supersedes 关联，旧版本标记 superseded
+
+# ============================================================
+# 页面消失处理
+# ============================================================
+
+page_disappearance:
+  description: 页面消失不等于事实立即失效
+
+  rules:
+    - rule: go_to_needs_review
+      description: 页面消失时相关 Assertion 进入 needs_review，不立即置为无效
+    - rule: keep_historical_evidence
+      description: 保留历史证据，供回滚和审计
+    - rule: no_auto_delete
+      description: 不得因页面消失自动删除事实或证据
+    - rule: review_trigger
+      description: 结合 review.yaml，页面消失触发人工复核，确认是下线还是迁移
+
+# ============================================================
+# 快照
+# ============================================================
+
+snapshot:
+  description: 每次发布生成 brand_snapshot，确保图谱可复现和回滚
+
+  reference_section: README §13.3
+  fields:
+    - snapshot_id
+    - tenant_id
+    - brand_id
+    - l1_version
+    - l2_snapshot_id
+    - source_manifest_hash
+    - entity_count
+    - assertion_count
+    - conflict_count
+    - approved_by
+    - published_at
+    - previous_snapshot_id
+
+  rules:
+    - rule: generate_per_publish
+      description: 每次正式发布生成一个 brand_snapshot
+    - rule: record_usage
+      description: 每次抽取、审核、Neo4j 投影和质量验收都记录使用的 brand_snapshot_id
+    - rule: reproducible
+      description: 通过 snapshot_id 可复现相同实体、关系和 Assertion 集合
+    - rule: rollback
+      description: snapshot 支持图谱回滚，Neo4j 可依快照重建
+
+  lifecycle:
+    - first_build: 发布 brand_snapshot_v1
+    - incremental: 每次增量更新验证后发布新快照
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义 6 类数据的更新频率和触发条件
+      - 建立 HTML Hash / 关键区块 / 文档版本变化检测
+      - 定义语义 Diff 6 维度和页面消失 needs_review 处理
+      - 定义 brand_snapshot 字段和可复现规则
+    author: Brand Atlas Team

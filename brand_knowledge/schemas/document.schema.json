@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brand-atlas.dev/schemas/l3_document.schema.json",
+  "title": "L3 Document",
+  "description": "Schema for L3 documents with permission fields (Section 6.3 of L3 spec).",
+  "type": "object",
+  "required": ["document_id", "tenant_id", "brand_id", "source_id", "content_hash", "access_level"],
+  "properties": {
+    "document_id": {"type": "string"},
+    "tenant_id": {"type": "string"},
+    "brand_id": {"type": "string"},
+    "source_id": {"type": "string"},
+    "canonical_url": {"type": "string", "format": "uri"},
+    "document_version": {"type": "string"},
+    "language": {"type": "string"},
+    "mime_type": {"type": "string"},
+    "content_hash": {"type": "string"},
+    "access_level": {"type": "string", "enum": ["public", "internal", "confidential", "restricted"]},
+    "allowed_task_types": {"type": "array", "items": {"type": "string"}},
+    "allowed_output_channels": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["internal_analysis", "customer_report", "public_content"]}
+    },
+    "contains_pii": {"type": "boolean"},
+    "contains_trade_secret": {"type": "boolean"},
+    "embargo_until": {"type": "string", "format": "date-time"},
+    "owner_department": {"type": "string"},
+    "status": {"type": "string", "enum": ["active", "inactive", "deprecated"]}
+  }
+}

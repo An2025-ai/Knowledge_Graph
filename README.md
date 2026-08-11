@@ -1,6 +1,6 @@
 # Brand Atlas Knowledge Graph
 
-> **版本**: 1.1.0  
+> **版本**: 1.2.0
 > **状态**: Active  
 > **创建日期**: 2026-08-07  
 > **更新日期**: 2026-08-11  
@@ -10,9 +10,10 @@
 Brand Atlas 知识图谱是一个多层知识工程系统，用于支持 GEO（生成式引擎优化）、
 品牌市场认知分析、提问词生成、主题规划和内容优化。
 
-当前实现了两层：
+当前已形成三层技术基线：
 - **L1 通用知识层**（v1.1.0）：跨品牌、跨行业复用的方法与规范层
 - **L2 行业知识层**（v1.0.0）：行业市场坐标系，定义数据域、Pipeline、Schema 和策略
+- **L3 品牌认知层**（v1.0.1）：多租户品牌实例、产品版本、能力映射、证据链和图谱投影
 
 第一层不是行业百科，也不是客户品牌知识库，而是：
 - 统一知识对象定义
@@ -27,7 +28,7 @@ Brand Atlas 知识图谱是一个多层知识工程系统，用于支持 GEO（�
 |------|------|------|
 | **L1 通用知识层** | 本体、意图、任务模板、来源规则、质量规则、示例 | 本目录 |
 | L2 行业/品类层 | 行业实体、市场主题、行业趋势、竞品公共信息 | industry_knowledge/ |
-| L3 品牌认知层 | 品牌产品、能力、定位、案例、内部文档 | 仅定义引用接口 |
+| **L3 品牌认知层** | 品牌产品、能力、定位、案例、内部文档 | brand_knowledge/ |
 | L4 动态观测层 | 搜索回答、提及、引用、竞品变化、时序观测 | 仅定义观测对象 |
 
 ## 目录结构
@@ -51,6 +52,18 @@ Knowledge_Graph/
 │   ├── pipelines/                 # 6 个数据处理流水线
 │   ├── policies/                  # 3 个 L2 策略
 │   └── examples/crm/              # CRM 试点示例
+├── brand_knowledge/               # L3 品牌认知层
+│   ├── README.md                  # L3 技术文档 (1069 行)
+│   ├── scopes/                    # 品牌接入范围 + 多租户配置
+│   ├── sources/                   # 品牌来源策略和权限
+│   ├── domains/                   # 11 数据域 + 抽取 Profile
+│   ├── ontology/                  # L3 实体/关系/assertion_kind
+│   ├── schemas/                   # 9 个 JSON Schema
+│   ├── pipelines/                 # 10 个品牌处理流水线
+│   ├── policies/                  # 6 个 L3 策略
+│   ├── database/                  # L3 迁移 SQL (11 表 + RLS)
+│   ├── examples/                  # DeepCleer 试点数据
+│   └── skills/                    # 12 个逻辑 Skills
 └── database/                      # 数据库层
     ├── schema.sql                 # PostgreSQL 9 表
     ├── publish.py                 # YAML → DB 发布
@@ -59,19 +72,19 @@ Knowledge_Graph/
 
 ## MVP 范围
 
-### L1 通用知识层 v1.1.0
+### L1 通用知识层 v1.2.0
 
-| 维度 | v1.0.0 | v1.1.0 | 变化 |
-|------|--------|--------|------|
-| 实体类型 | 15 | 19 | +4 (capability, decision_factor, JTBD, outcome) |
-| 关系类型 | 20 | 27 | +7 (has_problem, has_decision_factor, capability_supports_use_case 等) |
-| 意图类型 | 13 | 13 | 不变 |
-| 决策阶段 | 7 | 7 | 不变 |
-| 来源类型 | 8 | 13 | +5 (standards_body, industry_association, brokerage_research 等) |
-| 任务模板 | 5 | 9 | +4 (industry_knowledge_build, refresh, source_discovery, knowledge_promotion) |
-| 策略文件 | 3 | 6 | +3 (source_discovery, knowledge_promotion, report_evidence) |
-| 质量规则 | 20 | 20 | 不变 |
-| 正反例 | 50 | 50 | 不变 |
+| 维度 | v1.0.0 | v1.1.0 | v1.2.0 | 变化 |
+|------|--------|--------|--------|------|
+| 实体类型 | 15 | 19 | 21 | +2 (organization, product_version) |
+| 关系类型 | 20 | 27 | 31 | +4 (owns_brand, offers, version_of, supersedes) |
+| 意图类型 | 13 | 13 | 13 | 不变 |
+| 决策阶段 | 7 | 7 | 7 | 不变 |
+| 来源类型 | 8 | 13 | 13 | 不变 |
+| 任务模板 | 5 | 9 | 9 | 品牌导入支持多租户/产品版本/L2映射 |
+| 策略文件 | 3 | 6 | 6 | 冲突新增4类，上下文新增硬过滤 |
+| 质量规则 | 20 | 20 | 20 | 不变 |
+| 正反例 | 50 | 50 | 50 | 不变 |
 
 ### L2 行业知识层 v1.0.0
 
@@ -84,6 +97,19 @@ Knowledge_Graph/
 | 分类模板 | 3 (capabilities, decision_factors, topics) |
 | L2 技能定义 | 14 |
 | L2 工具定义 | ~50 |
+
+### L3 品牌认知层 v1.0.1
+
+| 维度 | 数量 |
+|------|------|
+| 数据域 | 11 |
+| Pipeline 定义 | 10 |
+| L3 策略文件 | 6 |
+| JSON Schema | 9 |
+| 抽取 Profile | 7 |
+| 逻辑 Skills | 12 |
+| 信息来源类型 | 9 |
+| 数据库迁移表 | 11 + RLS |
 
 ## 版本规范
 

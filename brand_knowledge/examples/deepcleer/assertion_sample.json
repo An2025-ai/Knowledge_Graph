@@ -1,0 +1,25 @@
+{
+  "$schema": "../../schemas/assertion.schema.json",
+  "subject": "product_deepcleer_finance",
+  "predicate": "has_capability",
+  "object": "l2_cap_multi_entity_consolidation",
+  "statement_text": "DeepCleer 官方资料称其支持多法人合并及内部交易抵消。",
+  "statement_class": "claim",
+  "assertion_kind": "self_claim",
+  "claimant": "brand_deepcleer",
+  "scope": {
+    "market": "CN",
+    "product_version": null,
+    "accounting_context": "enterprise_ecommerce"
+  },
+  "verification_status": "official_consistent_unverified",
+  "publication_status": "approved_with_attribution",
+  "access_level": "public",
+  "confidence": null,
+  "evidence_refs": [
+    "ev_site_finance_consolidation",
+    "ev_qa_page_6_q7"
+  ],
+  "limitations": [],
+  "supersedes_id": null
+}

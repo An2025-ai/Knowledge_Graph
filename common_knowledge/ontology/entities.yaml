@@ -1,18 +1,18 @@
 # GEO 第一层通用知识层 — 实体定义
-# 版本: 1.0.0
+# 版本: 1.2.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 # 参考: W3C SKOS, Schema.org, Wikidata
 
 meta:
-  version: 1.1.0
+  version: 1.2.0
   created_at: 2026-08-07
   updated_at: 2026-08-11
   status: active
   scope: shared
   description: >
-    定义 GEO/Brand Atlas 系统中使用的全部实体类型。v1.1.0 新增 capability、
-    decision_factor、job_to_be_done 和 outcome 四种实体类型，总数增至 19 个。
-    新增 statement_class 概念，将 fact、claim、observation、inference 统一归类。
+    定义 GEO/Brand Atlas 系统中使用的全部实体类型。v1.2.0 新增 organization 和
+    product_version 两种实体类型，总数增至 21 个。
+    其中 fact、claim、observation、inference 由 statement_class 统一归类。
   source_refs:
     - https://schema.org/
     - https://www.w3.org/TR/skos-reference/
@@ -656,6 +656,70 @@ entity_types:
       - 与 use_case 通过 produces_outcome 关系连接
     version: 1.1.0
 
+  # --- 20. 组织 ---
+  - type: organization
+    canonical_name: 组织
+    canonical_name_en: Organization
+    definition: >
+      法律或运营主体，负责拥有和运营品牌。一个组织可运营多个品牌，
+      与 brand 必须分开。解决当前 brand 同时承担法律主体和品牌身份的问题。
+    examples:
+      - 上海智算云图科技有限公司
+      - 阿里巴巴集团
+    required_fields:
+      - id
+      - type
+      - canonical_name
+      - status
+      - version
+    optional_fields:
+      - aliases
+      - description
+      - scope
+      - source_refs
+      - legal_name
+      - registration_number
+      - headquarters
+      - official_domains
+    constraints:
+      - 通过 owns_brand 关系关联到品牌
+      - brand 不是法律实体，organization 才是
+      - 一个组织可拥有多个品牌，一个品牌通常由一个组织运营
+    version: 1.2.0
+
+  # --- 21. 产品版本 ---
+  - type: product_version
+    canonical_name: 产品版本
+    canonical_name_en: Product Version
+    definition: >
+      产品能力、定价、命名和限制随版本变化的版本边界。
+      版本级断言必须指向 product_version，不能只依赖文档文件名。
+    examples:
+      - DeepCleer_QA_V2.1
+      - CRM 2026 Enterprise 版
+    required_fields:
+      - id
+      - type
+      - canonical_name
+      - status
+      - version
+      - product_ref
+    optional_fields:
+      - aliases
+      - description
+      - scope
+      - source_refs
+      - release_date
+      - semantic_version
+      - document_version
+      - changelog_summary
+    constraints:
+      - 通过 version_of 关系关联到产品
+      - 产品版本状态取值为 planned / beta / active / deprecated
+      - 能力断言必须限定在 product_version 范围内
+      - 处理文档版本冲突时不自动选择版本
+    version: 1.2.0
+
 # ============================================================
 # 陈述类别（statement_class）
 # ============================================================
@@ -727,6 +791,15 @@ field_definitions:
 # ============================================================
 
 changelog:
+  - version: 1.2.0
+    date: 2026-08-11
+    changes:
+      - 新增 2 种实体类型：organization（组织）、product_version（产品版本）
+      - 实体类型总数从 19 增至 21
+      - 支持一公司多品牌的表达（organization owns_brand brand）
+      - 支持产品版本级断言边界
+      - 向后兼容，未删除或修改已有类型
+    author: Brand Atlas Team
   - version: 1.1.0
     date: 2026-08-11
     changes:

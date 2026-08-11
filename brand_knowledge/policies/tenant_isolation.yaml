@@ -1,0 +1,173 @@
+# Brand Atlas Knowledge Graph — L3 多租户隔离策略
+# 版本: 1.0.0
+# 范围: L3 品牌认知层
+# 参考: brand_knowledge/README.md §4.1 多租户隔离, §10.3 约束和索引
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: brand
+  layer: L3
+  description: >
+    定义 L3 品牌认知层的多租户隔离规则。所有 L3 业务记录必须具备
+    tenant_id 和 brand_id：tenant_id 是客户数据安全边界，brand_id 是目标品牌
+    （一个租户可管理多个品牌或子品牌）。L2 实体为共享只读对象；跨品牌比较
+    必须显式声明目标品牌。PostgreSQL 使用 RLS 强制租户过滤，Neo4j 查询模板
+    必须以租户过滤开头。
+
+# ============================================================
+# 租户与品牌边界定义
+# ============================================================
+
+tenancy_model:
+  description: 三层归属模型，任何 L3 记录都必须能定位到租户和品牌
+
+  layers:
+    - layer: tenant
+      field: tenant_id
+      role: 客户数据安全边界
+      cardinality: 一个租户至少管理一个品牌
+      rules:
+        - tenant_id 是跨所有 L3 业务表的强制列，不允许 NULL
+        - tenant_id 由租户开通时分配，不可被业务抽取流程臆造
+        - 不同租户之间不存在任何默认可见的数据通路
+
+    - layer: brand
+      field: brand_id
+      role: 目标品牌标识
+      cardinality: 一个租户可管理一个或多个品牌/子品牌
+      rules:
+        - brand_id 必须归属当前 tenant_id，禁止跨租户引用品牌
+        - 品牌、产品、版本、内容、Assertion 等业务对象按品牌隔离
+        - 品牌切换不改变租户边界，仅改变品牌作用域
+
+    - layer: shared
+      field: l2_entity
+      role: L2 共享行业实体
+      cardinality: 全局共享，只读
+      rules:
+        - L2 实体为跨租户共享只读对象，不携带客户内部信息
+        - L3 不得原地修改 L2 实体；需要新概念时发起 L2 候选扩展
+        - L2 实体的引用以稳定 ID 形式保存，不复制字段到 L3
+
+# ============================================================
+# 跨品牌与跨租户访问
+# ============================================================
+
+cross_brand_access:
+  description: 跨品牌比较和分析必须显式声明范围
+
+  rules:
+    - rule: explicit_target_brands
+      description: 跨品牌比较必须显式声明目标品牌和允许比较的品牌集合
+      forbidden: 隐式、默认、全量跨品牌读取
+
+    - rule: cross_brand_scope
+      fields:
+        - target_brand_id          # 主目标品牌
+        - allowed_compare_brands   # 允许比较的品牌 ID 集合
+      required_by:
+        - 竞品比较任务
+        - 品牌差距分析
+        - 跨品牌公共结论组装
+
+    - rule: tenant_never_crossed
+      description: 任何查询、同步、投影都不得跨越 tenant_id 读取
+      enforcement: PostgreSQL RLS + Neo4j 查询模板硬过滤
+
+  l2_shared_usage:
+    description: L2 共享实体在跨品牌上下文中仅作为行业坐标系引用
+    allowed:
+      - 引用 L2 Capability / Audience / Problem 等规范 ID
+      - 引用 L2 品类、竞品公共事实
+    forbidden:
+      - 将 L2 shared 实体当作某租户私有数据写入
+      - 在 L2 实体上保存客户内部信息
+
+# ============================================================
+# PostgreSQL RLS 强制
+# ============================================================
+
+postgresql_rls:
+  description: PostgreSQL 使用 Row Level Security 强制租户过滤
+
+  policy_expression: "tenant_id = current_setting('app.tenant_id')"
+
+  requirements:
+    - 所有含 tenant_id 的 L3 业务表启用 RLS
+    - 每个表创建 tenant 级 SELECT 策略，表达式为 current_setting('app.tenant_id')
+    - 写入策略同样校验 tenant_id，防止跨租户写入
+    - 应用连接必须预先 SET app.tenant_id，未设置时禁止读取
+    - 服务端或迁移脚本不得关闭 RLS 绕过租户校验
+
+  tables:
+    - tenant
+    - brand_workspace
+    - brand_source_policy
+    - product_record
+    - brand_mapping
+    - assertion
+    - assertion_evidence
+    - knowledge_conflict
+    - claim_policy
+    - content_inventory
+    - brand_snapshot
+
+  fallback:
+    description: 未启用 RLS 的实现必须以应用层强制租户前置过滤
+    required: true
+
+# ============================================================
+# Neo4j 租户隔离
+# ============================================================
+
+neo4j_isolation:
+  description: Neo4j 品牌子图为可重建的查询投影，节点保存 tenant_id
+
+  node_rules:
+    - rule: tenant_id_on_nodes
+      description: 所有 L3 投影节点保存 tenant_id
+    - rule: tenant_filter_prefix
+      description: 任何查询模板必须以租户过滤开头，如 MATCH (n) WHERE n.tenant_id = $tenant_id
+    - rule: brand_scoped_queries
+      description: 涉及品牌子图的查询在租户过滤基础上按 brand_id 限定
+
+  projection_notes:
+    - L2 shared 实体投影为 :Entity:<L2Label>，scope='shared'，不携带租户私有字段
+    - 直接关系属性至少包含 assertion_id、tenant_id、brand_id
+
+# ============================================================
+# 强制校验
+# ============================================================
+
+enforcement:
+  - check: tenant_id_present
+    applies_to: 所有 L3 业务记录
+    criterion: tenant_id 非空且 brand_id 归属该租户
+    failure_action: 拒绝入库
+
+  - check: brand_scoped
+    applies_to: 品牌业务记录
+    criterion: brand_id 在 brand_workspace 中属于当前 tenant_id
+    failure_action: 标记为跨租户引用，进入人工审核
+
+  - check: no_tenant_leak
+    applies_to: 公开内容与 Context Package
+    criterion: 组装内容时不得带出其他租户或品牌数据
+    failure_action: 拦截输出
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义 tenant/brand/shared 三层归属模型
+      - 建立跨品牌比较显式范围规则
+      - 定义 PostgreSQL RLS 强制和 Neo4j 租户过滤要求
+      - 列出 11 张需启用 RLS 的 L3 业务表
+    author: Brand Atlas Team

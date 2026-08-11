@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brand-atlas.dev/schemas/l3_content_inventory.schema.json",
+  "title": "L3 Content Inventory",
+  "description": "Schema for L3 content asset inventory (Section 7.10 of L3 spec).",
+  "type": "object",
+  "required": ["content_id", "tenant_id", "brand_id", "canonical_name", "content_type", "source_id"],
+  "properties": {
+    "content_id": {"type": "string"},
+    "tenant_id": {"type": "string"},
+    "brand_id": {"type": "string"},
+    "canonical_name": {"type": "string"},
+    "content_type": {"type": "string"},
+    "source_id": {"type": "string"},
+    "url": {"type": "string", "format": "uri"},
+    "covered_topic_ids": {"type": "array", "items": {"type": "string"}},
+    "target_audience_ids": {"type": "array", "items": {"type": "string"}},
+    "published_at": {"type": "string", "format": "date"},
+    "content_hash": {"type": "string"},
+    "access_level": {"type": "string", "enum": ["public", "internal", "confidential", "restricted"]},
+    "status": {"type": "string", "enum": ["active", "inactive", "deprecated"]}
+  }
+}
