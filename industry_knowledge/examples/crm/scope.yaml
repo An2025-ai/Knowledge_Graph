@@ -1,0 +1,53 @@
+# Brand Atlas Knowledge Graph — CRM 行业范围示例
+# 版本: 1.0.0
+# 用途: 单行业报告驱动闭环的 CRM 试点范围定义
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  status: example
+  scope: industry
+
+scope:
+  request_id: industry_crm_cn_001
+  mode: create
+  industry_id: ind_enterprise_software
+  industry_name: 企业软件
+  market: CN
+  languages: [zh-CN]
+  included_categories:
+    - cat_crm
+  excluded_categories: []
+  target_audiences:
+    - 中小企业销售负责人
+    - 大客户销售总监
+    - IT 采购决策者
+    - 销售运营经理
+  seed_competitors:
+    - Salesforce
+    - HubSpot
+    - 销售易
+    - 纷享销客
+    - 用友
+  seed_sources:
+    - 中国信通院
+    - 艾瑞咨询
+    - IDC
+    - Gartner
+    - 36氪
+  priority_dimensions:
+    - audience_and_decision_chain
+    - problems_and_jobs
+    - use_cases
+    - capabilities
+    - decision_factors
+    - competition
+  research_questions:
+    - 中小企业选择 CRM 最关注什么因素？
+    - CRM 产品需要哪些标准能力？
+    - 中国 CRM 市场的主要参与者有哪些？
+    - 销售团队在 CRM 使用中遇到的核心痛点是什么？
+    - CRM 的定价模式和总体拥有成本如何？
+  freshness_policy: monthly
+  created_at: 2026-08-11
+  created_by: Brand Atlas Team

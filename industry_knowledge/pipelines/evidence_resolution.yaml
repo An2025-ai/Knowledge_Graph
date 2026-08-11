@@ -1,0 +1,253 @@
+# GEO 第二层行业知识层 — 管道定义：证据解析
+# 版本: 1.0.0
+# 范围: 将 [S#] 引用解析为原始证据，评估支持状态
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: industry_knowledge
+  layer: L2
+
+pipeline:
+  id: pipeline_evidence_resolution
+  name: 证据解析
+  name_en: Evidence Resolution
+  version: 1.0.0
+  purpose: >
+    将报告中的 [S#] 引用标签解析为原始证据文本。
+    加载引用索引和证据包，逐一定位每个引用标签对应的浏览器记录，
+    验证内容哈希，从原始页面提取证据文本，评估证据支持状态，
+    并标记证据不足或缺失的引用。
+  description: >
+    证据解析管道是知识提取的关键前置步骤。它建立从报告引用
+    到原始来源证据的完整追踪链。管道加载报告的引用索引和
+    附带的证据包，对每个引用标签执行来源定位、哈希验证、
+    文本提取和支持状态评估。支持状态包括直接支持、部分支持、
+    间接支持、不支持等层级。对于证据不足或缺失的引用进行
+    标记，确保下游管道能够区分有据可查和无据可依的陈述。
+
+  steps:
+    - step: 1
+      name: 加载引用索引和证据包
+      name_en: Load Report Citation Index and Evidence Package
+      description: 读取报告的引用索引和附带的证据包文件
+      inputs:
+        - citation_index
+        - evidence_package
+      outputs:
+        - citation_map: 引用标签到来源的完整映射
+        - evidence_files: 证据包中的文件清单
+      rules:
+        - citation_index_must_be_complete
+        - evidence_package_must_be_accessible
+
+    - step: 2
+      name: 定位浏览器记录
+      name_en: Locate Browser Record for Each Citation Label
+      description: 为每个引用标签在证据包中定位对应的浏览器记录
+      inputs:
+        - citation_map
+        - evidence_files
+        - browser_record_index
+      outputs:
+        - citation_records: 每个引用标签对应的浏览器记录（URL、抓取时间、页面标题）
+        - unresolved_citations: 无法定位浏览器记录的引用列表
+      rules:
+        - each_citation_must_have_record
+        - unresolved_citations_must_be_flagged
+
+    - step: 3
+      name: 验证内容哈希
+      name_en: Verify Content Hash Matches Evidence Package
+      description: 验证浏览器记录中存储的内容哈希与证据包中的文件一致
+      inputs:
+        - citation_records
+        - evidence_package
+      outputs:
+        - hash_verification: 哈希验证结果（匹配 / 不匹配 / 文件缺失）
+        - verified_records: 哈希验证通过的引用记录
+      rules:
+        - content_hash_must_match
+        - hash_mismatch_must_be_flagged
+
+    - step: 4
+      name: 提取证据文本
+      name_en: Extract Evidence Text from Original Pages
+      description: 从原始页面内容中提取与引用相关的证据文本片段
+      inputs:
+        - verified_records
+        - page_contents
+      outputs:
+        - evidence_texts: 提取的证据文本（原文片段、上下文、页面位置）
+      rules:
+        - evidence_text_must_be_verbatim
+        - evidence_context_must_be_preserved
+
+    - step: 5
+      name: 评估证据支持状态
+      name_en: Check Evidence Support Status
+      description: 评估每条证据对其引用陈述的支持程度
+      inputs:
+        - evidence_texts
+        - candidate_statements
+        - support_criteria
+      outputs:
+        - support_assessments: 每条证据的支持状态评估
+      rules:
+        - support_status_must_be_classified
+        - assessment_must_be_justified
+
+    - step: 6
+      name: 标记证据缺失
+      name_en: Flag Insufficient or Missing Evidence
+      description: 对证据不足或完全缺失的引用进行标记和分类
+      inputs:
+        - support_assessments
+        - unresolved_citations
+        - hash_verification
+      outputs:
+        - evidence_flags: 证据缺失标记（insufficient / missing / tampered / inaccessible）
+        - resolved_evidence: 完整的证据解析结果
+      rules:
+        - every_flag_must_have_reason
+        - missing_evidence_must_block_promotion
+
+  inputs:
+    - citation_index:
+        description: 报告引用索引（[S#] 标签到来源的映射）
+        source: 报告包中提取
+        fields: [citation_label, source_id, page_ref, url, content_hash]
+    - evidence_package:
+        description: 证据附件包（原始页面抓取、截图、数据文件）
+        source: 地理研究报告任务管道输出
+        fields: [package_id, files, manifest, created_at]
+    - browser_record_index:
+        description: 浏览器记录索引（URL 到抓取记录的映射）
+        source: 地理研究模块
+        fields: [record_id, url, fetched_at, page_title, content_hash, file_path]
+    - page_contents:
+        description: 原始页面内容（HTML 或提取的纯文本）
+        source: 证据包
+        fields: [page_id, url, raw_content, extracted_text, fetched_at]
+    - candidate_statements:
+        description: 候选陈述列表（来自报告摄入管道）
+        source: 报告摄入管道输出
+        fields: [candidate_id, statement_text, citation_labels, report_span, section_id, dimension_id]
+    - support_criteria:
+        description: 证据支持状态评估标准
+        source: 质量管理系统
+        fields: [criteria_id, support_level, definition, min_evidence_quality, examples]
+
+  outputs:
+    output_schema: resolved_evidence
+    output_fields:
+      - resolution_id: 证据解析批次唯一标识
+      - candidate_id: 关联的候选陈述 ID
+      - citation_label: 引用标签
+      - source_record: 浏览器记录详情（URL、抓取时间、页面标题）
+      - hash_verified: 内容哈希验证结果
+      - evidence_text: 提取的证据原文
+      - evidence_context: 证据上下文（前后文、页面位置）
+      - support_status: 支持状态（directly_supports / partially_supports / indirectly_supports / does_not_support / insufficient）
+      - support_justification: 支持状态判定理由
+      - evidence_flag: 证据标记（如 insufficient、missing、tampered）
+      - flag_reason: 标记原因
+      - resolved_at: 解析时间
+
+  rules:
+    - rule: citation_index_must_be_complete
+      description: 引用索引必须包含所有报告中的引用标签，不可遗漏
+      severity: critical
+
+    - rule: evidence_package_must_be_accessible
+      description: 证据包中的所有文件必须可读且格式正确
+      severity: critical
+
+    - rule: each_citation_must_have_record
+      description: 每个引用标签必须在证据包中存在对应的浏览器记录
+      severity: critical
+
+    - rule: unresolved_citations_must_be_flagged
+      description: 无法定位浏览器记录的引用必须标记为 unresolved
+      severity: critical
+
+    - rule: content_hash_must_match
+      description: 浏览器记录中的内容哈希必须与证据包中的文件哈希一致
+      severity: critical
+
+    - rule: hash_mismatch_must_be_flagged
+      description: 哈希不匹配的引用必须标记为 tampered，记录不匹配详情
+      severity: critical
+
+    - rule: evidence_text_must_be_verbatim
+      description: 提取的证据文本必须是原文引用，不可改写或摘要
+      severity: critical
+
+    - rule: evidence_context_must_be_preserved
+      description: 证据文本必须保留足够的上下文（前后至少各一句话）
+      severity: high
+
+    - rule: support_status_must_be_classified
+      description: 每条证据的支持状态必须归类到预定义的五级分类中
+      severity: critical
+
+    - rule: assessment_must_be_justified
+      description: 每条支持状态评估必须附带判定理由，不可仅给出结论
+      severity: high
+
+    - rule: every_flag_must_have_reason
+      description: 每个证据标记必须附带明确的标记原因
+      severity: critical
+
+    - rule: missing_evidence_must_block_promotion
+      description: 标记为 missing 或 tampered 的证据必须阻止对应候选的晋升
+      severity: critical
+
+  failure_mode: evidence_unresolvable
+  failure_handling:
+    condition: 大量引用无法解析、哈希大面积不匹配或证据包损坏
+    action: 生成证据解析失败报告，标记所有未解析的引用及原因，暂停该报告的下游管道，通知地理研究模块重新提供证据包
+    recovery: 地理研究模块重新抓取和打包证据，或人工审核决定是否接受部分证据
+
+  quality_checks:
+    - check: citation_resolution_rate
+      description: 确认引用解析的覆盖率
+      method: 计算 resolved_citations / total_citations 比率，不低于 95%
+
+    - check: hash_verification_pass_rate
+      description: 确认内容哈希验证通过率
+      method: 计算 hash_verified / total_records 比率，应达到 100%
+
+    - check: evidence_verbatim_check
+      description: 确认证据文本为原文引用
+      method: 对 evidence_text 和 page_contents 进行子串匹配验证
+
+    - check: support_status_distribution
+      description: 确认支持状态分布合理
+      method: 检查各 support_status 的占比，does_not_support 和 insufficient 占比过高时触发告警
+
+    - check: flag_justification
+      description: 确认所有证据标记均有合理原因
+      method: 检查 evidence_flags 中每个标记的 flag_reason 非空且描述具体
+
+    - check: unresolved_traceability
+      description: 确认未解析的引用有完整的追踪记录
+      method: 检查 unresolved_citations 中每条记录包含 citation_label 和 failure_reason
+
+    - check: context_sufficiency
+      description: 确认证据上下文长度足够
+      method: 检查 evidence_context 的字符数不低于最低阈值
+
+  metric_refs: []
+  # 预留：citation_resolution_rate, hash_mismatch_frequency, support_status_distribution, avg_evidence_quality_score
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义证据解析管道
+      - 实现从引用标签到原始证据的完整解析和验证流程
+      - 包含 6 个管道步骤、12 条规则和 7 项质量检查
+    author: Brand Atlas Team

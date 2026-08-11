@@ -1,0 +1,316 @@
+# GEO 第二层行业知识层 — 管道定义：知识提取
+# 版本: 1.0.0
+# 范围: 从候选陈述中提取结构化实体、关系和陈述
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: industry_knowledge
+  layer: L2
+
+pipeline:
+  id: pipeline_extraction
+  name: 知识提取
+  name_en: Knowledge Extraction
+  version: 1.0.0
+  purpose: >
+    从包含证据的候选陈述中提取结构化的实体、关系和陈述。
+    采用多级提取策略，按优先级从精确匹配到别名、NER 再到
+    LLM 提取实体，从表格到模式规则再到 LLM 枚举提取关系，
+    将陈述分类为事实、主张、观察或推断，并验证提取结果与
+    L1 类型约束和证据引用的兼容性。
+  description: >
+    知识提取管道是 L2 行业知识层的核心工序。它接收经过证据
+    解析的候选陈述，按照提取配置文件为每个章节和维度执行
+    多级提取。实体提取采用四级优先级策略（精确匹配 > 别名
+    匹配 > NER 识别 > LLM 提取），关系提取采用三级优先级
+    （表格解析 > 模式规则 > LLM 枚举）。提取完成后对每条
+    陈述进行类型分类，并验证提取结果与 L1 通用知识层类型
+    约束的兼容性，确保所有结构化输出均附带证据引用。
+
+  steps:
+    - step: 1
+      name: 加载提取配置文件
+      name_en: Load Extraction Profile for Each Report Section
+      description: 为每个报告章节加载对应的提取配置文件（实体类型、关系类型、优先级）
+      inputs:
+        - classified_candidates
+        - extraction_profiles
+      outputs:
+        - per_section_profiles: 每个章节的提取配置（目标实体类型、关系类型、提取规则）
+      rules:
+        - profile_must_match_section
+        - profile_must_be_active
+
+    - step: 2
+      name: 提取实体
+      name_en: Extract Entities by Priority
+      description: 按四级优先级提取实体：精确匹配 -> 别名匹配 -> NER -> LLM 提取
+      inputs:
+        - per_section_profiles
+        - candidate_statements
+        - entity_registry
+        - alias_registry
+        - ner_model
+        - llm_extraction_model
+      outputs:
+        - extracted_entities: 提取的实体列表（含提取方法和优先级）
+      rules:
+        - must_follow_priority_order
+        - lower_priority_must_not_override_higher
+        - entity_type_must_be_valid
+
+    - step: 3
+      name: 提取关系
+      name_en: Extract Relations by Priority
+      description: 按三级优先级提取关系：表格 -> 模式规则 -> LLM 枚举
+      inputs:
+        - per_section_profiles
+        - candidate_statements
+        - extracted_entities
+        - relation_patterns
+        - llm_extraction_model
+      outputs:
+        - extracted_relations: 提取的关系列表（含提取方法和优先级）
+      rules:
+        - table_extraction_first
+        - relation_must_link_existing_entities
+        - relation_type_must_be_registered
+
+    - step: 4
+      name: 分类陈述
+      name_en: Classify Statements
+      description: 将每条陈述分类为事实、主张、观察或推断
+      inputs:
+        - candidate_statements
+        - resolved_evidence
+        - statement_classification_rules
+      outputs:
+        - classified_statements: 分类后的陈述（statement_type + classification_reason）
+      rules:
+        - fact_requires_direct_evidence
+        - claim_must_be_labeled_as_claim
+        - inference_must_be_flagged_for_review
+
+    - step: 5
+      name: 验证类型约束和证据引用
+      name_en: Validate Against L1 Type Constraints and Evidence Quotes
+      description: 验证提取结果与 L1 类型约束和证据引用的兼容性
+      inputs:
+        - extracted_entities
+        - extracted_relations
+        - classified_statements
+        - l1_type_constraints
+        - resolved_evidence
+      outputs:
+        - validation_results: 验证结果（通过 / 冲突 / 证据不足）
+        - validated_extraction: 验证通过的提取结果
+      rules:
+        - must_check_l1_type_compatibility
+        - must_verify_evidence_quotes
+        - type_constraint_violation_is_blocking
+
+    - step: 6
+      name: 输出结构化提取
+      name_en: Output Structured Extraction with Evidence Spans
+      description: 将验证通过的提取结果序列化输出，附带证据引用
+      inputs:
+        - validated_extraction
+        - resolved_evidence
+      outputs:
+        - structured_extraction: 结构化提取结果（实体 + 关系 + 陈述 + 证据引用）
+        - extraction_manifest: 提取清单（统计摘要、覆盖率）
+      rules:
+        - output_must_include_evidence_spans
+        - output_must_include_confidence_scores
+
+  inputs:
+    - extraction_profiles:
+        description: 提取配置文件（按章节和维度定义提取目标、规则和优先级）
+        source: 提取配置管理系统
+        fields: [profile_id, section_id, entity_types, relation_types, extraction_rules, priority]
+    - entity_registry:
+        description: 已注册的实体注册表（用于精确匹配和别名匹配）
+        source: L2 稳定知识层
+        fields: [entity_id, canonical_name, entity_type, aliases, version]
+    - alias_registry:
+        description: 实体别名注册表（规范名称到别名的映射）
+        source: 实体消歧系统
+        fields: [alias_id, canonical_name, alias_text, alias_type, confidence]
+    - ner_model:
+        description: 命名实体识别模型（用于 NER 提取层级）
+        source: 模型注册表
+        fields: [model_id, model_version, supported_entity_types, f1_score, last_trained]
+    - llm_extraction_model:
+        description: LLM 提取模型（用于 LLM 提取层级）
+        source: 模型注册表
+        fields: [model_id, model_version, extraction_capabilities, temperature, max_tokens]
+    - relation_patterns:
+        description: 关系模式规则库（预定义的关系提取模式）
+        source: 模式管理系统
+        fields: [pattern_id, relation_type, trigger_phrases, subject_type, object_type, pattern_regex]
+    - statement_classification_rules:
+        description: 陈述分类规则（事实、主张、观察、推断的判定标准）
+        source: 质量管理系统
+        fields: [rule_id, statement_type, criteria, evidence_requirements, confidence_threshold]
+    - l1_type_constraints:
+        description: L1 通用知识层类型约束（实体类型、关系类型的定义和限制）
+        source: 通用知识层
+        fields: [constraint_id, entity_type, relation_type, allowed_properties, cardinality_rules]
+
+  outputs:
+    output_schema: structured_extraction
+    output_fields:
+      - extraction_id: 提取批次唯一标识
+      - batch_id: 来源候选批次 ID
+      - entities:
+          type: array
+          description: 提取的实体列表
+          item_fields:
+            - entity_id: 实体 ID（临时 ID，晋升时重新分配）
+            - canonical_name: 实体规范名称
+            - entity_type: 实体类型
+            - extraction_method: 提取方法（exact_match / alias_match / ner / llm）
+            - extraction_priority: 提取优先级（1-4）
+            - properties: 实体属性
+            - evidence_spans: 证据引用列表
+            - confidence: 置信度
+      - relations:
+          type: array
+          description: 提取的关系列表
+          item_fields:
+            - relation_id: 关系 ID（临时）
+            - relation_type: 关系类型
+            - subject_id: 主体实体 ID
+            - object_id: 客体实体 ID
+            - extraction_method: 提取方法（table / pattern / llm）
+            - extraction_priority: 提取优先级（1-3）
+            - evidence_spans: 证据引用列表
+            - confidence: 置信度
+      - statements:
+          type: array
+          description: 分类后的陈述列表
+          item_fields:
+            - statement_id: 陈述 ID
+            - statement_text: 陈述文本
+            - statement_type: 陈述类型（fact / claim / observation / inference）
+            - classification_reason: 分类理由
+            - evidence_spans: 证据引用列表
+            - requires_review: 是否需要人工审核
+      - validation_summary: 验证摘要（通过 / 冲突 / 证据不足的统计）
+      - extraction_timestamp: 提取时间戳
+
+  rules:
+    - rule: profile_must_match_section
+      description: 加载的提取配置文件必须与目标章节匹配
+      severity: critical
+
+    - rule: profile_must_be_active
+      description: 提取配置文件必须处于 active 状态，已废弃的配置不可使用
+      severity: high
+
+    - rule: must_follow_priority_order
+      description: 实体提取必须严格按照 exact_match -> alias_match -> ner -> llm 的顺序执行
+      severity: critical
+
+    - rule: lower_priority_must_not_override_higher
+      description: 低优先级提取方法的结果不得覆盖高优先级方法已提取的实体
+      severity: critical
+
+    - rule: entity_type_must_be_valid
+      description: 提取的实体类型必须在 L1 类型约束中定义，未定义的类型拒绝提取
+      severity: critical
+
+    - rule: table_extraction_first
+      description: 关系提取必须优先从表格中解析，表格提取失败后才使用模式规则
+      severity: high
+
+    - rule: relation_must_link_existing_entities
+      description: 关系的 subject_id 和 object_id 必须指向在本批次或已注册中存在的实体
+      severity: critical
+
+    - rule: relation_type_must_be_registered
+      description: 关系类型必须在 L1 关系类型注册表中定义
+      severity: critical
+
+    - rule: fact_requires_direct_evidence
+      description: 分类为 fact 的陈述必须具有 directly_supports 级别的证据支持
+      severity: critical
+
+    - rule: claim_must_be_labeled_as_claim
+      description: 来源为主观性陈述（品牌自述、观点性文章）的内容必须标记为 claim
+      severity: critical
+
+    - rule: inference_must_be_flagged_for_review
+      description: 由 LLM 推断得出的内容必须标记为 inference 并推入审核队列
+      severity: high
+
+    - rule: must_check_l1_type_compatibility
+      description: 所有提取的实体和关系必须与 L1 类型约束进行兼容性检查
+      severity: critical
+
+    - rule: must_verify_evidence_quotes
+      description: 所有提取结果必须与证据引用进行交叉验证
+      severity: critical
+
+    - rule: type_constraint_violation_is_blocking
+      description: 违反 L1 类型约束的提取结果必须拒绝，不可输出
+      severity: critical
+
+    - rule: output_must_include_evidence_spans
+      description: 输出的每个实体、关系和陈述必须附带 evidence_spans 引用
+      severity: critical
+
+    - rule: output_must_include_confidence_scores
+      description: 输出的每个提取结果必须附带置信度评分
+      severity: high
+
+  failure_mode: extraction_quality_insufficient
+  failure_handling:
+    condition: 提取结果质量不达标（实体提取率过低、大量类型约束违规、证据引用断裂）
+    action: 生成提取质量报告，标记低质量维度，拒绝输出提取结果，调整提取配置或模型后重新执行
+    recovery: 优化提取配置文件、更新 NER 模型或 LLM prompt、补充实体注册表后重新提取
+
+  quality_checks:
+    - check: entity_extraction_coverage
+      description: 确认实体提取覆盖率达标
+      method: 检查每个章节的 extracted_entities 数量与 candidate_statements 的比例
+
+    - check: extraction_priority_adherence
+      description: 确认提取方法按优先级执行
+      method: 检查每个实体的 extraction_priority 与 extraction_method 的对应关系正确
+
+    - check: relation_entity_integrity
+      description: 确认所有关系引用的实体存在于本批次或已注册实体中
+      method: 遍历所有关系，验证 subject_id 和 object_id 的可解析性
+
+    - check: statement_classification_accuracy
+      description: 确认陈述分类符合规则
+      method: 抽样检查 fact 类型陈述的 evidence_spans 引用是否均为 directly_supports
+
+    - check: l1_type_compatibility
+      description: 确认提取结果与 L1 类型约束兼容
+      method: 将 extracted_entities 的 entity_type 与 l1_type_constraints 比对
+
+    - check: evidence_span_traceability
+      description: 确认每个证据引用可追溯到 resolved_evidence
+      method: 反向解析所有 evidence_spans，验证指向的 resolved_evidence 记录存在
+
+    - check: confidence_threshold
+      description: 确认低置信度提取结果已标记
+      method: 检查 confidence 低于阈值的条目是否已标记 requires_review
+
+  metric_refs: []
+  # 预留：entity_extraction_recall, relation_extraction_precision, statement_classification_accuracy, extraction_throughput
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义知识提取管道
+      - 实现多级实体提取（四级）和关系提取（三级）策略
+      - 包含陈述分类、L1 类型约束验证和证据引用
+      - 包含 6 个管道步骤、16 条规则和 7 项质量检查
+    author: Brand Atlas Team

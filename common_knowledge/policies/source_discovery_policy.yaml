@@ -1,0 +1,237 @@
+# GEO 第一层通用知识层 — 来源发现与验证策略
+# 版本: 1.1.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.1.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: shared
+  description: >
+    定义来源的白名单、发现、验证及生命周期管理规则。
+    确保所有进入知识图谱的源信息经过严格分类和验证。
+
+# ============================================================
+# 来源生命周期
+# ============================================================
+
+source_lifecycle:
+  description: 来源从发现到活跃或拒绝的完整生命周期管理
+  states:
+    - state: discovered
+      name: 已发现
+      transitions: [candidate]
+      description: 系统自动发现或人工提交的潜在来源，尚未经过任何验证
+
+    - state: candidate
+      name: 候选
+      transitions: [verified, rejected]
+      description: 已通过初步分类筛选，正在等待验证流程
+
+    - state: verified
+      name: 已验证
+      transitions: [active, rejected]
+      description: 已通过所有验证检查，可用于知识图谱
+
+    - state: active
+      name: 活跃
+      transitions: [suspended, deprecated]
+      description: 当前活跃使用的来源，可被引用为证据
+
+    - state: rejected
+      name: 已拒绝
+      transitions: [candidate]
+      description: 未通过验证的来源，永久或暂时拒绝
+
+    - state: suspended
+      name: 已暂停
+      transitions: [active, deprecated]
+      description: 暂时停止使用（如域名变更、临时无法访问）
+
+    - state: deprecated
+      name: 已弃用
+      transitions: []
+      description: 永久停止使用，保留历史引用但不再新增
+
+# ============================================================
+# 来源分类
+# ============================================================
+
+source_classes:
+
+  allowed:
+    description: 允许进入知识图谱的来源类别，可直接引用为证据
+    categories:
+      - {class: government, name: 政府机构, authority_level: high, examples: [国家统计局, 商务部, 工信部, 各国.gov域名]}
+      - {class: regulator, name: 监管机构, authority_level: high, examples: [证监会, 银保监会, 药监局]}
+      - {class: standards_body, name: 标准制定机构, authority_level: high, examples: [ISO, IEEE, W3C, 国家标准委]}
+      - {class: industry_association, name: 行业协会, authority_level: medium, examples: [中国软件行业协会, 中国互联网协会]}
+      - {class: industry_research, name: 行业研究机构, authority_level: medium, examples: [IDC, Gartner, Forrester, 艾瑞咨询]}
+      - {class: academic, name: 学术机构, authority_level: medium, examples: [大学研究机构, 学术期刊, 会议论文]}
+      - {class: brokerage_research, name: 券商研究, authority_level: medium, examples: [券商行业研究报告, 投行行业分析]}
+      - {class: reliable_media, name: 可靠媒体, authority_level: medium, examples: [新华社, 路透社, 彭博社, 财新]}
+      - {class: competitor_official, name: 竞品官方信息, authority_level: medium, examples: [竞品官网, 官方博客, 官方新闻稿, 公开财报], note: 作为品牌自述使用需标注立场}
+      - {class: company_disclosure, name: 公司披露, authority_level: high, examples: [上市公司年报, 季报, 招股说明书, 官方公告], note: 经审计的披露权威等级为high}
+
+  discovery_only:
+    description: 仅用于发现阶段，不得直接引用为证据，需追溯到原始来源
+    categories:
+      - {class: aggregator, name: 信息聚合平台, restriction: 仅用于发现线索需追溯到原始来源}
+      - {class: search_engine, name: 搜索引擎, examples: [Google, 百度, Bing], restriction: 仅用于发现来源搜索结果本身不得作为证据}
+
+  forbidden:
+    description: 禁止作为知识图谱证据来源的类别
+    categories:
+      - {class: community, name: 社区/问答平台, examples: [知乎, Quora, 百度知道], reason: 缺乏编辑审核权威性无法保证}
+      - {class: social_media, name: 社交媒体, examples: [微博, Twitter/X, Facebook, LinkedIn], reason: 内容未经审核信息可靠性无法保证}
+      - {class: ugc_review, name: 用户生成评测, examples: [大众点评, 豆瓣, App Store评论], reason: 个体主观性强无统一标准无法验证}
+      - {class: forum, name: 论坛/讨论区, examples: [贴吧, V2EX, Hacker News], reason: 内容未经审核权威性不足}
+      - {class: creator_platform, name: 创作者平台, examples: [小红书, B站, 抖音, YouTube], reason: 个人创作者观点缺乏编辑审核流程}
+
+# ============================================================
+# 域名黑名单
+# ============================================================
+
+domain_blacklist:
+  description: 明确禁止作为知识图谱证据来源的域名
+  domains: [zhihu.com, xiaohongshu.com, bilibili.com, reddit.com, g2.com, producthunt.com, zhidao.baidu.com, tieba.baidu.com, douban.com, weibo.com, v2ex.com, news.ycombinator.com, quora.com, medium.com, youtube.com, tiktok.com]
+
+# ============================================================
+# 验证规则
+# ============================================================
+
+verification_rules:
+  description: 来源从 discovered 到 active 状态必须通过的验证检查
+
+  rules:
+    - rule: organization_identity_check
+      name: 组织身份验证
+      priority: 1
+      description: 验证来源背后的组织身份是否真实、合法
+      checks: [组织名称与官方注册信息一致, 组织存在且有效运营]
+      failure_action: 标记为 rejected
+
+    - rule: official_domain_verification
+      name: 官方域名验证
+      priority: 2
+      description: 验证网站域名是否为组织官方域名
+      checks: [域名注册信息与组织名称匹配, 域名不在黑名单中且HTTPS证书有效]
+      failure_action: 标记为 rejected 或 suspended
+
+    - rule: methodology_assessment
+      name: 方法论评估
+      priority: 3
+      description: 评估来源信息的收集和分析方法是否可靠
+      checks: [研究方法论有明确说明, 样本量数据来源分析框架清晰]
+      failure_action: 降低 quality_score 中的 methodology 维度
+
+    - rule: independence_evaluation
+      name: 独立性评估
+      priority: 4
+      description: 评估来源是否存在利益冲突或偏见
+      checks: [来源与所报道对象无直接利益关联, 如有利益关联已明确披露]
+      failure_action: 标记利益关联降低 authority 评分
+
+    - rule: publication_track_record
+      name: 发表记录验证
+      priority: 5
+      description: 评估来源的发表历史和一致性
+      checks: [至少有6个月以上连续发表记录, 历史内容未发现重大错误或造假]
+      failure_action: 标记为 candidate延长观察期
+
+# ============================================================
+# 扩展来源发现
+# ============================================================
+
+extended_source_discovery:
+  description: 当现有来源不足以覆盖知识图谱需求时，触发扩展来源发现
+
+  triggers:
+    - {trigger: missing_dimension, name: 维度缺失, description: 某个知识维度完全没有来源覆盖, action: 搜索所有allowed和discovery_only来源类别}
+    - {trigger: partial_dimension, name: 维度不完整, description: 某个知识维度的来源数量不足最低要求, action: 补充来源以达到最低数量要求}
+    - {trigger: outdated_dimension, name: 维度过时, description: 某个知识维度的所有来源均已超过有效期, action: 搜索最新来源以更新过时维度}
+    - {trigger: conflicting_dimension, name: 维度冲突, description: 某个知识维度的来源之间存在无法解决的冲突, action: 搜索额外独立来源以交叉验证}
+
+  required_metadata:
+    description: 每个新来源必须记录的元数据字段
+    fields: [source_name, source_url, source_class, source_category, discovery_method, discovery_date, discovery_context, authority_level, verification_status]
+
+# ============================================================
+# 来源质量维度
+# ============================================================
+
+source_quality_dimensions:
+  description: >
+    每个活跃来源必须定期评估以下质量维度。
+    评分范围1-5，综合评分低于3的来源将被标记为需要复核。
+
+  dimensions:
+    - dimension: authority
+      name: 权威性
+      weight: 0.30
+      description: 来源在相关领域的权威程度和认可度
+      scoring_criteria:
+        5: 公认顶级权威机构（政府统计部门、ISO等）
+        4: 行业顶级研究机构或知名学术期刊
+        3: 行业知名研究机构或可靠媒体
+        2: 一般行业机构或媒体
+        1: 未知或小型机构
+
+    - dimension: independence
+      name: 独立性
+      weight: 0.25
+      description: 来源在信息生产和发布过程中的独立程度
+      scoring_criteria:
+        5: 完全独立无任何利益关联
+        4: 轻微利益关联但已完全披露
+        3: 有一定利益关联但影响可控
+        2: 存在明显利益关联
+        1: 与报道对象有直接利益关系
+
+    - dimension: methodology
+      name: 方法论
+      weight: 0.25
+      description: 来源信息收集和分析方法的严谨程度
+      scoring_criteria:
+        5: 方法论透明严谨可复现
+        4: 方法论基本清晰细节可接受
+        3: 方法论有说明但不完整
+        2: 方法论不清晰或存在明显缺陷
+        1: 无方法论说明
+
+    - dimension: timeliness
+      name: 时效性
+      weight: 0.10
+      description: 来源信息的更新频率和时效性
+      scoring_criteria:
+        5: 实时或准实时更新
+        4: 定期更新（月度或季度）
+        3: 半年到一年更新一次
+        2: 超过一年但仍有参考价值
+        1: 严重过时
+
+    - dimension: transparency
+      name: 透明度
+      weight: 0.10
+      description: 来源对自身局限偏差和利益关系的披露程度
+      scoring_criteria:
+        5: 完全透明所有限制和偏差均披露
+        4: 大部分透明主要限制已披露
+        3: 部分透明部分限制未披露
+        2: 透明度不足关键信息缺失
+        1: 完全不透明
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义来源发现与验证策略
+      - 建立7步来源生命周期和3类来源分类体系
+      - 建立域名黑名单（16个禁止域名）和5项验证规则
+      - 定义扩展来源发现触发条件和来源质量维度
+    author: Brand Atlas Team

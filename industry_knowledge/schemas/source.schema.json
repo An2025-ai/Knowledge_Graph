@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brand-atlas.dev/schemas/source.schema.json",
+  "title": "L2 Source Instance",
+  "description": "Schema for L2 source instances (Section 4.6 extended source record format of L2 spec).",
+  "type": "object",
+  "required": ["source_id", "organization", "official_domain", "source_class", "original_url"],
+  "properties": {
+    "source_id": {"type": "string"},
+    "organization": {"type": "string"},
+    "official_domain": {"type": "string"},
+    "source_class": {
+      "type": "string",
+      "enum": [
+        "government", "regulator", "standards_body", "industry_association",
+        "industry_research", "academic", "brokerage_research", "reliable_media",
+        "competitor_official", "company_disclosure", "aggregator"
+      ]
+    },
+    "discovered_by": {
+      "type": "string",
+      "enum": ["manual", "geo-research", "whitelist"]
+    },
+    "discovery_query": {"type": "string"},
+    "discovery_reason": {"type": "string"},
+    "identity_verified": {"type": "boolean"},
+    "original_publisher": {"type": "string"},
+    "methodology_available": {"type": "boolean"},
+    "independence_level": {
+      "type": "string",
+      "enum": ["high", "medium", "low", "unknown"]
+    },
+    "allowed_uses": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "original_url": {"type": "string", "format": "uri"},
+    "canonical_url": {"type": "string", "format": "uri"},
+    "published_at": {"type": "string", "format": "date"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "content_hash": {"type": "string"},
+    "language": {"type": "string"},
+    "market": {"type": "string"},
+    "approval_status": {
+      "type": "string",
+      "enum": ["discovered", "candidate", "verified", "active", "suspended", "deprecated", "rejected"]
+    },
+    "l2_enabled": {"type": "boolean", "default": false}
+  }
+}

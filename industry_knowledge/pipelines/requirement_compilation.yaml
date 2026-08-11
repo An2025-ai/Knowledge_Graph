@@ -1,0 +1,232 @@
+# GEO 第二层行业知识层 — 管道定义：需求编译
+# 版本: 1.0.0
+# 范围: 将 L2 数据维度编译为机器可读的行业知识需求规格
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: industry_knowledge
+  layer: L2
+
+pipeline:
+  id: pipeline_requirement_compilation
+  name: 需求编译
+  name_en: Requirement Compilation
+  version: 1.0.0
+  purpose: >
+    将 L2 数据维度编译为机器可读的行业知识需求规格文件。
+    从行业范围清单出发，查询数据维度注册表，为每个维度生成
+    具体的问题和期望字段，并设定来源要求和证据规则，最终输出
+    版本化的需求文件供下游管道使用。
+  description: >
+    需求编译管道是 L2 行业知识层的第一道工序。它负责将抽象的
+    行业范围和维度定义转换为可执行的知识需求规格。管道加载
+    行业范围清单，查询 L2 数据维度注册表获取该行业所需的全部维度，
+    然后为每个维度生成具体的问题模板、期望字段、来源要求和证据
+    规则。最后通过 schema 校验确保输出的需求文件符合规范。
+
+  steps:
+    - step: 1
+      name: 加载行业范围清单
+      name_en: Load Industry Scope Manifest
+      description: 读取目标行业的范围定义文件，获取行业编码、名称、子类目和地理范围
+      inputs:
+        - industry_scope_manifest
+      outputs:
+        - parsed_scope: 解析后的行业范围对象
+      rules:
+        - industry_scope_must_have_valid_id
+
+    - step: 2
+      name: 查询 L2 数据维度注册表
+      name_en: Query L2 Data Dimension Registry
+      description: 根据行业范围查询数据维度注册表，获取该行业需要覆盖的所有维度
+      inputs:
+        - parsed_scope
+        - data_dimension_registry
+      outputs:
+        - required_dimensions: 该行业所需的维度列表
+      rules:
+        - dimension_must_be_active
+        - dimension_must_match_industry
+
+    - step: 3
+      name: 编译维度问题与字段
+      name_en: Compile Dimension-Specific Questions and Expected Fields
+      description: 为每个所需维度生成具体的问题模板和期望返回的字段定义
+      inputs:
+        - required_dimensions
+        - question_templates
+      outputs:
+        - dimension_questions: 每个维度对应的问题和期望字段映射
+      rules:
+        - each_dimension_must_have_questions
+        - expected_fields_must_be_typed
+
+    - step: 4
+      name: 设定来源要求和证据规则
+      name_en: Set Source Requirements and Evidence Rules
+      description: 为每个维度设定允许的来源类型、权威级别要求和证据验证规则
+      inputs:
+        - dimension_questions
+        - source_type_registry
+        - evidence_rules_catalog
+      outputs:
+        - source_requirements: 每个维度的来源要求配置
+        - evidence_rules: 每个维度的证据规则配置
+      rules:
+        - source_type_must_be_registered
+        - evidence_rules_must_cover_all_dimensions
+
+    - step: 5
+      name: 校验需求文件
+      name_en: Validate Against Industry Requirement Schema
+      description: 将编译完成的需求文件与 industry_requirement.schema.json 进行校验
+      inputs:
+        - compiled_requirement
+        - industry_requirement_schema
+      outputs:
+        - validation_result: 校验结果（通过/失败及错误详情）
+      rules:
+        - schema_validation_must_pass
+        - schema_violations_must_be_fatal
+
+    - step: 6
+      name: 输出版本化需求文件
+      name_en: Output Versioned Requirement File
+      description: 将校验通过的需求文件写入管道输出目录，附加版本号和元数据
+      inputs:
+        - compiled_requirement
+        - validation_result
+      outputs:
+        - industry_requirement_yaml: 版本化的行业知识需求 YAML 文件
+      rules:
+        - output_must_include_version
+        - output_must_include_changelog
+
+  inputs:
+    - industry_scope_manifest:
+        description: 行业范围清单（编码、名称、子类目、地理范围）
+        source: 行业分类配置
+        fields: [industry_id, canonical_name, category_ids, geo_scope, description]
+    - data_dimension_registry:
+        description: L2 数据维度注册表，定义所有可用的知识维度
+        source: 维度管理系统
+        fields: [dimension_id, dimension_name, dimension_type, applicable_industries, default_questions, expected_fields]
+    - question_templates:
+        description: 问题模板库，按维度类型预设的标准问题
+        source: 模板管理系统
+        fields: [template_id, dimension_type, question_text, expected_answer_format, priority]
+    - source_type_registry:
+        description: 来源类型注册表（政府、行业协会、学术、媒体等）
+        source: 来源管理系统
+        fields: [source_type_id, type_name, authority_level, allowed_uses, limitations]
+    - evidence_rules_catalog:
+        description: 证据规则目录（证据类型、验证方法、最低标准）
+        source: 证据管理系统
+        fields: [rule_id, dimension_id, evidence_type, verification_method, min_quality_score]
+    - industry_requirement_schema:
+        description: 行业需求文件的 JSON Schema 规范
+        source: Schema 注册表
+        fields: [schema_id, schema_version, schema_definition]
+
+  outputs:
+    output_schema: industry_requirement
+    output_fields:
+      - requirement_id: 需求文件唯一标识
+      - requirement_version: 需求文件版本号
+      - industry_scope: 目标行业范围
+      - dimensions: 每个维度的完整配置（问题、期望字段、来源要求、证据规则）
+      - compiled_at: 编译时间
+      - valid_until: 需求文件有效期
+      - schema_version: 遵循的 schema 版本
+
+  rules:
+    - rule: industry_scope_must_have_valid_id
+      description: 行业范围清单必须包含有效的 industry_id，且与已知行业分类匹配
+      severity: critical
+
+    - rule: dimension_must_be_active
+      description: 查询到的数据维度必须处于 active 状态，已废弃的维度不可使用
+      severity: critical
+
+    - rule: dimension_must_match_industry
+      description: 查询到的维度必须在其 applicable_industries 列表中包含目标行业
+      severity: high
+
+    - rule: each_dimension_must_have_questions
+      description: 每个所需维度至少生成一个具体问题，不可出现空维度
+      severity: critical
+
+    - rule: expected_fields_must_be_typed
+      description: 每个维度的期望字段必须声明类型（string、number、array、object 等）
+      severity: high
+
+    - rule: source_type_must_be_registered
+      description: 指定的来源类型必须在 source_type_registry 中已注册
+      severity: critical
+
+    - rule: evidence_rules_must_cover_all_dimensions
+      description: 证据规则必须覆盖所有已启用的维度，不允许遗漏
+      severity: high
+
+    - rule: schema_validation_must_pass
+      description: 需求文件必须通过 industry_requirement.schema.json 的完整校验
+      severity: critical
+
+    - rule: schema_violations_must_be_fatal
+      description: 任何 schema 校验违规都应视为阻塞性错误，禁止输出
+      severity: critical
+
+    - rule: output_must_include_version
+      description: 输出的需求文件必须包含 version 和 compiled_at 字段
+      severity: critical
+
+    - rule: output_must_include_changelog
+      description: 输出的需求文件必须包含 changelog 记录
+      severity: high
+
+  failure_mode: compilation_validation_failed
+  failure_handling:
+    condition: 需求编译过程中 schema 校验失败或维度缺失
+    action: 生成详细错误报告，标记失败步骤和具体违规项，拒绝输出需求文件
+    recovery: 修复维度注册表配置、补充缺失模板或调整 schema 后重新执行管道
+
+  quality_checks:
+    - check: scope_completeness
+      description: 确认行业范围清单的所有字段已正确解析
+      method: 检查 parsed_scope 中 industry_id、canonical_name、category_ids 等字段非空
+
+    - check: dimension_coverage
+      description: 确认所需维度覆盖了该行业的所有必要知识领域
+      method: 将 required_dimensions 与该行业在 dimension_registry 中的定义比对
+
+    - check: question_uniqueness
+      description: 确认每个维度的问题不重复且覆盖维度核心信息
+      method: 检查同一维度下 question_text 无重复，且问题数量 >= 1
+
+    - check: source_authority_alignment
+      description: 确认来源要求与维度对权威级别的需求一致
+      method: 检查每个维度的 source_requirements 的 authority_level 不低于维度要求的最低级别
+
+    - check: schema_pass
+      description: 确认编译结果通过 JSON Schema 校验
+      method: 使用 industry_requirement.schema.json 验证 compiled_requirement
+
+    - check: version_increment
+      description: 确认版本号按照语义化版本规则递增
+      method: 检查新版本号与已有版本号的差异合理性
+
+  metric_refs: []
+  # 预留：compilation_duration_seconds, dimensions_per_industry, schema_validation_pass_rate, question_coverage_ratio
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义需求编译管道
+      - 实现从行业范围清单到版本化需求文件的完整编译流程
+      - 包含 6 个管道步骤、11 条规则和 6 项质量检查
+    author: Brand Atlas Team

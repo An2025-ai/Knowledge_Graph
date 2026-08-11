@@ -1,15 +1,16 @@
 # GEO 第一层通用知识层 — 来源类型定义
-# 版本: 1.0.0
+# 版本: 1.1.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.0.0
+  version: 1.1.0
   created_at: 2026-08-07
-  updated_at: 2026-08-07
+  updated_at: 2026-08-11
   status: active
   scope: shared
   description: >
-    定义 GEO/Brand Atlas 系统中使用的全部来源类型（8 种）。
+    定义 GEO/Brand Atlas 系统中使用的全部来源类型（13 种）。
+    v1.1.0 新增 5 种来源类型以支持 L2 行业知识层的数据采集需求。
     每种来源类型包含权威等级、适用场景、不适用场景和验证规则。
 
 # ============================================================
@@ -245,6 +246,146 @@ source_types:
       - 标注搜索引擎和地域
     version: 1.0.0
 
+# --- 9. 标准组织 ---
+  - type: standards_body
+    name: 标准组织
+    name_en: Standards Body
+    definition: >
+      制定和发布行业标准、技术规范、认证要求的组织。
+      包括国际标准组织、国家标准机构和行业标准联盟。
+    authority_level: high
+    suitable_for:
+      - 行业标准和技术规范
+      - 认证要求
+      - 互操作性规范
+      - 术语和分类标准
+    not_suitable_for:
+      - 市场份额数据
+      - 产品功能评价
+      - 用户行为分析
+    examples:
+      - ISO 标准文档
+      - GB 国家标准
+      - 行业技术标准
+    validation_rules:
+      - 验证标准发布机构的资质
+      - 确认标准版本和生效日期
+      - 区分强制性标准和推荐性标准
+      - 注意标准的适用范围
+    version: 1.1.0
+
+  # --- 10. 行业协会 ---
+  - type: industry_association
+    name: 行业协会
+    name_en: Industry Association
+    definition: >
+      行业协会、商会、产业联盟发布的行业报告、统计数据、
+      白皮书和行业自律规范。
+    authority_level: high
+    suitable_for:
+      - 行业统计数据
+      - 产业发展报告
+      - 行业自律规范
+      - 会员企业名录
+    not_suitable_for:
+      - 独立产品评测
+      - 单个企业市场份额
+      - 替代政府监管数据
+    examples:
+      - 中国信通院白皮书
+      - 中国软件行业协会报告
+      - 行业联盟技术标准
+    validation_rules:
+      - 验证协会的行业代表性
+      - 区分行业统计和会员自报数据
+      - 注意报告方法和样本范围
+      - 关注是否存在利益偏向
+    version: 1.1.0
+
+  # --- 11. 券商研究 ---
+  - type: brokerage_research
+    name: 券商/投行研究
+    name_en: Brokerage Research
+    definition: >
+      证券公司、投资银行研究部门发布的行业分析报告、
+      公司研究报告和市场预测。
+    authority_level: medium
+    suitable_for:
+      - 行业趋势和长期预测
+      - 竞争格局分析
+      - 上市公司财务分析
+      - 市场估值参考
+    not_suitable_for:
+      - 作为独立客观事实
+      - 替代政府统计数据
+      - 产品功能验证
+    examples:
+      - 中信证券行业研究报告
+      - 中金公司行业分析
+      - 华泰证券产业研究
+    validation_rules:
+      - 必须标记为研究判断，非客观事实
+      - 区分历史数据和预测数据
+      - 注意券商与覆盖公司的业务关系
+      - 优先引用原始数据和行业基础事实
+    version: 1.1.0
+
+  # --- 12. 上市公司披露 ---
+  - type: company_disclosure
+    name: 上市公司披露
+    name_en: Company Disclosure
+    definition: >
+      上市公司依法公开披露的财务报告、年报、招股说明书、
+      公告和投资者关系信息。
+    authority_level: high
+    suitable_for:
+      - 公司财务数据
+      - 业务板块收入
+      - 客户数量和市场描述
+      - 合规披露信息
+    not_suitable_for:
+      - 产品功能细节
+      - 独立市场排名
+      - 替代行业研究报告
+    examples:
+      - 上市公司年报
+      - IPO 招股说明书
+      - 季度财报
+      - 重大事项公告
+    validation_rules:
+      - 验证披露来源为官方信息披露平台
+      - 区分经审计数据和未经审计数据
+      - 注意披露时间有效性
+      - 公司自述的市场描述标记为 claim
+    version: 1.1.0
+
+  # --- 13. 聚合发现 ---
+  - type: aggregator
+    name: 聚合与发现平台
+    name_en: Aggregator / Discovery
+    definition: >
+      聚合行业报告、新闻和研究资料的平台，用于发现原始来源。
+      聚合平台本身不是权威来源，仅用于追溯原始发布机构。
+    authority_level: low
+    suitable_for:
+      - 发现原始报告和来源
+      - 追溯原始发布机构
+      - 跨来源交叉验证
+    not_suitable_for:
+      - 作为独立证据来源
+      - 直接引用为事实依据
+      - 替代原始报告
+    examples:
+      - 199IT 报告聚合
+      - 东方财富研报检索
+      - 行业报告导航站
+    validation_rules:
+      - 必须追溯至原始发布机构
+      - 聚合平台的摘要不得作为证据
+      - 记录发现路径和选择理由
+      - 优先使用原始发布机构的直接链接
+    version: 1.1.0
+
 # ============================================================
 # 来源权威等级汇总
 # ============================================================
@@ -255,18 +396,31 @@ authority_levels:
     - government_regulatory
     - academic
     - industry_report
+    - standards_body
+    - industry_association
+    - company_disclosure
   medium:
     - third_party_review
     - media
+    - brokerage_research
   low:
     - community
     - search_observation
+    - aggregator
 
 # ============================================================
 # 变更记录
 # ============================================================
 
 changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 新增 5 种来源类型：standards_body、industry_association、brokerage_research、company_disclosure、aggregator
+      - 权威等级更新：high 新增 3 种，medium 新增 1 种，low 新增 1 种
+      - 来源类型总数从 8 增至 13
+      - aggregator 仅用于发现原始来源，不作为独立证据
+    author: Brand Atlas Team
   - version: 1.0.0
     date: 2026-08-07
     changes:

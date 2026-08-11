@@ -1,0 +1,226 @@
+# GEO 第一层通用知识层 — 知识晋升策略
+# 版本: 1.1.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.1.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: shared
+  description: >
+    定义候选知识条目(candidate)晋升为稳定知识条目(active)的审核关卡、
+    验证流程和状态管理规则。确保只有经过充分验证的知识才能进入
+    知识图谱的核心语料库。
+
+# ============================================================
+# 晋升关卡
+# ============================================================
+
+promotion_gates:
+  description: 每个候选知识条目必须按顺序通过以下10个关卡才能晋升
+
+  gates:
+    - gate: gate_01
+      name: 行业范围检查
+      order: 1
+      check: [industry_id在已定义的行业列表中, 知识条目不超出项目范围]
+      outcome_if_fail: fail_with_rejection
+      auto_check: true
+
+    - gate: gate_02
+      name: 实体类型验证
+      order: 2
+      check: [subject_entity_type在已定义的实体类型列表中, subject_entity具有有效的entity_id]
+      outcome_if_fail: fail_with_rejection
+      auto_check: true
+
+    - gate: gate_03
+      name: 关系有效性验证
+      order: 3
+      check: [predicate在已定义的关系类型列表中, 关系组合符合约束, 关系方向正确]
+      outcome_if_fail: fail_with_rejection
+      auto_check: true
+
+    - gate: gate_04
+      name: 可追溯来源检查
+      order: 4
+      check: [source处于active状态, source_class在allowed列表中, quality_score>=3.0, 不在域名黑名单中]
+      outcome_if_fail: fail_with_retry
+      auto_check: true
+
+    - gate: gate_05
+      name: 原始证据检查
+      order: 5
+      check: [有evidence_package关联, access_status为crawled或ok, content_hash与原始内容匹配]
+      outcome_if_fail: fail_with_retry
+      auto_check: false
+
+    - gate: gate_06
+      name: 证据内容匹配
+      order: 6
+      check: [证据文本与陈述语义匹配度>=0.80, 证据不是仅主题相似, 证据类型不是topic_level_match]
+      outcome_if_fail: fail_with_rejection
+      auto_check: false
+
+    - gate: gate_07
+      name: 事实/主张分类
+      order: 7
+      check: [information_class字段已设置, 分类符合claim_policy分类决策流程, claim已标注sub_type]
+      outcome_if_fail: fail_with_retry
+      auto_check: false
+
+    - gate: gate_08
+      name: 冲突检查
+      order: 8
+      check: [不与已有active知识存在contradicts关系, 冲突状态已标记为resolved_*, 结果支持当前条目]
+      outcome_if_fail: escalate_to_review
+      auto_check: false
+
+    - gate: gate_09
+      name: 时间与区域范围定义
+      order: 9
+      check: [valid_from已设置, valid_to已设置或为null, applicable_region已设置, 统计数据已标注]
+      outcome_if_fail: fail_with_retry
+      auto_check: false
+
+    - gate: gate_10
+      name: 去重检查
+      order: 10
+      check: [无精确匹配, 近似重复检查语义相似度<0.85, 相似度>=0.85标记为potential_duplicate等待人工审核]
+      outcome_if_fail: escalate_to_review
+      auto_check: false
+
+# ============================================================
+# 关卡处理结果
+# ============================================================
+
+gate_outcomes:
+  description: 每个关卡可能返回的4种处理结果
+
+  outcomes:
+    - outcome: pass
+      name: 通过
+      description: 检查通过，进入下一关卡
+      action: 继续晋升流程
+
+    - outcome: fail_with_rejection
+      name: 拒绝
+      description: 检查失败，知识条目被永久拒绝晋升
+      action: [知识条目状态设置为rejected, 记录失败关卡的拒绝原因, 通知提交者拒绝结果]
+      appeal: 30天内可申请重新审核
+
+    - outcome: fail_with_retry
+      name: 重试
+      description: 检查失败，允许在修正后重新提交
+      action: [知识条目状态保持为candidate, 记录失败原因和修正建议, 设置retry_deadline默认7天, 超期未修正则自动转为rejected]
+      max_retries: 3
+
+    - outcome: escalate_to_review
+      name: 升级审核
+      description: 检查无法自动判断，需要人工审核
+      action: [知识条目加入人工审核队列, 发送审核通知, 审核结果决定晋升或拒绝]
+      review_sla_hours: 72
+
+# ============================================================
+# 验证级别
+# ============================================================
+
+verification_levels:
+  description: 知识条目晋升过程中的验证级别
+
+  levels:
+    - {level: auto_verified, name: 自动验证, applicable_gates: [1, 2, 3, 4], verification_method: 规则引擎自动检查, evidence_required: false, description: 由系统自动执行适用于关卡1-4}
+    - {level: peer_verified, name: 同行验证, applicable_gates: [5, 6, 7], verification_method: 第二位知识工程师独立审核, evidence_required: true, description: 由第二位知识工程师执行的交叉验证适用于关卡5-7}
+    - {level: human_reviewed, name: 人工审核, applicable_gates: [8, 9, 10], verification_method: 高级审核员全面审核, evidence_required: true, description: 由高级知识工程师或领域专家执行的审核适用于关卡8-10}
+    - {level: externally_audited, name: 外部审计, applicable_gates: [8], verification_method: 第三方独立审计, evidence_required: true, description: 由外部独立审计方执行的验证}
+
+# ============================================================
+# 晋升状态
+# ============================================================
+
+promotion_statuses:
+  description: 知识条目在晋升流程中的状态
+
+  statuses:
+    - {status: candidate, name: 候选, transitions: [verified, rejected], description: 新创建的知识条目尚未进入晋升流程}
+    - {status: verified, name: 已验证, transitions: [active], description: 已通过晋升关卡的验证可以晋升为active}
+    - {status: active, name: 活跃, transitions: [expired, disputed, superseded], description: 当前有效的稳定知识条目}
+    - {status: expired, name: 已过期, transitions: [active], description: 超过有效期的知识条目引用时标注"历史数据"}
+    - {status: disputed, name: 有争议, transitions: [active, superseded], description: 受到质疑的知识条目正在重新评估}
+    - {status: superseded, name: 已替代, transitions: [], description: 被更新的知识条目取代建立superseded_by关系指向新版本}
+
+# ============================================================
+# 关键晋升规则
+# ============================================================
+
+critical_promotion_rules:
+  description: 涉及高敏感或高风险知识条目时，必须升级到人工审核
+
+  rules:
+    - rule: market_size_requires_review
+      name: 市场规模数据需审核
+      description: 涉及市场规模、增长率、市场份额的数据必须经过人工审核
+      triggers: [predicate包含market_size/market_share/market_growth]
+      action: 强制升级到human_reviewed级别
+
+    - rule: regulatory_requires_review
+      name: 监管信息需审核
+      description: 涉及监管政策、合规要求、法律条文的知识必须经过人工审核
+      triggers: [predicate包含regulatory/compliance/legal, subject_entity_type为regulator或legal_entity]
+      action: 强制升级到human_reviewed级别
+
+    - rule: security_requires_review
+      name: 安全信息需审核
+      description: 涉及安全漏洞、数据泄露、隐私问题的知识必须经过人工审核
+      triggers: [predicate包含security_vulnerability/data_breach/privacy, topic包含security/cybersecurity]
+      action: 强制升级到human_reviewed级别
+
+    - rule: competitive_claims_require_review
+      name: 竞争性主张需审核
+      description: 涉及品牌间比较、竞争关系的主张必须经过人工审核
+      triggers: [predicate包含competitor/competes_with/better_than, claim sub_type为self_claim且涉及比较]
+      action: 强制升级到human_reviewed级别
+
+    - rule: conflicting_high_authority_requires_review
+      name: 高权威来源冲突需审核
+      description: 当两个高权威来源存在冲突时，必须经过人工审核
+      triggers: [冲突双方authority均>=4, 冲突类型为value_conflict且差异>20%]
+      action: 强制升级到human_reviewed级别
+
+# ============================================================
+# 证据充分性
+# ============================================================
+
+evidence_sufficiency:
+  description: 不同类型知识条目的最低来源数量和交叉验证要求
+
+  minimum_sources:
+    - {statement_type: fact, min_sources: 1, min_high_authority: 1, cross_validation: false, note: 至少1个高权威来源或2个中权威来源}
+    - {statement_type: claim, min_sources: 1, min_high_authority: 0, cross_validation: false, note: 必须标注来源来源可以是陈述主体自身}
+    - {statement_type: market_data, min_sources: 2, min_high_authority: 1, cross_validation: true, note: 至少2个独立来源其中1个为高权威}
+    - {statement_type: competitor_info, min_sources: 2, min_high_authority: 0, cross_validation: true, note: 至少2个独立来源}
+    - {statement_type: regulatory_info, min_sources: 1, min_high_authority: 1, cross_validation: false, note: 必须直接引用官方监管文件}
+    - {statement_type: product_feature, min_sources: 1, min_high_authority: 0, cross_validation: false, note: 官方产品文档或至少2个独立第三方评测}
+    - {statement_type: pricing_info, min_sources: 1, min_high_authority: 0, cross_validation: false, note: 官方定价页面或公开报价需标注有效期}
+
+  cross_validation_requirements:
+    requirements:
+      - 交叉验证来源必须来自不同的source_category
+      - 交叉验证来源之间无已知的利益关联
+      - 交叉验证来源的数值差异不超过20%
+      - 如果差异超过20%标记为value_conflict并升级审核
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义知识晋升策略
+      - 建立10个晋升关卡和4种关卡处理结果
+      - 定义4个验证级别和6个晋升状态
+      - 定义5条关键晋升规则和7种知识类型的证据充分性要求
+    author: Brand Atlas Team

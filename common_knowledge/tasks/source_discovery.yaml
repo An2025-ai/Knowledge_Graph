@@ -1,0 +1,178 @@
+# GEO 第一层通用知识层 — 任务模板：来源发现与验证
+# 版本: 1.1.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.1.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: shared
+
+task:
+  id: task_source_discovery
+  name: 来源发现与验证
+  name_en: Source Discovery and Verification
+  version: 1.1.0
+  purpose: >
+    发现并验证行业研究所需的新的权威信息来源。
+    维护来源白名单，验证来源身份，并对来源类型进行分类，
+    确保知识图谱中所有引用的来源均经过验证和授权。
+  description: >
+    来源发现与验证任务负责持续扩展和维护知识图谱所依赖的
+    权威信息来源库。任务根据行业范围和发现缺口维度，主动
+    搜索和识别新的潜在来源，对每个来源进行身份验证、域名
+    归属确认、类型分类和独立性评估。通过验证的来源被加入
+    白名单，并记录其允许的用途和限制条件。
+
+  required_context:
+    - industry_scope:
+        description: 行业范围和定义
+        source: 行业分类标准或 L2 稳定知识层
+        fields: [industry_id, canonical_name, category_ids, geo_scope]
+    - existing_source_registry:
+        description: 现有来源注册表（已验证的来源白名单）
+        source: 来源管理系统
+        fields: [source_id, canonical_name, source_type, verified_at, allowed_uses, limitations]
+    - discovery_gap_dimensions:
+        description: 来源发现缺口维度（指示需要补充哪些类型的来源）
+        source: 来源管理分析
+        fields: [dimension_id, source_type_gap, geo_gap, topic_gap, authority_level_gap, priority]
+
+  optional_context:
+    - seed_queries:
+        description: 种子搜索查询（用于定向搜索新来源）
+        source: 手动配置或搜索规划
+        fields: [query_id, query_text, target_source_type, expected_authority]
+    - known_organizations:
+        description: 已知的组织列表（行业协会、标准组织、研究机构）
+        source: 行业知识或手动配置
+        fields: [organization_id, canonical_name, organization_type, known_domains]
+
+  output_schema: discovered_sources
+  output_fields:
+    - source_profiles:
+        type: array
+        description: 发现的来源档案列表
+        item_fields:
+          - source_id: 来源 ID
+          - canonical_name: 来源规范名称
+          - source_type: 来源类型（government / industry_association / standards_body / research_institute / media / enterprise / academic）
+          - organization_name: 所属组织名称
+          - official_domain: 官方域名
+          - authority_level: 权威等级（primary / secondary / supplementary）
+          - geo_coverage: 地理覆盖范围
+          - topic_coverage: 主题覆盖范围
+          - description: 来源描述
+          - discovery_date: 发现日期
+          - discovery_reason: 发现原因（填补哪个缺口维度）
+    - verification_results:
+        type: array
+        description: 验证结果列表
+        item_fields:
+          - source_id: 来源 ID
+          - verification_status: 验证状态（verified / pending / rejected）
+          - identity_verified: 组织身份验证结果
+          - domain_verified: 官方域名验证结果
+          - methods: 验证方法
+          - verified_at: 验证时间
+          - verifier_notes: 验证备注
+    - classification:
+        type: array
+        description: 来源分类结果
+        item_fields:
+          - source_id: 来源 ID
+          - primary_type: 主分类
+          - secondary_types: 次分类
+          - content_focus: 内容侧重领域
+          - update_frequency: 更新频率
+          - suitable_for: 适用场景
+          - not_suitable_for: 不适用场景
+    - allowed_uses:
+        type: array
+        description: 各来源的允许用途
+        item_fields:
+          - source_id: 来源 ID
+          - use_type: 用途类型（fact_citation / claim_support / trend_analysis / competitive_intelligence / market_sizing）
+          - permission_level: 权限级别（unrestricted / conditional / restricted）
+          - conditions: 使用条件（如有）
+    - limitations:
+        type: array
+        description: 各来源的使用限制
+        item_fields:
+          - source_id: 来源 ID
+          - limitation_type: 限制类型（bias_risk / paywall / language / geo_restriction / frequency_cap / licensing）
+          - description: 限制描述
+          - mitigation: 缓解措施
+
+  rules:
+    - rule: must_verify_organization_identity
+      description: 必须验证来源所属组织的真实身份和合法性
+      severity: critical
+
+    - rule: must_check_official_domain
+      description: 必须确认来源使用的域名是组织官方域名
+      severity: critical
+
+    - rule: must_classify_source_type
+      description: 必须对每个来源进行分类（政府、行业协会、媒体、学术等）
+      severity: critical
+
+    - rule: must_record_discovery_reason
+      description: 必须记录每个来源的发现原因，关联到具体的缺口维度
+      severity: high
+
+    - rule: must_assess_independence
+      description: 必须评估来源的独立性（是否受商业利益影响）
+      severity: high
+
+    - rule: no_community_platforms
+      description: 不允许将社区平台（论坛、社交媒体、UGC 平台）作为知识来源
+      severity: critical
+
+    - rule: no_aggregators_as_primary
+      description: 不允许将内容聚合器（如新闻聚合站、目录站）作为主来源
+      severity: high
+
+  failure_mode: no_verifiable_sources_found
+  failure_handling:
+    condition: 在指定维度和时间范围内未发现任何可验证的新来源
+    action: 生成发现报告，记录搜索过程和未通过验证的候选来源，标记缺口维度为"暂时无法填补"
+    recovery: 扩大搜索范围、调整种子查询或等待新来源出现后重新执行
+
+  quality_checks:
+    - check: identity_verification
+      description: 确认每个来源的组织身份已验证
+      method: 检查 verification_results 中 identity_verified 为 true
+
+    - check: domain_verification
+      description: 确认每个来源的域名已验证为官方域名
+      method: 检查 verification_results 中 domain_verified 为 true
+
+    - check: source_type_accuracy
+      description: 确认来源分类正确
+      method: 与 source_types.yaml 中定义的类型比对，检查分类合理性
+
+    - check: gap_dimension_coverage
+      description: 确认发现的来源覆盖了指定的缺口维度
+      method: 将 discovery_reason 与 discovery_gap_dimensions 比对
+
+    - check: independence_assessment
+      description: 确认每个来源的独立性已评估
+      method: 检查 limitations 中是否包含 bias_risk 相关评估
+
+    - check: allowed_uses_clarity
+      description: 确认每个来源的允许用途明确
+      method: 检查 allowed_uses 中每个来源的 use_type 和 permission_level 非空
+
+  metric_refs: []
+  # 预留：source_discovery_rate, verification_pass_rate, source_gap_closure_rate, source_authority_score
+
+changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义来源发现与验证任务模板
+      - 支持来源身份验证、域名确认和类型分类
+      - 包含来源白名单管理和使用权限控制
+    author: Brand Atlas Team

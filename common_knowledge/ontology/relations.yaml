@@ -1,17 +1,17 @@
 # GEO 第一层通用知识层 — 关系定义
-# 版本: 1.0.0
+# 版本: 1.1.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.0.0
+  version: 1.1.0
   created_at: 2026-08-07
-  updated_at: 2026-08-07
+  updated_at: 2026-08-11
   status: active
   scope: shared
   description: >
     定义 GEO/Brand Atlas 系统中实体之间可以建立的全部关系类型。
-    关系控制在 20 种以内，每种关系定义主体类型、客体类型、基数、
-    方向性和约束条件。
+    v1.1.0 新增 7 种关系类型，总数增至 27 种。
+    扩展 has_capability 的客体类型以支持 capability 实体。
 
 # ============================================================
 # 关系类型定义
@@ -101,19 +101,23 @@ relation_types:
 
   # --- 6. has_capability: 具备能力 ---
   - relation: has_capability
-    description: 产品具备某项能力
+    description: 产品具备某项能力（v1.1.0 扩展客体类型）
     description_en: Product has a capability
     subject_types: [product]
-    object_types: [use_case]
+    object_types: [use_case, capability]
     cardinality: many-to-many
     bidirectional: false
     confidence_required: true
     source_refs_required: true
-    version: 1.0.0
+    version: 1.1.0
+    note: >
+      v1.1.0 将 object_types 从 [use_case] 扩展为 [use_case, capability]。
+      新数据应优先使用 capability 作为客体类型。use_case 作为客体类型的兼容
+      将在 L1 2.0.0 移除，届时 has_capability 仅接受 capability 类型。
     examples:
       - subject: Salesforce Sales Cloud
         relation: has_capability
-        object: AI 驱动的销售预测
+        object: AI 驱动的销售预测（capability 类型）
 
   # --- 7. competes_with: 竞争关系 ---
   - relation: competes_with
@@ -344,6 +348,125 @@ relation_types:
         relation: has_content_gap
         object: AI 在行业中的应用
 
+  # --- 21. has_problem: 用户角色面临的问题 ---
+  - relation: has_problem
+    description: 用户角色面临某个问题或痛点
+    description_en: Audience has a problem
+    subject_types: [audience]
+    object_types: [problem]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.1.0
+    examples:
+      - subject: 中小企业销售负责人
+        relation: has_problem
+        object: 销售线索分散
+
+  # --- 22. has_decision_factor: 决策因素关联 ---
+  - relation: has_decision_factor
+    description: 用户角色或品类关联到某个决策因素
+    description_en: Audience or category has a decision factor
+    subject_types: [audience, category]
+    object_types: [decision_factor]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.1.0
+    examples:
+      - subject: 中小企业销售负责人
+        relation: has_decision_factor
+        object: 实施周期
+      - subject: CRM
+        relation: has_decision_factor
+        object: 数据安全
+
+  # --- 23. capability_supports_use_case: 能力支撑使用场景 ---
+  - relation: capability_supports_use_case
+    description: 某项能力支撑某个使用场景
+    description_en: Capability supports a use case
+    subject_types: [capability]
+    object_types: [use_case]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: false
+    version: 1.1.0
+    note: >
+      区别于 supports_use_case（product → use_case），此关系表达 capability → use_case 的关联。
+    examples:
+      - subject: 销售预测
+        relation: capability_supports_use_case
+        object: 预测季度销售额
+
+  # --- 24. requires_capability: 使用场景需要某项能力 ---
+  - relation: requires_capability
+    description: 使用场景需要某项能力才能完成
+    description_en: Use case requires a capability
+    subject_types: [use_case]
+    object_types: [capability]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: false
+    version: 1.1.0
+    examples:
+      - subject: 预测季度销售额
+        relation: requires_capability
+        object: 销售预测
+
+  # --- 25. performs: 用户角色执行某项任务 ---
+  - relation: performs
+    description: 用户角色执行某项用户任务
+    description_en: Audience performs a job to be done
+    subject_types: [audience]
+    object_types: [job_to_be_done]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.1.0
+    examples:
+      - subject: 中小企业销售负责人
+        relation: performs
+        object: 统一管理销售线索
+
+  # --- 26. produces_outcome: 使用场景产生期望结果 ---
+  - relation: produces_outcome
+    description: 使用场景产生某个期望业务结果
+    description_en: Use case produces a desired outcome
+    subject_types: [use_case]
+    object_types: [outcome]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: true
+    version: 1.1.0
+    examples:
+      - subject: 多渠道销售线索统一管理
+        relation: produces_outcome
+        object: 缩短线索响应时间至 5 分钟以内
+
+  # --- 27. achieves_outcome: 用户任务达成期望结果 ---
+  - relation: achieves_outcome
+    description: 用户任务达成某个期望业务结果
+    description_en: Job to be done achieves a desired outcome
+    subject_types: [job_to_be_done]
+    object_types: [outcome]
+    cardinality: many-to-many
+    bidirectional: false
+    confidence_required: true
+    source_refs_required: false
+    version: 1.1.0
+    examples:
+      - subject: 统一管理销售线索
+        relation: achieves_outcome
+        object: 提升线索转化率 20%
+
+  # --- (original 20 ends above, new v1.1.0 additions: relations 21-27) ---
+
 # ============================================================
 # 关系记录格式
 # ============================================================
@@ -389,6 +512,14 @@ relation_record_format:
 # ============================================================
 
 changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 新增 7 种关系类型：has_problem、has_decision_factor、capability_supports_use_case、requires_capability、performs、produces_outcome、achieves_outcome
+      - 扩展 has_capability 的 object_types 从 [use_case] 改为 [use_case, capability]
+      - 关系类型总数从 20 增至 27
+      - 向后兼容，未删除或修改已有关系
+    author: Brand Atlas Team
   - version: 1.0.0
     date: 2026-08-07
     changes:

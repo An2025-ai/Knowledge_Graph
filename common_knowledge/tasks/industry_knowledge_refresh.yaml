@@ -1,0 +1,174 @@
+# GEO 第一层通用知识层 — 任务模板：行业知识刷新
+# 版本: 1.1.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.1.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: shared
+
+task:
+  id: task_industry_knowledge_refresh
+  name: 行业知识刷新
+  name_en: Industry Knowledge Refresh
+  version: 1.1.0
+  purpose: >
+    对已有行业知识进行定期增量更新。
+    检测变化、刷新过期事实、添加新实体，并标记已过时的知识，
+    确保 L2 知识层保持在最新状态。
+  description: >
+    行业知识刷新任务负责对已建立的行业知识基线进行周期性维护。
+    通过对比新旧研究报告，自动检测实体变更、事实更新和关系变化，
+    生成增量变更报告，并保留完整的历史版本记录。刷新过程不直接
+    覆盖已有知识，而是通过版本化方式记录变更，确保知识演化的
+    可追溯性和可审计性。
+
+  required_context:
+    - industry_id:
+        description: 目标行业标识
+        source: L2 稳定知识层
+        fields: [industry_id, canonical_name, category_ids]
+    - existing_knowledge_snapshot:
+        description: 当前 L2 稳定知识的快照（实体、关系、事实）
+        source: L2 稳定知识层
+        fields: [entity_id, relation_id, fact_id, claim_id, version, last_updated]
+    - refresh_requirement:
+        description: 刷新需求规格（刷新范围、深度、优先级）
+        source: 项目需求文档或调度系统
+        fields: [requirement_id, refresh_scope, entity_types_to_refresh, priority_topics, scheduled_at]
+    - new_research_report:
+        description: 最新行业研究报告
+        source: 地理研究模块
+        fields: [report_id, title, source, publication_date, body, methodology, citations]
+
+  optional_context:
+    - change_detection_results:
+        description: 预执行的变更检测结果（如有）
+        source: 变更检测服务
+        fields: [change_id, entity_id, change_type, detected_at, confidence]
+    - conflict_reports:
+        description: 已知的冲突报告（上一轮刷新遗留或手动提交）
+        source: 冲突管理系统
+        fields: [conflict_id, entity_id, conflict_description, reported_at, resolution_status]
+
+  output_schema: refresh_report
+  output_fields:
+    - added_entities:
+        type: array
+        description: 新增的实体列表
+        item_fields:
+          - entity_id: 实体 ID
+          - canonical_name: 实体规范名称
+          - entity_type: 实体类型
+          - source_report: 来源报告
+          - confidence: 置信度
+    - updated_facts:
+        type: array
+        description: 更新的事实列表
+        item_fields:
+          - fact_id: 事实 ID
+          - previous_version: 前一版本号
+          - new_version: 新版本号
+          - change_type: 变更类型（updated / refined / corrected）
+          - previous_value: 旧值
+          - new_value: 新值
+          - source_report: 来源报告
+          - change_reason: 变更原因
+    - deprecated_items:
+        type: array
+        description: 标记为过时的知识条目
+        item_fields:
+          - item_id: 条目 ID
+          - item_type: 条目类型（entity / relation / fact / claim）
+          - deprecation_reason: 过时原因
+          - deprecated_at: 过时时间
+          - superseded_by: 替代条目 ID（如有）
+    - conflicts_detected:
+        type: array
+        description: 检测到的冲突列表
+        item_fields:
+          - conflict_id: 冲突 ID
+          - entity_or_fact_id: 冲突涉及的实体或事实
+          - conflict_type: 冲突类型（value_conflict / existence_conflict / relation_conflict）
+          - description: 冲突描述
+          - sources: 冲突来源
+          - recommended_resolution: 建议解决方案
+          - severity: 严重程度
+    - coverage_delta:
+        type: object
+        description: 覆盖度变化
+        fields:
+          - previous_coverage_score: 刷新前覆盖度评分
+          - new_coverage_score: 刷新后覆盖度评分
+          - delta: 覆盖度变化
+          - topic_coverage_changes: 各主题覆盖度变化明细
+
+  rules:
+    - rule: must_preserve_history
+      description: 所有变更必须保留历史版本，不可直接删除旧数据
+      severity: critical
+
+    - rule: must_version_entities
+      description: 实体变更必须生成新版本号，而非原地修改
+      severity: critical
+
+    - rule: must_detect_staleness
+      description: 必须检测并标记所有过期事实（基于时间戳和来源时效性）
+      severity: critical
+
+    - rule: must_flag_conflicts
+      description: 新旧知识之间的任何不一致必须标记为冲突，不可静默覆盖
+      severity: critical
+
+    - rule: must_update_coverage
+      description: 每次刷新后必须重新计算并报告覆盖度变化
+      severity: high
+
+    - rule: never_overwrite_in_place
+      description: 严禁直接覆盖已有知识条目，所有变更必须通过版本化操作
+      severity: critical
+
+  failure_mode: insufficient_delta_data
+  failure_handling:
+    condition: 新旧研究报告之间的差异不足以支持有意义的刷新（数据量过少或无实质变更）
+    action: 生成轻量刷新报告，标记为"无实质变更"，记录检测到的微小差异，保持当前知识版本
+    recovery: 等待新的研究报告或手动触发刷新请求
+
+  quality_checks:
+    - check: version_continuity
+      description: 确认版本号连续且无跳跃
+      method: 检查每个更新条目的 previous_version 与 new_version 的连续性
+
+    - check: staleness_detection
+      description: 确认所有过期事实已被检测
+      method: 检查所有事实的 last_updated 与当前日期的差值，标记超过阈值的事实
+
+    - check: conflict_resolution_tracking
+      description: 确认所有冲突已被记录且分配了解决方案
+      method: 检查 conflicts_detected 中每个冲突的 recommended_resolution 非空
+
+    - check: coverage_recalculation
+      description: 确认覆盖度评分已基于新数据重新计算
+      method: 对比 previous_coverage_score 和 new_coverage_score 的差异合理性
+
+    - check: deprecation_validity
+      description: 确认被标记为过时的条目有明确的过时原因
+      method: 检查 deprecated_items 中每个条目的 deprecation_reason 非空
+
+    - check: audit_trail
+      description: 确认所有变更操作有完整的审计日志
+      method: 检查每个变更条目包含 change_type、change_reason 和 source_report
+
+  metric_refs: []
+  # 预留：refresh_frequency, staleness_ratio, conflict_rate, coverage_trend
+
+changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义行业知识刷新任务模板
+      - 支持增量更新、版本化管理和历史保留
+      - 包含过期检测、冲突标记和覆盖度追踪
+    author: Brand Atlas Team

@@ -1,5 +1,5 @@
 # Brand Atlas Knowledge Graph — YAML → PostgreSQL 发布脚本
-# 版本: 1.0.0
+# 版本: 1.1.0
 # 用途: 将 common_knowledge/ 中的 YAML 文件同步到 PostgreSQL 数据库
 # 依赖: pip install pyyaml psycopg2-binary
 # 用法: python publish.py [--dry-run] [--file <path>]
@@ -116,6 +116,43 @@ FILE_TABLE_MAP = {
         "extra_fields": {},
     },
     "tasks/content_brief.yaml": {
+        "table": "task_template",
+        "key_field": "task_code",
+        "key_path": "id",
+        "data_path": None,
+        "is_single": True,
+        "record_key": "task",
+        "extra_fields": {},
+    },
+    # v1.1.0 新增任务
+    "tasks/industry_knowledge_build.yaml": {
+        "table": "task_template",
+        "key_field": "task_code",
+        "key_path": "id",
+        "data_path": None,
+        "is_single": True,
+        "record_key": "task",
+        "extra_fields": {},
+    },
+    "tasks/industry_knowledge_refresh.yaml": {
+        "table": "task_template",
+        "key_field": "task_code",
+        "key_path": "id",
+        "data_path": None,
+        "is_single": True,
+        "record_key": "task",
+        "extra_fields": {},
+    },
+    "tasks/source_discovery.yaml": {
+        "table": "task_template",
+        "key_field": "task_code",
+        "key_path": "id",
+        "data_path": None,
+        "is_single": True,
+        "record_key": "task",
+        "extra_fields": {},
+    },
+    "tasks/knowledge_promotion.yaml": {
         "table": "task_template",
         "key_field": "task_code",
         "key_path": "id",

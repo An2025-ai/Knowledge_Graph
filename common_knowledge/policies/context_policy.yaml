@@ -1,16 +1,17 @@
 # GEO 第一层通用知识层 — 上下文检索策略
-# 版本: 1.0.0
+# 版本: 1.1.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.0.0
+  version: 1.1.0
   created_at: 2026-08-07
-  updated_at: 2026-08-07
+  updated_at: 2026-08-11
   status: active
   scope: shared
   description: >
     定义信息检索、过滤、排序和输出的上下文策略。
-    确保系统在正确的时间、以正确的优先级、向正确的任务提供正确的信息。
+    v1.1.0 新增 industry_id、snapshot_id、requirement_id、market、
+    valid_at 和 verification_status 过滤维度，以支持 L2 行业知识层。
 
 # ============================================================
 # 过滤规则
@@ -84,6 +85,40 @@ filtering_rules:
       1. 公开信息（scope: shared）对所有任务可用
       2. 品牌特有信息（scope: brand_specific）仅该品牌相关任务可用
       3. 受限信息需要额外权限验证
+
+  - rule: industry_filtering
+    name: 行业维度过滤（L2扩展）
+    priority: 6
+    description: >
+      按行业标识、市场区域、快照版本和研究需求过滤信息。
+      v1.1.0 新增，用于支持 L2 行业知识层的数据隔离。
+    filter_dimensions:
+      - industry_id: 行业标识
+      - snapshot_id: 知识快照版本
+      - requirement_id: 研究需求标识
+      - market: 市场区域（如 CN、US、EU）
+      - language: 内容语言
+    logic: >
+      1. 按 industry_id 过滤行业范围内的知识
+      2. 按 market 过滤地域相关的市场数据
+      3. 按 snapshot_id 定位特定版本的知识快照
+      4. 按 requirement_id 追溯知识的研究来源
+
+  - rule: validity_filtering
+    name: 时效性与验证状态过滤
+    priority: 7
+    description: >
+      按知识的有效时间和验证状态过滤。
+      v1.1.0 新增，确保只使用当前有效且经验证的知识。
+    filter_dimensions:
+      - valid_at: 指定的时间点（默认当前时间）
+      - verification_status: verified / unverified / disputed / expired
+      - status: active / inactive / deprecated
+    logic: >
+      1. valid_from <= valid_at AND (valid_to IS NULL OR valid_to >= valid_at)
+      2. 优先使用 verification_status: verified 的知识
+      3. 排除 status: deprecated 的知识
+      4. 对 verification_status: disputed 的知识显式标记冲突
 
 # ============================================================
 # 检索规则
@@ -246,6 +281,14 @@ conflict_marking_rules:
 # ============================================================
 
 changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 新增 industry_filtering 规则（industry_id, snapshot_id, requirement_id, market, language）
+      - 新增 validity_filtering 规则（valid_at, verification_status, status）
+      - 过滤规则总数从 5 增至 7
+      - 向后兼容，未修改已有规则
+    author: Brand Atlas Team
   - version: 1.0.0
     date: 2026-08-07
     changes:

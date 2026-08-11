@@ -1,0 +1,164 @@
+# Brand Atlas Knowledge Graph — L2 数据时效性策略
+# 版本: 1.0.0
+# 范围: L2 行业知识层
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: industry
+  description: >
+    定义 L2 行业知识层中各类数据的更新频率、过期判定和时效性规则。
+    遵循 L1 claim_policy 的过期数据规则，并扩展为行业特定的时效策略。
+
+# ============================================================
+# 更新频率
+# ============================================================
+
+update_frequencies:
+  - data_type: policy_and_regulation
+    frequency: daily_monitor
+    trigger: event_driven
+    description: 政策和监管变化，每日监测，事件触发重抓
+
+  - data_type: competitor_product_pages
+    frequency: daily
+    trigger: change_detection
+    description: 竞品产品页和定价，每日变化检测，变化后解析
+
+  - data_type: industry_news
+    frequency: daily
+    trigger: scheduled
+    description: 行业新闻，每日采集，默认进入 observation
+
+  - data_type: industry_reports
+    frequency: weekly
+    trigger: discovery
+    description: 行业报告，每周发现新报告，发布时抓取
+
+  - data_type: topic_tree
+    frequency: monthly
+    trigger: review
+    description: 行业主题树，每月评审，不随单次热点重建
+
+  - data_type: stable_definitions
+    frequency: quarterly
+    trigger: review
+    description: 稳定定义和能力字典，每季度复核
+
+  - data_type: facts_and_statistics
+    frequency: quarterly
+    trigger: valid_to_check
+    description: 事实和统计，按 valid_to 或季度复核
+
+# ============================================================
+# 过期判定规则
+# ============================================================
+
+expiration_rules:
+  - rule: market_size_expiry
+    applies_to: statistic
+    semantic_subtypes: [market_size, market_share]
+    max_age_months: 12
+    description: 市场规模和份额数据超过 12 个月视为过期
+    action: mark_inactive_and_trigger_refresh
+
+  - rule: product_feature_expiry
+    applies_to: fact
+    subject_entity_types: [product]
+    max_age_months: 6
+    description: 产品功能描述超过 6 个月需要复核
+    action: flag_for_review
+
+  - rule: trend_expiry
+    applies_to: claim
+    semantic_subtypes: [trend, forecast]
+    max_age_months: 6
+    description: 趋势和预测超过 6 个月需要重新评估
+    action: flag_for_review_and_mark_forecast_date
+
+  - rule: statistical_expiry
+    applies_to: fact
+    semantic_subtypes: [statistic]
+    max_age_months: 24
+    description: 一般统计数据超过 24 个月视为过期
+    action: mark_inactive
+
+  - rule: regulatory_expiry
+    applies_to: fact
+    semantic_subtypes: [regulation, policy]
+    max_age_months: 36
+    description: 法规和政策超过 36 个月需要复核
+    action: flag_for_review
+
+  - rule: definitional_expiry
+    applies_to: fact
+    semantic_subtypes: [definition]
+    max_age_months: 60
+    description: 定义性知识超过 60 个月需要复核
+    action: flag_for_review
+
+  - rule: historical_data
+    applies_to: fact
+    semantic_subtypes: [historical]
+    max_age_months: null
+    description: 历史数据永不过期，但标记为历史数据
+    action: mark_as_historical
+
+# ============================================================
+# 时效性检查
+# ============================================================
+
+staleness_detection:
+  - check: valid_to_exceeded
+    description: valid_to 已过期的记录
+    action: status → inactive, 记录过期时间
+
+  - check: updated_at_stale
+    description: updated_at 超过 max_age_months 的记录
+    action: flag_for_review
+
+  - check: source_stale
+    description: 所有 source_refs 的 published_at 均超过时效阈值
+    action: 降低 confidence 至 0.5 以下
+
+  - check: conflicting_freshness
+    description: 同一事实的多个来源时间差异过大（> 2 年）
+    action: 标记为时间冲突，保留双方
+
+# ============================================================
+# 更新策略
+# ============================================================
+
+update_strategy:
+  mode: append_and_version
+  description: 更新采用追加和版本化，不原地删除历史数据
+
+  actions:
+    - type: new_version
+      description: 创建新版本记录，旧版本保留并标记 superseded
+    - type: mark_inactive
+      description: 失效记录 status 改为 inactive，不删除
+    - type: mark_expired
+      description: 过期记录 status 改为 expired，保留 valid_from/valid_to
+    - type: flag_for_review
+      description: 不确定是否过期的记录进入审核队列
+
+  never:
+    - delete_history
+    - overwrite_in_place
+    - silent_update
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义 7 类数据更新频率
+      - 建立 7 条过期判定规则
+      - 定义时效性检测和更新策略
+    author: Brand Atlas Team

@@ -1,0 +1,188 @@
+# GEO 第一层通用知识层 — 任务模板：知识晋升
+# 版本: 1.1.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.1.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: shared
+
+task:
+  id: task_knowledge_promotion
+  name: 知识晋升
+  name_en: Knowledge Promotion
+  version: 1.1.0
+  purpose: >
+    将通过质量关卡验证的候选知识（从报告提取中产生）
+    晋升为 L2 稳定知识。实现从候选到已验证再到活跃状态的
+    完整晋升管道。
+  description: >
+    知识晋升任务负责管理从 L1 候选知识到 L2 稳定知识的
+    晋升流程。候选知识在通过证据验证、实体消歧和质量关卡后，
+    由晋升任务统一处理，包括重复检测、冲突检查、语句分类和
+    审核队列管理。只有通过所有质量关卡的候选知识才能被晋升
+    为活跃状态，未通过的候选知识被拒绝并记录拒绝原因。
+
+  required_context:
+    - extraction_candidates:
+        description: 从行业报告中提取的候选知识
+        source: 行业知识构建任务输出
+        fields: [candidate_id, entity_type, canonical_name, properties, source_refs, confidence]
+    - evidence_resolution_results:
+        description: 证据解析结果（每个候选知识的证据支持评估）
+        source: 证据验证模块
+        fields: [candidate_id, evidence_support_score, evidence_chain, evidence_quality, resolved_sources]
+    - entity_resolution_results:
+        description: 实体消歧结果（候选实体与已有实体的匹配关系）
+        source: 实体消歧模块
+        fields: [candidate_id, matched_entity_id, match_confidence, resolution_type, resolved_properties]
+
+  optional_context:
+    - existing_stable_knowledge:
+        description: 已有的 L2 稳定知识快照
+        source: L2 稳定知识层
+        fields: [entity_id, relation_id, fact_id, version, status]
+    - review_queue_results:
+        description: 人工审核队列的处理结果
+        source: 审核管理系统
+        fields: [review_id, candidate_id, reviewer_decision, review_notes, reviewed_at]
+
+  output_schema: promotion_report
+  output_fields:
+    - promoted_entities:
+        type: array
+        description: 晋升为 L2 的实体列表
+        item_fields:
+          - entity_id: 实体 ID（新分配或复用已有）
+          - canonical_name: 实体规范名称
+          - entity_type: 实体类型
+          - promotion_status: 晋升状态（new / merged / updated）
+          - previous_status: 之前状态（candidate）
+          - promoted_at: 晋升时间
+          - gates_passed: 通过的质量关卡列表
+          - knowledge_version: 知识版本号
+    - promoted_relations:
+        type: array
+        description: 晋升为 L2 的关系列表
+        item_fields:
+          - relation_id: 关系 ID
+          - relation_type: 关系类型
+          - subject_id: 主体实体
+          - object_id: 客体实体
+          - promotion_status: 晋升状态
+          - promoted_at: 晋升时间
+          - gates_passed: 通过的质量关卡列表
+    - promoted_statements:
+        type: array
+        description: 晋升为 L2 的陈述列表（事实和主张）
+        item_fields:
+          - statement_id: 陈述 ID
+          - statement_type: 陈述类型（fact / claim）
+          - content: 陈述内容
+          - promotion_status: 晋升状态
+          - evidence_support: 证据支持度评分
+          - promoted_at: 晋升时间
+          - gates_passed: 通过的质量关卡列表
+    - rejected_candidates:
+        type: array
+        description: 被拒绝的候选知识
+        item_fields:
+          - candidate_id: 候选 ID
+          - rejection_reason: 拒绝原因
+          - failed_gate: 失败的质量关卡
+          - rejection_detail: 详细拒绝说明
+          - rejected_at: 拒绝时间
+          - resubmission_eligible: 是否可重新提交
+    - review_queue_items:
+        type: array
+        description: 需要人工审核的条目
+        item_fields:
+          - review_id: 审核 ID
+          - candidate_id: 候选 ID
+          - review_type: 审核类型（claim_verification / conflict_resolution / entity_disambiguation）
+          - priority: 审核优先级
+          - reason: 需要审核的原因
+          - status: 审核状态（pending / in_review / resolved）
+          - assigned_to: 指派人
+
+  rules:
+    - rule: must_pass_all_gates
+      description: 候选知识必须通过所有质量关卡才能晋升，任一关卡失败即拒绝
+      severity: critical
+
+    - rule: must_verify_evidence_support
+      description: 必须验证候选知识有足够的证据支持，证据不足者拒绝晋升
+      severity: critical
+
+    - rule: must_resolve_entities
+      description: 必须完成实体消歧，确认候选实体与已有实体的关系（新实体/合并/重复）
+      severity: critical
+
+    - rule: must_classify_statement
+      description: 必须对每条陈述进行分类（fact / claim），并据此决定晋升策略
+      severity: critical
+
+    - rule: must_detect_duplicates
+      description: 必须检测候选知识与已有知识之间的重复，避免重复写入
+      severity: high
+
+    - rule: must_check_conflicts
+      description: 必须检测候选知识与已有知识之间的冲突，冲突未解决前拒绝晋升
+      severity: high
+
+    - rule: no_evidence_no_promotion
+      description: 无证据支持的候选知识一律不得晋升
+      severity: critical
+
+    - rule: critical_claims_require_review
+      description: 涉及重大事实或敏感领域的主张必须经过人工审核
+      severity: high
+
+  failure_mode: gate_check_failed
+  failure_handling:
+    condition: 候选知识未能通过所有质量关卡
+    action: 生成详细的关卡失败报告，列出每个失败候选的失败原因和失败关卡，将部分候选推入审核队列或标记为不可晋升
+    recovery: 根据失败原因采取对应措施（补充证据、重新消歧、人工审核）后重新提交晋升
+
+  quality_checks:
+    - check: gate_execution_order
+      description: 确认质量关卡按正确顺序执行
+      method: 验证 gates_passed 列表的顺序符合定义的质量关卡顺序
+
+    - check: evidence_support_threshold
+      description: 确认晋升的候选知识证据支持度超过阈值
+      method: 检查 promoted_statements 中每条陈述的 evidence_support 不低于阈值
+
+    - check: entity_resolution_completeness
+      description: 确认所有候选实体已完成消歧
+      method: 检查每个 promoted_entities 的 entity_resolution_results 已完成
+
+    - check: duplicate_prevention
+      description: 确认没有重复写入已有知识
+      method: 对比 promoted_entities 与 existing_stable_knowledge 的实体匹配
+
+    - check: conflict_resolution
+      description: 确认晋升的候选知识无未解决的冲突
+      method: 检查 conflicts_detected 中所有冲突的 resolution 状态为 resolved
+
+    - check: rejected_candidate_traceability
+      description: 确认每个被拒绝的候选有明确的拒绝原因
+      method: 检查 rejected_candidates 中每个记录的 rejection_reason 和 failed_gate 非空
+
+    - check: review_queue_completeness
+      description: 确认需要审核的条目已正确加入审核队列
+      method: 检查 critical_claims 对应的 review_queue_items 存在且 priority 正确
+
+  metric_refs: []
+  # 预留：promotion_pass_rate, gate_failure_distribution, review_queue_backlog, knowledge_growth_rate
+
+changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义知识晋升任务模板
+      - 实现候选 → 验证 → 活跃的完整晋升管道
+      - 包含多质量关卡、审核队列和拒绝追溯
+    author: Brand Atlas Team

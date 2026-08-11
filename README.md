@@ -1,13 +1,18 @@
-# Brand Atlas Knowledge Graph — 第一层通用知识层
+# Brand Atlas Knowledge Graph
 
-> **版本**: 1.0.0  
+> **版本**: 1.1.0  
 > **状态**: Active  
 > **创建日期**: 2026-08-07  
+> **更新日期**: 2026-08-11  
 
 ## 概述
 
-本目录包含 Brand Atlas 知识图谱的**第一层通用知识层（L1 Common Knowledge Layer）**，
-是跨品牌、跨行业复用的"方法与规范层"。它定义了系统使用的共同语言和操作方式。
+Brand Atlas 知识图谱是一个多层知识工程系统，用于支持 GEO（生成式引擎优化）、
+品牌市场认知分析、提问词生成、主题规划和内容优化。
+
+当前实现了两层：
+- **L1 通用知识层**（v1.1.0）：跨品牌、跨行业复用的方法与规范层
+- **L2 行业知识层**（v1.0.0）：行业市场坐标系，定义数据域、Pipeline、Schema 和策略
 
 第一层不是行业百科，也不是客户品牌知识库，而是：
 - 统一知识对象定义
@@ -21,50 +26,64 @@
 | 层级 | 内容 | 位置 |
 |------|------|------|
 | **L1 通用知识层** | 本体、意图、任务模板、来源规则、质量规则、示例 | 本目录 |
-| L2 行业/品类层 | 行业实体、市场主题、行业趋势、竞品公共信息 | 仅定义接入规范 |
+| L2 行业/品类层 | 行业实体、市场主题、行业趋势、竞品公共信息 | industry_knowledge/ |
 | L3 品牌认知层 | 品牌产品、能力、定位、案例、内部文档 | 仅定义引用接口 |
 | L4 动态观测层 | 搜索回答、提及、引用、竞品变化、时序观测 | 仅定义观测对象 |
 
 ## 目录结构
 
 ```
-common_knowledge/
-├── ontology/                    # 本体定义
-│   ├── entities.yaml           # 15 种实体类型定义
-│   └── relations.yaml          # 20 种关系类型定义
-├── intents/                    # 意图定义
-│   ├── intent_types.yaml       # 13 种意图 + 7 个决策阶段
-│   └── prompt_patterns.yaml    # 提问词模式库
-├── sources/                    # 来源规范
-│   ├── source_types.yaml       # 8 种来源类型
-│   └── authority_rules.yaml    # 20 条权威与质量规则
-├── tasks/                      # 任务模板
-│   ├── brand_onboarding.yaml   # 品牌导入
-│   ├── prompt_generation.yaml  # 提问词生成
-│   ├── topic_planning.yaml     # 主题规划
-│   ├── search_diagnosis.yaml   # 搜索诊断
-│   └── content_brief.yaml      # 内容 Brief
-├── policies/                   # 策略规则
-│   ├── claim_policy.yaml       # 事实与主张策略
-│   ├── conflict_policy.yaml    # 冲突处理策略
-│   └── context_policy.yaml     # 上下文检索策略
-└── examples/                   # 示例
-    ├── positive_examples.yaml  # 正确示例
-    └── negative_examples.yaml  # 错误示例
+Knowledge_Graph/
+├── README.md
+├── common_knowledge/              # L1 通用知识层
+│   ├── ontology/                  # 19 实体 + 27 关系
+│   ├── intents/                   # 13 意图 + 39 提问词模式
+│   ├── sources/                   # 13 来源类型 + 20 质量规则
+│   ├── tasks/                     # 9 任务模板 (+4 v1.1.0)
+│   ├── policies/                  # 6 策略文件 (+3 v1.1.0)
+│   └── examples/                  # 50 组正反例
+├── industry_knowledge/            # L2 行业知识层
+│   ├── README.md                  # L2 技术文档 (1916 行)
+│   ├── scopes/                    # 行业范围定义
+│   ├── requirements/              # 研究需求文件
+│   ├── schemas/                   # 8 个 JSON Schema
+│   ├── taxonomies/                # 能力/决策因素/主题模板
+│   ├── pipelines/                 # 6 个数据处理流水线
+│   ├── policies/                  # 3 个 L2 策略
+│   └── examples/crm/              # CRM 试点示例
+└── database/                      # 数据库层
+    ├── schema.sql                 # PostgreSQL 9 表
+    ├── publish.py                 # YAML → DB 发布
+    └── README.md
 ```
 
 ## MVP 范围
 
-| 维度 | 目标 | 实际 |
-|------|------|------|
-| 实体类型 | ≤15 | 15 |
-| 关系类型 | ≤20 | 20 |
-| 意图类型 | 10~13 | 13 |
-| 决策阶段 | 7 | 7 |
-| 来源类型 | 8~10 | 8 |
-| 任务模板 | 5 | 5 |
-| 质量规则 | ≤20 | 20 |
-| 正反例 | 每任务 ≥5 组 | 每任务 5 组 |
+### L1 通用知识层 v1.1.0
+
+| 维度 | v1.0.0 | v1.1.0 | 变化 |
+|------|--------|--------|------|
+| 实体类型 | 15 | 19 | +4 (capability, decision_factor, JTBD, outcome) |
+| 关系类型 | 20 | 27 | +7 (has_problem, has_decision_factor, capability_supports_use_case 等) |
+| 意图类型 | 13 | 13 | 不变 |
+| 决策阶段 | 7 | 7 | 不变 |
+| 来源类型 | 8 | 13 | +5 (standards_body, industry_association, brokerage_research 等) |
+| 任务模板 | 5 | 9 | +4 (industry_knowledge_build, refresh, source_discovery, knowledge_promotion) |
+| 策略文件 | 3 | 6 | +3 (source_discovery, knowledge_promotion, report_evidence) |
+| 质量规则 | 20 | 20 | 不变 |
+| 正反例 | 50 | 50 | 不变 |
+
+### L2 行业知识层 v1.0.0
+
+| 维度 | 数量 |
+|------|------|
+| JSON Schema | 8 |
+| 数据域 | 9 |
+| Pipeline 定义 | 6 |
+| L2 策略文件 | 3 |
+| 分类模板 | 3 (capabilities, decision_factors, topics) |
+| L2 技能定义 | 14 |
+| L2 工具定义 | ~50 |
 
 ## 版本规范
 

@@ -1,0 +1,252 @@
+# GEO 第一层通用知识层 — 报告证据链策略
+# 版本: 1.1.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.1.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: shared
+  description: >
+    定义报告证据链的完整模型、引用解析规则、证据充分性标准和
+    报告验证规则。确保每条知识陈述都能追溯到原始证据。
+
+# ============================================================
+# 证据链模型
+# ============================================================
+
+evidence_chain_model:
+  description: 从原始网页到最终知识陈述的完整证据追溯链
+
+  chain:
+    - {step: original_page, name: 原始网页, order: 1, description: 信息最初出现的网页或文档, attributes: [url, captured_at, http_status, content_hash, content_type], preservation: 原始文件归档保存记录SHA-256哈希值}
+    - {step: browser_record, name: 浏览器记录, order: 2, description: 浏览器渲染后的页面快照和抓取记录, attributes: [snapshot_path, render_status, access_method], preservation: 渲染截图和DOM快照保存}
+    - {step: evidence_package, name: 证据包, order: 3, description: 从原始页面中提取的组装为证据包的文本片段, attributes: [package_id, extracted_text, text_location, extraction_method, extraction_date, extracted_by], preservation: 提取的文本片段和位置信息保存}
+    - {step: report_citation, name: 报告引用, order: 4, description: 在报告中使用[S#]格式的引用标记, attributes: [citation_id, package_id, citation_context, citation_type], preservation: 引用ID和证据包ID的映射关系保存}
+    - {step: extracted_statement, name: 提取陈述, order: 5, description: 从证据中提取的最终知识陈述, attributes: [statement_id, statement_text, evidence_refs, information_class], preservation: 陈述文本和证据关系的完整记录}
+
+# ============================================================
+# 引用解析规则
+# ============================================================
+
+citation_resolution_rules:
+  description: 报告中的[S#]引用标记必须能够解析到完整的证据链
+
+  rules:
+    - rule: citation_mapping
+      name: 引用映射
+      description: 每个[S#]引用必须映射到一个证据包
+      requirement: mandatory
+      validation:
+        - 报告中每个[S#]必须存在于citations列表中
+        - 每个citation必须有对应的evidence_package_id
+        - evidence_package_id必须指向有效的证据包
+      failure_action: 报告标记为invalid拒绝发布
+
+    - rule: evidence_accessibility
+      name: 证据可访问性
+      description: 引用的证据必须处于可访问状态
+      requirement: mandatory
+      validation:
+        - evidence的access_status必须为crawled或ok
+        - 如果access_status为blocked引用不可用
+        - 如果access_status为pending引用需等待验证
+      failure_action: 引用标记为unverified报告整体降低置信度
+
+    - rule: evidence_content_match
+      name: 证据内容匹配
+      description: 证据文本必须直接支持陈述，而非仅主题相似
+      requirement: mandatory
+      validation:
+        - 证据文本与陈述语义匹配度>=0.80
+        - 证据文本中的关键信息点与陈述一致
+        - 证据不能是topic_level_match（仅主题相似）
+        - 证据文本中的数值日期名称与陈述一致
+      failure_action: 报告标记为需要修正引用标记为mismatch
+
+    - rule: citation_source_whitelist
+      name: 引用来源白名单
+      description: 引用的证据来源必须在来源白名单中
+      requirement: mandatory
+      validation:
+        - 证据包关联的source的source_class在allowed列表中
+        - source的quality_score综合评分>=3.0
+        - source的域名不在domain_blacklist中
+        - source当前状态为active
+      failure_action: 引用标记为invalid_source报告标记为需要修正
+
+# ============================================================
+# 证据充分性
+# ============================================================
+
+evidence_sufficiency:
+  description: >
+    证据充分性等级从最强到最弱分为4级。
+    只有前3级可以被接受，第4级（topic_level_match）必须拒绝。
+
+  levels:
+    - level: direct_quote
+      name: 直接引用
+      strength: strongest
+      acceptable: true
+      description: 证据文本是陈述的精确原文引用
+      requirements: [语义匹配度>=0.95, 关键数值日期名称完全一致, 来源页面可直接访问和验证]
+      example: "陈述:2025年全球CRM市场规模为880亿美元 | 证据:根据IDC报告2025年全球CRM市场规模达到880亿美元 | 评估:直接引用数值和来源完全匹配"
+
+    - level: paraphrased_with_page_ref
+      name: 改写引用（含页码）
+      strength: strong
+      acceptable: true
+      description: 证据文本是陈述的改写，并标注了具体页码或段落
+      requirements: [语义匹配度>=0.85, 关键信息点一致, 标注了原文中的具体位置, 改写不改变原文含义]
+      example: "陈述:Salesforce在CRM市场占据领先地位市场份额约为23% | 证据:IDC2025年报告第12页第3段市场份额23.1% | 评估:改写引用标注了页码语义一致"
+
+    - level: section_summary
+      name: 段落摘要
+      strength: moderate
+      acceptable: true
+      description: 证据文本是原文某一段落或章节的摘要总结
+      requirements: [语义匹配度>=0.80, 摘要不歪曲原文含义, 摘要范围明确, 不得仅凭标题或关键词进行总结]
+      example: "陈述:CRM市场增长动力包括AI集成和移动化趋势 | 证据:IDC报告第3章AI和机器学习集成列为第一位移动CRM需求增长列为第二位 | 评估:段落摘要标注了章节"
+
+    - level: topic_level_match
+      name: 主题匹配
+      strength: weakest
+      acceptable: false
+      description: 证据文本仅与陈述主题相同，但不直接支持具体陈述内容
+      identification: [证据和陈述讨论同一主题但具体信息不同, 证据未提及陈述中的关键数值或事实, 证据仅提供背景信息而非直接证据, 语义匹配度<0.80]
+      example: "陈述:2025年CRM市场规模为880亿美元 | 证据:CRM系统是管理客户关系的重要工具近年来市场规模持续增长 | 评估:仅主题匹配未提供数据驳回"
+      rejection_action: 标记为insufficient_evidence驳回引用
+
+# ============================================================
+# 报告验证规则
+# ============================================================
+
+report_validation_rules:
+  description: 每份报告在发布前必须通过以下验证规则
+
+  rules:
+    - rule: required_chapters
+      name: 必需章节检查
+      priority: 1
+      description: 确认报告包含所有必需的章节
+      required_chapters: [执行摘要, 行业概览, 品牌/产品分析, 市场数据, 竞争分析, 趋势与展望, 来源引用]
+      failure_action: 报告标记为draft不允许发布
+
+    - rule: required_dimensions
+      name: 必需维度检查
+      priority: 2
+      description: 确认报告覆盖了所有必需的知识维度
+      required_dimensions: [市场概况, 产品功能, 定价策略, 技术架构, 竞争定位, 监管合规]
+      failure_action: 缺失维度标记为incomplete报告降级为partial
+
+    - rule: citation_completeness
+      name: 引用完整性检查
+      priority: 3
+      description: 确认所有需要引用的陈述都有引用标记
+      validation:
+        - 所有数值陈述必须有[S#]引用
+        - 所有市场数据必须有[S#]引用
+        - 所有第三方观点必须有[S#]引用
+        - 所有非通用知识陈述必须有[S#]引用
+      failure_action: 无引用的陈述标记为unverified
+
+    - rule: source_whitelist_compliance
+      name: 来源白名单合规
+      priority: 4
+      description: 确认所有引用来源均在白名单中
+      validation:
+        - 所有引用source的source_class为allowed
+        - 所有引用source不在domain_blacklist中
+        - 所有引用source状态为active
+      failure_action: 违规引用标记为invalid报告标记为需要修正
+
+    - rule: no_search_snippet_evidence
+      name: 禁止搜索片段证据
+      priority: 5
+      description: 确认没有使用搜索结果片段作为证据
+      validation:
+        - 证据来源不是search_engine
+        - 证据文本不是搜索结果摘要
+        - 证据链接指向原始页面而非搜索结果页
+      failure_action: 搜索片段证据标记为invalid替换为原始来源
+
+    - rule: no_community_evidence
+      name: 禁止社区来源证据
+      priority: 6
+      description: 确认没有使用社区、论坛、UGC平台作为证据
+      validation:
+        - 证据来源域名不在domain_blacklist中
+        - 证据来源的source_class不是forbidden中的任何类别
+        - 证据来源的source_category不是community/social_media/ugc_review/forum/creator_platform
+      failure_action: 社区来源证据标记为invalid替换为可靠来源
+
+# ============================================================
+# 证据保存规则
+# ============================================================
+
+evidence_preservation:
+  description: 所有原始证据必须归档保存，确保可追溯性和可验证性
+
+  rules:
+    - rule: original_file_archive
+      name: 原始文件归档
+      description: 所有作为证据的原始文件必须归档保存
+      requirements: [原始HTML/PDF/DOCX文件保存到证据存储库, 归档时记录文件大小和格式]
+      retention: 永久保存
+
+    - rule: content_hash_verification
+      name: 内容哈希验证
+      description: 所有证据文件必须记录内容哈希并定期验证
+      requirements: [归档时计算SHA-256哈希值, 每季度验证一次哈希值确保内容未被篡改, 哈希值不匹配时触发安全警报]
+      failure_action: 标记为tampered隔离证据启动调查
+
+    - rule: content_hash_matching
+      name: 内容哈希匹配
+      description: 证据包中引用的内容哈希必须与原始文件哈希匹配
+      requirements: [evidence_package.content_hash与original_page.content_hash一致, 如果不一致需要重新验证证据内容]
+      failure_action: 标记为hash_mismatch证据降级为可疑
+
+    - rule: access_status_recording
+      name: 访问状态记录
+      description: 每次证据访问的结果必须记录
+      statuses:
+        - ok: 页面正常访问内容完整
+        - crawled: 已通过爬虫成功抓取
+        - blocked: 页面被阻止访问（反爬、登录墙、付费墙）
+        - redirected: 页面被重定向到其他URL
+        - not_found: 页面返回404
+        - error: 访问时发生其他错误
+        - pending: 待访问验证
+
+# ============================================================
+# 拒绝证据类型
+# ============================================================
+
+rejected_evidence_types:
+  description: 以下类型的证据在任何情况下都不得被接受
+
+  types:
+    - {type: search_snippets, name: 搜索片段, description: 搜索引擎结果页面显示的摘要片段, rejection_reason: 搜索结果片段常被截断或脱离上下文无法验证原始页面}
+    - {type: blocked_pages, name: 被阻止的页面, description: 因登录墙付费墙反爬机制而无法访问的页面, rejection_reason: 无法验证页面实际内容无法确认证据真实性}
+    - {type: community_content, name: 社区内容, description: 来自社区论坛问答平台社交媒体的内容, rejection_reason: 缺乏编辑审核权威性无法保证无法验证作者身份}
+    - {type: llm_generated_without_source, name: 无来源的AI生成内容, description: AI模型生成但未标注原始来源的文本, rejection_reason: AI生成内容可能包含幻觉或错误无法追溯原始信息}
+    - {type: expired_content, name: 已过期内容, description: 超过有效期的信息且无更新版本, rejection_reason: 过期信息可能不再准确可能导致错误决策, exception: 历史研究需要时可引用但必须标注"历史数据"}
+    - {type: machine_translated_content, name: 未经核验的机器翻译, description: 未经人工核验的机器翻译内容, rejection_reason: 机器翻译可能产生语义错误导致关键信息误解, exception: 经人工核验的机器翻译可以使用需标注"机器翻译已人工核验"}
+    - {type: cached_or_archived_without_original, name: 无法验证的缓存/存档, description: 仅存在于缓存或存档中无法验证原始页面的内容, rejection_reason: 无法确认缓存内容是否被篡改无法验证原始来源, exception: 知名存档服务如archive.org的内容可作为辅助参考}
+    - {type: personal_communication, name: 个人通讯, description: 邮件即时消息面谈等非公开的个人通讯, rejection_reason: 无法独立验证无法追溯缺乏可重复性, exception: 经当事人书面同意并归档的正式通讯可以使用}
+
+# ============================================================
+# 变更记录
+# ============================================================
+
+changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义报告证据链策略
+      - 建立5步证据链模型和4项引用解析规则
+      - 定义4级证据充分性标准和6项报告验证规则
+      - 定义4项证据保存规则和8种拒绝证据类型
+    author: Brand Atlas Team

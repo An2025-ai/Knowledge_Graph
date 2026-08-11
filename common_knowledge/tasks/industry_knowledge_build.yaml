@@ -1,0 +1,193 @@
+# GEO 第一层通用知识层 — 任务模板：行业知识构建
+# 版本: 1.1.0
+# 范围: 跨品牌、跨行业复用的方法与规范层
+
+meta:
+  version: 1.1.0
+  created_at: 2026-08-11
+  updated_at: 2026-08-11
+  status: active
+  scope: shared
+
+task:
+  id: task_industry_knowledge_build
+  name: 行业知识构建
+  name_en: Industry Knowledge Build
+  version: 1.1.0
+  purpose: >
+    为新行业或品类进行一次性基线知识构建。
+    读取来自地理研究模块的行业报告，提取实体、关系和事实，
+    并将其写入 L2 稳定知识层，作为后续增量刷新的基础。
+  description: >
+    行业知识构建任务负责为首次接入的行业或品类建立完整的
+    知识基线。任务从研究报告中提取结构化的实体（公司、产品、
+    技术、标准等）、关系（竞争、供应、合规等）和事实/主张，
+    经过验证和冲突检测后，写入 L2 稳定知识层。构建完成后，
+    该行业知识即可供品牌分析、主题规划和搜索诊断等下游任务使用。
+
+  required_context:
+    - industry_scope:
+        description: 行业范围和定义（行业编码、名称、子类目）
+        source: 行业分类标准或手动配置
+        fields: [industry_id, canonical_name, category_ids, geo_scope, description]
+    - industry_requirement:
+        description: 行业知识构建需求规格（深度、广度、优先级）
+        source: 项目需求文档
+        fields: [requirement_id, knowledge_depth, entity_types_required, relation_types_required, priority_topics]
+    - research_report:
+        description: 行业研究报告（由地理研究模块提供）
+        source: 地理研究模块 / 行业报告库
+        fields: [report_id, title, source, publication_date, body, methodology, citations]
+    - evidence_package:
+        description: 研究报告附带的证据包（数据、统计、引用来源）
+        source: 地理研究模块
+        fields: [package_id, data_tables, statistics, source_refs, attachment_links]
+
+  optional_context:
+    - existing_industry_knowledge:
+        description: 已有的行业知识（如有旧版本或相关行业知识）
+        source: L2 稳定知识层
+        fields: [entity_id, relation_id, fact_id, last_updated]
+    - competitor_list:
+        description: 行业内已知的竞争对手列表
+        source: 品牌导入或市场分析
+        fields: [competitor_id, canonical_name, market_position, related_industry]
+    - authoritative_sources:
+        description: 行业权威来源列表（政府、行业协会、标准组织）
+        source: 来源注册表
+        fields: [source_id, source_type, authority_level, url, verified_at]
+
+  output_schema: industry_knowledge_package
+  output_fields:
+    - entities:
+        type: array
+        description: 提取的实体列表
+        item_fields:
+          - entity_id: 实体 ID
+          - canonical_name: 实体规范名称
+          - entity_type: 实体类型（company / product / technology / standard / regulation / organization）
+          - description: 实体描述
+          - properties: 实体属性
+          - source_refs: 引用来源
+          - confidence: 置信度（0.0-1.0）
+    - relations:
+        type: array
+        description: 提取的关系列表
+        item_fields:
+          - relation_id: 关系 ID
+          - relation_type: 关系类型
+          - subject_id: 主体实体 ID
+          - object_id: 客体实体 ID
+          - description: 关系描述
+          - source_refs: 引用来源
+          - confidence: 置信度
+    - facts:
+        type: array
+        description: 提取的事实列表
+        item_fields:
+          - fact_id: 事实 ID
+          - statement: 事实陈述
+          - fact_type: 事实类型（quantitative / qualitative / regulatory）
+          - source_refs: 引用来源
+          - evidence_chain: 证据链
+          - verified_at: 验证时间
+    - claims:
+        type: array
+        description: 提取的主张列表（未完全验证，需后续确认）
+        item_fields:
+          - claim_id: 主张 ID
+          - statement: 主张陈述
+          - claim_type: 主张类型
+          - source_refs: 引用来源
+          - verification_status: 验证状态（unverified / partially_verified）
+          - review_required: 是否需要人工审核
+    - topics:
+        type: array
+        description: 识别出的行业主题
+        item_fields:
+          - topic_id: 主题 ID
+          - canonical_name: 主题名称
+          - topic_type: 主题类型
+          - parent_topic_id: 父主题 ID
+          - relevance: 行业相关度
+    - content_gaps:
+        type: array
+        description: 识别出的报告内容缺口
+        item_fields:
+          - gap_id: 缺口 ID
+          - gap_description: 缺口描述
+          - gap_type: 缺口类型
+          - severity: 严重程度
+          - recommended_sources: 推荐补充来源
+
+  rules:
+    - rule: must_validate_report_contract
+      description: 必须验证研究报告的合同/协议是否满足最低质量标准
+      severity: critical
+
+    - rule: must_resolve_all_citations
+      description: 报告中所有引用必须解析为可追溯的来源记录
+      severity: critical
+
+    - rule: must_classify_fact_claim
+      description: 必须将每条陈述分类为事实（fact）或主张（claim），不可混为一谈
+      severity: critical
+
+    - rule: must_detect_conflicts
+      description: 必须检测新知识与已有知识之间的冲突
+      severity: critical
+
+    - rule: must_record_evidence_chain
+      description: 每条事实和主张必须记录完整的证据链（报告 → 来源 → 引用 → 数据）
+      severity: critical
+
+    - rule: no_community_sources
+      description: 不允许使用社区平台（论坛、知乎、Reddit 等）作为知识来源
+      severity: critical
+
+    - rule: no_search_snippets_as_evidence
+      description: 不允许使用搜索引擎摘要片段作为事实证据
+      severity: critical
+
+  failure_mode: insufficient_report_quality
+  failure_handling:
+    condition: 研究报告质量不满足最低标准（缺少方法论、无引用、数据不可验证）
+    action: 拒绝当前报告，生成质量评估反馈，要求地理研究模块重新提供符合标准的报告
+    recovery: 收到质量达标的报告后重新执行构建任务
+
+  quality_checks:
+    - check: report_contract_validation
+      description: 确认研究报告满足最低质量标准
+      method: 检查报告是否包含 methodology、citations、source_refs 等必要字段
+
+    - check: citation_resolution
+      description: 确认所有引用已解析为可追溯来源
+      method: 遍历所有引用，验证 source_refs 指向已知来源或新来源已验证
+
+    - check: fact_claim_classification
+      description: 确认所有陈述已正确分类为 fact 或 claim
+      method: 检查每条陈述的 fact_type 或 claim_type 字段非空
+
+    - check: conflict_detection
+      description: 确认已执行冲突检测并记录结果
+      method: 检查是否存在冲突日志，且每个冲突有 resolution 记录
+
+    - check: evidence_chain_completeness
+      description: 确认所有事实和主张有完整证据链
+      method: 逐条检查 evidence_chain 字段非空且包含至少两层引用
+
+    - check: entity_linkage
+      description: 确认所有关系的主体和客体实体均已创建
+      method: 遍历所有关系，验证 subject_id 和 object_id 指向已存在的实体
+
+  metric_refs: []
+  # 预留：entity_extraction_recall, fact_accuracy_rate, conflict_resolution_rate, report_quality_score
+
+changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 初始版本，定义行业知识构建任务模板
+      - 支持从研究报告提取实体、关系、事实、主张
+      - 包含报告质量验证、冲突检测和证据链追溯
+    author: Brand Atlas Team

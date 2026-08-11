@@ -1,0 +1,98 @@
+# Brand Atlas Knowledge Graph — L2 流水线：知识晋升
+# 版本: 1.0.0
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  status: active
+  scope: industry
+
+pipeline:
+  id: pipeline_promotion
+  name: 知识晋升
+  description: 将已验证的候选知识通过质量门禁晋升为稳定 L2 知识
+  trigger: extraction 产出结构化知识
+
+  inputs:
+    - extraction_output:
+        source: extraction output
+        schema: schemas/extraction.schema.json
+    - existing_knowledge:
+        source: PostgreSQL entity/relation/statement tables
+    - review_queue:
+        source: review_queue table
+
+  outputs:
+    - promotion_report:
+        description: 晋升结果报告
+    - stable_knowledge:
+        destination: PostgreSQL entity/relation/statement tables
+    - review_items:
+        destination: review_queue table
+
+  steps:
+    - step: 1
+      name: 门禁检查
+      action: >
+        依次执行 10 道门禁：行业范围、实体类型、关系类型、可追溯来源、
+        原始证据、证据支持陈述、事实/主张分类、无未解决冲突、
+        时间地域范围明确、非重复。每道门禁返回 pass/fail_with_rejection/fail_with_retry/escalate。
+      output: gate_results
+
+    - step: 2
+      name: 实体消歧
+      action: >
+        按 7 级级联匹配：精确名称 → 别名/域名 → 外部ID → 字符串模糊 →
+        向量相似度 → 关系上下文 → LLM裁决。自动合并需达到置信度阈值。
+      output: resolved_entities
+
+    - step: 3
+      name: 重复检测
+      action: >
+        按幂等键（report_id + report_span + statement_hash + evidence_hash）检测；
+        相同结论相同证据合并来源，相同结论不同证据追加来源，不同结论创建新版本。
+      output: dedup_result
+
+    - step: 4
+      name: 关键项路由审核
+      action: >
+        市场规模、监管、安全、效果、排名和冲突数据进入人工审核队列；
+        高权威来源冲突升级至 senior_reviewer
+      output: review_items
+
+    - step: 5
+      name: 写入稳定知识
+      action: 将通过所有门禁且非审核项的知识写入 PostgreSQL
+      output: persisted_records
+
+    - step: 6
+      name: 记录拒绝原因
+      action: 未通过门禁的候选记录拒绝原因，保留原始证据，写入 rejected_candidate
+      output: rejection_log
+
+  rules:
+    - must_pass_all_gates
+    - must_verify_evidence_support
+    - must_resolve_entities
+    - must_classify_statement
+    - must_detect_duplicates
+    - must_check_conflicts
+    - no_evidence_no_promotion
+    - critical_claims_require_review
+    - never_overwrite_in_place
+
+  quality_checks:
+    - check: gate_compliance
+      description: 所有晋升记录通过全部 10 道门禁
+    - check: evidence_traceability
+      description: 所有晋升的 fact 可追溯到原始证据
+    - check: duplicate_rate
+      description: 本次晋升的重复率 < 5%
+    - check: review_escalation
+      description: 所有关键项正确进入审核队列
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes: 初始版本
+    author: Brand Atlas Team

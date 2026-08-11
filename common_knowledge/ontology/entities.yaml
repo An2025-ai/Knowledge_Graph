@@ -4,15 +4,15 @@
 # 参考: W3C SKOS, Schema.org, Wikidata
 
 meta:
-  version: 1.0.0
+  version: 1.1.0
   created_at: 2026-08-07
-  updated_at: 2026-08-07
+  updated_at: 2026-08-11
   status: active
   scope: shared
   description: >
-    定义 GEO/Brand Atlas 系统中使用的全部实体类型。实体类型控制在 15 个以内，
-    覆盖品牌、产品、行业、品类、用户角色、场景、问题、主题、提问词、竞品、
-    内容、来源、事实、主张和观测。每种实体类型包含字段定义、约束和示例。
+    定义 GEO/Brand Atlas 系统中使用的全部实体类型。v1.1.0 新增 capability、
+    decision_factor、job_to_be_done 和 outcome 四种实体类型，总数增至 19 个。
+    新增 statement_class 概念，将 fact、claim、observation、inference 统一归类。
   source_refs:
     - https://schema.org/
     - https://www.w3.org/TR/skos-reference/
@@ -509,7 +509,172 @@ entity_types:
       - observation_type 取值为 search_result / ai_answer / mention / ranking / trend / other
       - 不得直接用作事实推论的基础，需经验证后晋升
       - promoted_to 标记晋升后的 fact 或 claim 的 id
-    version: 1.0.0
+    version: 1.1.0
+
+  # --- 16. 能力 ---
+  - type: capability
+    canonical_name: 能力
+    canonical_name_en: Capability
+    definition: >
+      产品具备的独立功能或技术能力。能力描述的是"产品能做什么"，
+      与使用场景（use_case，描述"用户在什么情境下使用"）语义不同。
+      能力是行业共享字典的核心，使 L3 能将品牌产品映射到同一能力坐标系。
+    examples:
+      - 销售预测
+      - 自然语言处理
+      - 多渠道数据接入
+      - 自动化工作流
+    required_fields:
+      - id
+      - type
+      - canonical_name
+      - status
+      - version
+    optional_fields:
+      - aliases
+      - description
+      - scope
+      - source_refs
+      - parent_capability_id
+      - related_problem_ids
+      - supported_use_case_ids
+      - evaluation_dimensions
+    constraints:
+      - 能力只描述能力本身，不描述具体品牌是否具备
+      - 支持层级结构（通过 parent_capability_id）
+      - evaluation_dimensions 为评价该能力的维度列表
+      - 具体品牌是否具备该能力属于 L3 范畴
+    version: 1.1.0
+
+  # --- 17. 决策因素 ---
+  - type: decision_factor
+    canonical_name: 决策因素
+    canonical_name_en: Decision Factor
+    definition: >
+      用户在购买或选择产品时关注的核心考量维度。决策因素是提问词挖掘、
+      选型比较和内容优化的核心坐标，连接用户角色、品类和主题。
+    examples:
+      - 实施周期
+      - 数据安全
+      - 总体拥有成本
+      - 易用性
+      - 系统集成能力
+      - 合规性
+      - 可扩展性
+      - 本地化支持
+    required_fields:
+      - id
+      - type
+      - canonical_name
+      - status
+      - version
+    optional_fields:
+      - aliases
+      - description
+      - scope
+      - source_refs
+      - applicable_category_ids
+      - related_audience_ids
+      - evaluation_method
+      - importance
+    constraints:
+      - 决策因素应具有跨品牌通用性
+      - applicable_category_ids 标注适用的品类范围
+      - importance 取值为 critical / high / medium / low / unknown
+      - evaluation_method 为衡量该因素的方法列表
+    version: 1.1.0
+
+  # --- 18. 用户任务 ---
+  - type: job_to_be_done
+    canonical_name: 用户任务
+    canonical_name_en: Job to Be Done
+    definition: >
+      用户希望完成的独立任务或目标，独立于具体产品或使用场景。
+      JTBD 关注的是"用户想要达成什么"，而非"用户如何使用产品达成"。
+      与 use_case 的区别在于 JTBD 是产品无关的，而 use_case 是产品相关的。
+    examples:
+      - 统一管理销售线索
+      - 提升客户复购率
+      - 减少人工数据录入
+      - 实时掌握团队业绩
+    required_fields:
+      - id
+      - type
+      - canonical_name
+      - status
+      - version
+    optional_fields:
+      - aliases
+      - description
+      - scope
+      - source_refs
+      - related_audience_ids
+      - related_problem_ids
+      - functional_dimensions
+      - emotional_dimensions
+      - desired_outcome_ids
+    constraints:
+      - JTBD 描述应产品无关，聚焦用户目标
+      - functional_dimensions 为功能性需求维度
+      - emotional_dimensions 为情感性需求维度
+      - 与 use_case 通过关系连接而非直接替代
+    version: 1.1.0
+
+  # --- 19. 期望结果 ---
+  - type: outcome
+    canonical_name: 期望结果
+    canonical_name_en: Desired Outcome
+    definition: >
+      用户期望通过完成某项任务或使用某个场景后取得的业务结果。
+      Outcome 是可衡量的、与业务价值直接关联的最终状态。
+    examples:
+      - 缩短线索响应时间至 5 分钟以内
+      - 提升线索转化率 20%
+      - 降低客户流失率
+      - 实现销售流程自动化覆盖 90%
+    required_fields:
+      - id
+      - type
+      - canonical_name
+      - status
+      - version
+    optional_fields:
+      - aliases
+      - description
+      - scope
+      - source_refs
+      - related_jtbd_ids
+      - related_use_case_ids
+      - measurement_method
+      - baseline_value
+      - target_value
+      - unit
+    constraints:
+      - outcome 应具有可衡量性
+      - measurement_method 描述如何衡量该结果
+      - baseline_value 和 target_value 提供量化参考
+      - 与 use_case 通过 produces_outcome 关系连接
+    version: 1.1.0
+
+# ============================================================
+# 陈述类别（statement_class）
+# ============================================================
+
+statement_classes:
+  - class: fact
+    description: 有证据支持的客观陈述，可被独立验证
+    entity_type: fact
+  - class: claim
+    description: 来源主体对自身或他人的陈述，具有主观性
+    entity_type: claim
+  - class: observation
+    description: 特定时间和条件下获取的快照
+    entity_type: observation
+  - class: inference
+    description: 基于事实、主张或观测得出的推理结论
+    note: >
+      inference 不是独立的图谱实体类型，而是结论的陈述属性。
+      推理结论应保存为 fact 或 claim，并标注 statement_class 为 inference
 
 # ============================================================
 # 实体字段规范
@@ -562,6 +727,14 @@ field_definitions:
 # ============================================================
 
 changelog:
+  - version: 1.1.0
+    date: 2026-08-11
+    changes:
+      - 新增 4 种实体类型：capability（能力）、decision_factor（决策因素）、job_to_be_done（用户任务）、outcome（期望结果）
+      - 新增 statement_classes 定义，将 inference 统一归类为陈述类别
+      - 实体类型总数从 15 增至 19
+      - 向后兼容，未删除或修改已有类型
+    author: Brand Atlas Team
   - version: 1.0.0
     date: 2026-08-07
     changes:

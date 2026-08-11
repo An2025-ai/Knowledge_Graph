@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brand-atlas.dev/schemas/citation_resolution.schema.json",
+  "title": "Citation Resolution",
+  "description": "Schema for citation-to-evidence resolution results (Section 4.7 of L2 spec).",
+  "type": "object",
+  "required": ["citation_label", "source_record_id", "original_url", "access_status", "evidence_text", "support_status"],
+  "properties": {
+    "citation_label": {"type": "string", "pattern": "^S[0-9]+$"},
+    "source_record_id": {"type": "string"},
+    "original_url": {"type": "string", "format": "uri"},
+    "access_status": {
+      "type": "string",
+      "enum": ["crawled", "ok", "search-snippet", "robots-blocked", "paywall", "not_found"]
+    },
+    "source_class": {"type": "string"},
+    "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "evidence_text": {"type": "string"},
+    "evidence_location": {
+      "type": "object",
+      "properties": {
+        "content_path": {"type": "string"},
+        "start_offset": {"type": "integer"},
+        "end_offset": {"type": "integer"}
+      }
+    },
+    "support_status": {
+      "type": "string",
+      "enum": ["directly_supports", "partially_supports", "topic_similar_only", "contradicts", "insufficient"]
+    },
+    "support_reason": {"type": "string"},
+    "verifier_version": {"type": "string"}
+  }
+}

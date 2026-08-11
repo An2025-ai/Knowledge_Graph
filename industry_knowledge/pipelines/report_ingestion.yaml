@@ -1,0 +1,87 @@
+# Brand Atlas Knowledge Graph — L2 流水线：报告导入
+# 版本: 1.0.0
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-11
+  status: active
+  scope: industry
+
+pipeline:
+  id: pipeline_report_ingestion
+  name: 行业报告导入
+  description: 解析 geo-research 生成的行业报告，提取知识候选
+  trigger: 新报告通过 industry_report_validation 校验
+
+  inputs:
+    - validated_report:
+        source: geo-research reports/generated/
+        schema: schemas/research_report.schema.json
+    - evidence_package:
+        source: geo-research data/runs/<run_id>/
+    - import_history:
+        source: external_import_record table
+        description: 用于幂等性检查
+
+  outputs:
+    - report_candidates:
+        schema: schemas/report_candidate.schema.json
+    - import_record:
+        destination: external_import_record table
+
+  steps:
+    - step: 1
+      name: 验证报告合同
+      action: >
+        检查 report_id、requirement_id、run_id 一致性；
+        验证必需章节存在；确认所有 [S#] 在信源清单中
+      output: validation_result
+
+    - step: 2
+      name: 幂等检查
+      action: 按 report_id + report_span + statement_hash + evidence_hash 检查是否已导入
+      output: dedup_result
+
+    - step: 3
+      name: 解析报告章节
+      action: 使用 Markdown AST 按章节解析，提取标题、段落、列表、表格和引用
+      output: parsed_sections
+
+    - step: 4
+      name: 提取候选知识
+      action: >
+        遍历每个章节的段落，提取包含 [S#] 引用的陈述；
+        记录 report_span（起始行、结束行）和 citation_labels
+      output: raw_candidates
+
+    - step: 5
+      name: 分类候选
+      action: 按章节代码和维度对候选进行分类，标注 knowledge_candidate_type
+      output: classified_candidates
+
+    - step: 6
+      name: 入队证据解析
+      action: 将通过门禁的候选发送到 evidence_resolution 流水线
+      output: queued_for_evidence
+
+  rules:
+    - must_validate_report_contract
+    - must_check_import_idempotency
+    - must_require_citation_labels
+    - must_reject_community_sources
+    - must_reject_search_snippets
+    - must_record_import_lineage
+
+  quality_checks:
+    - check: citation_completeness
+      description: 所有候选至少包含 1 个可解析的 [S#]
+    - check: section_coverage
+      description: 所有必需章节均有候选产出
+    - check: idempotency
+      description: 同一报告版本不产生重复候选
+
+changelog:
+  - version: 1.0.0
+    date: 2026-08-11
+    changes: 初始版本
+    author: Brand Atlas Team
