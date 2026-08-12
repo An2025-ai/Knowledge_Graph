@@ -75,11 +75,23 @@ def _scope_id_for_industry(db: DB, industry_id: str) -> str | None:
 def _build_required_dimensions(scope: dict) -> list[dict]:
     """Compile the required_dimensions JSONB from the scope manifest.
 
-    Each priority dimension becomes a dimension entry with the scope's
-    research questions and expected source classes. Falls back to the five
-    research questions as a "research_questions" dimension when no priority
-    dimensions are declared.
+    Prefers the scope's own `required_dimensions` (if provided — e.g. by
+    scope_builder, which embeds the full 14-dimension template with questions).
+    Falls back to building from `priority_dimensions` + `research_questions`.
     """
+    explicit = scope.get("required_dimensions")
+    if isinstance(explicit, list) and explicit:
+        dims = []
+        for i, dim in enumerate(explicit, start=1):
+            entry = dict(dim)
+            entry.setdefault("required", True)
+            entry.setdefault("order", i)
+            entry.setdefault("expected_fields", ["canonical_name", "definition", "evidence_spans"])
+            entry.setdefault("required_source_classes", DEFAULT_SOURCE_REQUIREMENTS["allowed_source_classes"])
+            entry.setdefault("evidence_rules", {"min_independent_sources": 1})
+            dims.append(entry)
+        return dims
+
     priority = scope.get("priority_dimensions") or []
     questions = scope.get("research_questions") or []
     dimensions: list[dict] = []
@@ -128,9 +140,21 @@ def _content_hash(requirement_id: str, dimensions: list[dict]) -> str:
 
 
 def _load_scope(path: str) -> dict[str, Any]:
-    """Load and lightly validate a scope manifest YAML file."""
+    """Load and lightly validate a scope manifest YAML file.
+
+    Supports both flat manifests and the nested form (scope: { ... }), e.g. the
+    CRM example under industry_knowledge/examples/crm/scope.yaml, by merging the
+    `scope` sub-object into the top level.
+    """
     with open(path, "r", encoding="utf-8") as f:
-        scope = yaml.safe_load(f) or {}
+        raw = yaml.safe_load(f) or {}
+
+    scope = dict(raw)
+    inner = raw.get("scope")
+    if isinstance(inner, dict):
+        # Nested scope manifest: merge inner fields in (outer meta wins for meta).
+        for k, v in inner.items():
+            scope.setdefault(k, v)
 
     industry_id = scope.get("industry_id") or scope.get("meta", {}).get("industry_id")
     if not industry_id:

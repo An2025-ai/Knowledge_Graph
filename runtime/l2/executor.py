@@ -64,6 +64,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run all L2 pipelines in order (scope + report required).",
     )
     parser.add_argument("--scope", help="Path to industry scope manifest YAML.")
+    parser.add_argument(
+        "--industry",
+        help="Target industry (e.g. 'CRM软件'); builds a scope manifest automatically instead of --scope.",
+    )
+    parser.add_argument("--market", default="CN", help="Market region (default CN).")
+    parser.add_argument("--category", help="Optional category id (scope builder).")
+    parser.add_argument("--audience", help="Comma-separated target audiences (scope builder).")
+    parser.add_argument("--competitors", help="Comma-separated seed competitors (scope builder).")
+    parser.add_argument("--priority-dim", help="Comma-separated priority dimension codes (scope builder).")
+    parser.add_argument("--questions", help="Extra research questions (semicolon-separated) (scope builder).")
+    parser.add_argument("--seed-sources", help="Comma-separated seed authoritative sources (scope builder).")
     parser.add_argument("--report", help="Path to markdown report (or geo-research report).")
     parser.add_argument(
         "--crawl",
@@ -73,6 +84,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--request",
         help="Research demand text passed to geo-research in crawl mode (default built from scope/requirement).",
+    )
+    parser.add_argument(
+        "--requirement-id",
+        help="industry_requirement.requirement_id — crawl uses its 14 dimensions as the request.",
     )
     parser.add_argument("--report-id", help="research_report.report_id to attach/scope to.")
     parser.add_argument("--evidence", help="Path to evidence index JSON.")
@@ -112,6 +127,39 @@ def _run_pipeline(name: str, args: argparse.Namespace, db: DB) -> dict:
     return run(db, args)
 
 
+def _build_scope_from_industry(args: argparse.Namespace) -> str:
+    """Use scope_builder to turn --industry/--market/... into a scope manifest path.
+
+    Returns the path to the generated scope manifest (written to scopes/).
+    """
+    from runtime.l2 import scope_builder
+
+    def _csv(v):
+        return [s.strip() for s in v.split(",")] if v else None
+
+    scope = scope_builder.build_scope(
+        industry=args.industry,
+        market=args.market,
+        category=getattr(args, "category", None),
+        audiences=_csv(getattr(args, "audience", None)),
+        competitors=_csv(getattr(args, "competitors", None)),
+        priority_dims=_csv(getattr(args, "priority_dim", None)),
+        extra_questions=_csv(getattr(args, "questions", None)),
+        seed_sources=_csv(getattr(args, "seed_sources", None)),
+    )
+    request_id = scope["scope"]["request_id"]
+    out_path = f"scopes/{request_id}.yaml"
+    import os
+
+    os.makedirs("scopes", exist_ok=True)
+    import yaml
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(scope, f, allow_unicode=True, sort_keys=False)
+    print(f"[executor] built scope manifest from --industry: {out_path}")
+    return out_path
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -126,14 +174,18 @@ def main(argv: list[str] | None = None) -> int:
 
     names = [args.pipeline] if args.pipeline else ALL_ORDER
 
-    # --all needs a scope for requirement_compilation and either a report or
-    # --crawl (which lets geo-research generate the report).
+    # If --industry is given (but no --scope), build a scope manifest first.
+    if args.industry and not args.scope:
+        args.scope = _build_scope_from_industry(args)
+
+    # --all needs a scope for requirement_compilation and either a report,
+    # --crawl, or a --requirement-id (crawl).
     if args.all:
         if not args.scope:
-            parser.error("--all requires --scope <scope.yaml>")
-        if not args.report and not args.crawl:
+            parser.error("--all requires --scope <scope.yaml> or --industry <名称>")
+        if not args.report and not args.crawl and not args.requirement_id:
             parser.error(
-                "--all requires --report <file.md>, or --crawl to have geo-research generate it"
+                "--all requires --report <file.md>, or --crawl / --requirement-id to have geo-research generate it"
             )
 
     results = {}

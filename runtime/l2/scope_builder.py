@@ -1,0 +1,332 @@
+"""L2 scope builder — turn rough user intents into a full industry scope manifest.
+
+The user supplies rough info (industry, market, optionally audience/competitors/
+priority dimensions/questions). This builds a complete `industry_scope` manifest
+with all 14 standard L2 data dimensions, ready for `requirement_compilation`.
+
+Usage:
+    python -m runtime.l2.scope_builder --industry "CRM软件" --market CN \
+        [--category cat_crm] [--audience "中小企业销售负责人,大客户销售总监"] \
+        [--competitors "销售易,纷享销客,用友"] \
+        [--priority-dim "audience_and_decision_chain,problems_and_jobs"] \
+        [--questions "中国CRM市场有哪些核心痛点？"] \
+        [--seed-sources "中国信通院,艾瑞咨询,IDC"] \
+        [--out scopes/crm_cn.yaml] [--dry-run]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+# The 14 standard L2 data dimensions. Each dimension carries its standard
+# research questions (templated with the industry/market) and expected fields,
+# mirroring industry_knowledge/requirements/industry_requirement.example.yaml.
+DIMENSION_TEMPLATE = [
+    {
+        "dimension_code": "market_definition",
+        "questions": [
+            "{industry} 在 {market} 市场的定义和边界是什么？",
+            "{industry} 品类包含哪些子品类和相邻品类？",
+            "{industry} 在 {market} 的价值链位置和生态关系是什么？",
+        ],
+        "expected_fields": [
+            "industry_definition", "category_boundaries", "aliases",
+            "parent_category_ids", "adjacent_category_ids",
+        ],
+    },
+    {
+        "dimension_code": "category_structure",
+        "questions": [
+            "{industry} 品类下有哪些子品类和解决方案类别？",
+            "各子品类的定义、边界和包含关系是什么？",
+        ],
+        "expected_fields": [
+            "subcategory_name", "subcategory_definition",
+            "parent_category_id", "inclusion_criteria", "exclusion_criteria",
+        ],
+    },
+    {
+        "dimension_code": "market_participants",
+        "questions": [
+            "{industry} 在 {market} 市场的主要参与者有哪些？",
+            "各参与者的市场角色、定位和目标客户群是什么？",
+            "市场集中度和竞争格局如何？",
+        ],
+        "expected_fields": [
+            "brand_name", "product_name", "market_role", "target_audience", "market_position",
+        ],
+    },
+    {
+        "dimension_code": "audience_and_decision_chain",
+        "questions": [
+            "{industry} 品类有哪些核心用户角色？",
+            "谁是使用者、评估者、采购者和决策者？",
+            "中小企业和大型企业的决策链有何不同？",
+        ],
+        "expected_fields": [
+            "audience_name", "organization_type", "organization_size",
+            "decision_role", "job_to_be_done",
+        ],
+    },
+    {
+        "dimension_code": "problems_and_jobs",
+        "questions": [
+            "{industry} 用户面临哪些核心痛点？",
+            "不同角色和规模的企业痛点有何差异？",
+            "用户使用 {industry} 想完成哪些核心任务？",
+        ],
+        "expected_fields": [
+            "problem_name", "affected_audience_ids", "severity",
+            "occurrence_conditions", "jtbd_description",
+        ],
+    },
+    {
+        "dimension_code": "use_cases",
+        "questions": [
+            "{industry} 在 {market} 市场有哪些典型使用场景？",
+            "不同行业和规模的企业使用 {industry} 的场景有何差异？",
+            "使用场景与用户痛点和期望结果如何关联？",
+        ],
+        "expected_fields": [
+            "use_case_name", "related_problem_ids", "desired_outcomes", "typical_user_roles",
+        ],
+    },
+    {
+        "dimension_code": "capabilities",
+        "questions": [
+            "{industry} 产品的标准能力图谱是什么？",
+            "哪些能力是基础能力？哪些是差异化能力？",
+            "能力与使用场景的关系是什么？",
+        ],
+        "expected_fields": [
+            "capability_name", "capability_definition", "parent_capability_id",
+            "supported_use_case_ids", "evaluation_dimensions",
+        ],
+    },
+    {
+        "dimension_code": "decision_factors",
+        "questions": [
+            "企业在选择 {industry} 时关注哪些决策因素？",
+            "不同规模企业和角色的决策因素权重有何差异？",
+            "价格、部署、集成、安全、服务等因素的相对重要性？",
+        ],
+        "expected_fields": [
+            "factor_name", "factor_definition", "applicable_category_ids",
+            "related_audience_ids", "evaluation_method", "importance",
+        ],
+    },
+    {
+        "dimension_code": "topics_and_questions",
+        "questions": [
+            "{industry} 行业围绕哪些核心主题和问题展开？",
+            "主题之间的层级关系是什么？",
+            "典型问题对应哪些用户意图？",
+        ],
+        "expected_fields": [
+            "topic_name", "parent_topic_id", "question_patterns",
+            "related_intent_codes", "freshness_requirement",
+        ],
+    },
+    {
+        "dimension_code": "market_facts_and_trends",
+        "questions": [
+            "{industry} 在 {market} 市场的规模、增长率和结构是怎样的？",
+            "主要趋势和驱动因素是什么？",
+            "有哪些关键的市场预测和展望？",
+        ],
+        "expected_fields": [
+            "fact_statement", "value_amount", "unit", "time_period", "geography", "methodology_summary",
+        ],
+    },
+    {
+        "dimension_code": "regulation_and_risks",
+        "questions": [
+            "{industry} 市场有哪些相关的法规和政策？",
+            "数据安全、隐私保护和行业合规要求是什么？",
+            "市场面临哪些主要风险和不确定性？",
+        ],
+        "expected_fields": [
+            "regulation_name", "issuing_body", "effective_date",
+            "applicable_subjects", "risk_description",
+        ],
+    },
+    {
+        "dimension_code": "competition_structure",
+        "questions": [
+            "{industry} 市场的竞争格局是怎样的？",
+            "直接竞品和替代方案有哪些？",
+            "竞争范围和比较维度是什么？",
+        ],
+        "expected_fields": [
+            "competitor_name", "competition_scope", "comparison_dimensions", "market_position",
+        ],
+    },
+    {
+        "dimension_code": "source_ecology",
+        "questions": [
+            "{industry} 行业有哪些权威信息来源和研究机构？",
+            "各来源的覆盖主题、权威性和独立性如何？",
+            "来源生态中是否存在空白或过度依赖？",
+        ],
+        "expected_fields": [
+            "source_name", "publisher", "source_class",
+            "authority_level", "independence_level", "covered_topics",
+        ],
+    },
+    {
+        "dimension_code": "evidence_gaps",
+        "questions": [
+            "哪些维度或问题没有找到充分证据？",
+            "哪些证据存在冲突或无法验证？",
+            "哪些数据因来源限制而无法获取？",
+        ],
+        "expected_fields": [
+            "gap_dimension", "gap_description", "gap_reason",
+            "attempted_sources", "recommended_action",
+        ],
+    },
+]
+
+# Allowed source classes (L2 contract).
+ALLOWED_SOURCE_CLASSES = [
+    "government", "regulator", "standards_body", "industry_association",
+    "industry_research", "academic", "brokerage_research", "reliable_media",
+    "competitor_official", "company_disclosure",
+]
+
+# Excluded source classes (L2: no UGC / community).
+EXCLUDED_SOURCE_CLASSES = ["community", "social_media", "ugc_review"]
+
+
+def _slug(value: str) -> str:
+    """Lowercase alnum slug for ids/filenames."""
+    return "".join(c for c in value.lower() if c.isalnum())[:30] or "industry"
+
+
+def build_scope(
+    industry: str,
+    market: str,
+    category: str | None = None,
+    audiences: list[str] | None = None,
+    competitors: list[str] | None = None,
+    priority_dims: list[str] | None = None,
+    extra_questions: list[str] | None = None,
+    seed_sources: list[str] | None = None,
+    languages: list[str] | None = None,
+) -> dict:
+    """Build a complete industry_scope manifest dict."""
+    market = market.upper()
+    industry_id = f"ind_{_slug(industry)}"
+    category_id = category or f"cat_{_slug(industry)}"
+    request_id = f"industry_{_slug(industry)}_{market.lower()}_001"
+
+    # Fill the 14-dimension template with the industry/market.
+    required_dimensions = []
+    for i, dim in enumerate(DIMENSION_TEMPLATE, start=1):
+        questions = [q.format(industry=industry, market=market) for q in dim["questions"]]
+        if dim["dimension_code"] in (priority_dims or []):
+            questions = extra_questions + questions if extra_questions else questions
+        required_dimensions.append(
+            {
+                "dimension_code": dim["dimension_code"],
+                "required": True,
+                "order": i,
+                "questions": questions,
+                "expected_fields": dim["expected_fields"],
+                "required_source_classes": ALLOWED_SOURCE_CLASSES,
+                "evidence_rules": {"min_independent_sources": 1},
+            }
+        )
+
+    scope = {
+        "meta": {
+            "version": "1.0.0",
+            "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "status": "active",
+            "scope": "industry",
+            "description": f"Industry scope manifest for {industry} in the {market} market.",
+        },
+        "scope": {
+            "request_id": request_id,
+            "mode": "create",
+            "industry_id": industry_id,
+            "industry_name": industry,
+            "market": market,
+            "languages": languages or ["zh-CN"],
+            "included_categories": [category_id],
+            "excluded_categories": [],
+            "target_audiences": audiences or [],
+            "seed_competitors": competitors or [],
+            "seed_sources": seed_sources or [],
+            "priority_dimensions": priority_dims or [d["dimension_code"] for d in DIMENSION_TEMPLATE],
+            "research_questions": extra_questions or [],
+            "required_dimensions": required_dimensions,
+            "source_requirements": {
+                "primary_mode": "whitelist_first",
+                "allowed_source_classes": ALLOWED_SOURCE_CLASSES,
+                "excluded_source_classes": EXCLUDED_SOURCE_CLASSES,
+                "critical_claim_min_independent_sources": 2,
+            },
+            "report_contract": {
+                "format": "markdown",
+                "inline_citation_format": "[S#]",
+                "require_coverage_ledger": True,
+                "require_evidence_package": True,
+                "require_missing_data_section": True,
+            },
+        },
+    }
+    return scope
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Build an L2 industry scope manifest from rough inputs.")
+    parser.add_argument("--industry", required=True, help="Target industry, e.g. CRM软件")
+    parser.add_argument("--market", default="CN", help="Market region, e.g. CN")
+    parser.add_argument("--category", help="Optional category id, default cat_<industry>")
+    parser.add_argument("--audience", help="Comma-separated target audiences")
+    parser.add_argument("--competitors", help="Comma-separated seed competitors")
+    parser.add_argument("--priority-dim", help="Comma-separated priority dimension codes")
+    parser.add_argument("--questions", help="Extra research questions (semicolon-separated)")
+    parser.add_argument("--seed-sources", help="Comma-separated seed authoritative sources")
+    parser.add_argument("--out", help="Output scope manifest path (default scopes/<id>.yaml)")
+    parser.add_argument("--dry-run", action="store_true", help="Print scope without writing")
+    args = parser.parse_args()
+
+    def _csv(v):
+        return [s.strip() for s in v.split(",")] if v else None
+
+    scope = build_scope(
+        industry=args.industry,
+        market=args.market,
+        category=args.category,
+        audiences=_csv(args.audience),
+        competitors=_csv(args.competitors),
+        priority_dims=_csv(args.priority_dim),
+        extra_questions=_csv(args.questions),
+        seed_sources=_csv(args.seed_sources),
+    )
+
+    if args.dry_run:
+        print(yaml.safe_dump(scope, allow_unicode=True, sort_keys=False))
+        return 0
+
+    request_id = scope["scope"]["request_id"]
+    out_path = args.out or f"scopes/{request_id}.yaml"
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(scope, f, allow_unicode=True, sort_keys=False)
+    print(f"[scope_builder] wrote {out_path} ({len(DIMENSION_TEMPLATE)} dimensions)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

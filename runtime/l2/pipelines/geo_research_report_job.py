@@ -62,18 +62,38 @@ def _geo_research_timeout() -> int:
         return 900
 
 
-def _build_request(args) -> str:
-    """Compose a geo-research `--request` research demand from scope/requirement."""
+def _build_request(args, db=None) -> str:
+    """Compose a geo-research `--request` research demand.
+
+    Priority:
+      1. Explicit --request text (user-provided).
+      2. --requirement-id → load industry_requirement from DB → flatten to a
+         full 14-dimension request via requirement_to_request.
+      3. Fallback generic demand.
+    """
     if getattr(args, "request", None):
         return args.request
-    # Fall back to constructing from industry_requirement / scope if available.
+
     requirement_id = getattr(args, "requirement_id", None) or getattr(args, "requirement", None)
     if requirement_id:
-        return f"研究行业：{requirement_id}。请覆盖行业与市场、产品与竞品、用户需求、趋势与风险等维度，引用公开权威来源。"
+        if db is None:
+            raise ValueError(
+                "--requirement-id requires a DB connection to load industry_requirement; "
+                "either pass --request <text> or ensure PostgreSQL is reachable."
+            )
+        try:
+            from runtime.l2.requirement_to_request import load_requirement, requirement_to_request
+
+            req = load_requirement(db, requirement_id)
+            market = getattr(args, "market", None) or req.get("market", "CN")
+            return requirement_to_request(req, market=market)
+        except Exception as exc:
+            raise RuntimeError(f"Failed to build request from requirement {requirement_id}: {exc}") from exc
+
     return "请对指定行业进行公开权威研究，覆盖市场、产品、竞品、用户与趋势维度。"
 
 
-def trigger_geo_research(args) -> str:
+def trigger_geo_research(args, db=None) -> str:
     """Shell out to geo-research to crawl + synthesize a report. Returns report path.
 
     Runs:
@@ -84,7 +104,7 @@ def trigger_geo_research(args) -> str:
     root = _geo_research_root()
     python = _geo_research_python(root)
     llm_config = _geo_research_llm_config(root)
-    request = _build_request(args)
+    request = _build_request(args, db=db)
     timeout = _geo_research_timeout()
     dry_run = getattr(args, "dry_run", False)
 
@@ -186,7 +206,7 @@ def run(db: DB, args) -> dict[str, Any]:
     """Trigger geo-research crawl (if --crawl) and ingest the delivered report."""
     crawl = getattr(args, "crawl", False)
     if crawl:
-        report_path = trigger_geo_research(args)
+        report_path = trigger_geo_research(args, db=db)
         # If dry-run produced a placeholder, return early without DB writes.
         if report_path.startswith("<dry-run"):
             return {
@@ -217,6 +237,8 @@ def run(db: DB, args) -> dict[str, Any]:
     run_id = getattr(args, "geo_research_run_id", None) or os.environ.get("GEO_RESEARCH_RUN_ID")
     requirement_id = getattr(args, "requirement_id", None)
     report_id = getattr(args, "report_id", None) or f"grep_{datetime.now(timezone.utc):%Y%m%d%H%M%S}"
+    # Make the generated report_id available to downstream --all pipelines.
+    args.report_id = report_id
 
     # --- external_import_record: file-level provenance (not a knowledge fact) ---
     import_record = {

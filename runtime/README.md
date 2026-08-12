@@ -87,6 +87,21 @@ python -m runtime.l2.executor --pipeline promotion
 # 一键全流程（--report 用已有报告，或 --crawl 自动爬取）
 python -m runtime.l2.executor --all --scope <scope.yaml> --report <report.md>
 python -m runtime.l2.executor --all --scope <scope.yaml> --crawl --request "研究需求"
+
+# 【推荐】从"大致信息"一键到"按需求爬取报告"：
+#   你只需给目标行业 + 市场区域，系统自动：
+#   ① scope_builder 生成完整 14 维度 scope
+#   ② requirement_compilation 编译成 requirement（含各维度研究问题）
+#   ③ 用完整需求触发 geo-research 爬取 + 生成行业报告
+#   ④ report_ingestion → extraction → promotion 入库
+python -m runtime.l2.executor --all --industry "CRM软件" --market CN --crawl \
+    [--audience "中小企业销售负责人"] [--competitors "销售易,纷享销客,用友"] \
+    [--priority-dim "audience_and_decision_chain,problems_and_jobs"] \
+    [--seed-sources "中国信通院,艾瑞咨询"]
+
+# 也可单独生成 scope / request（不爬取）
+python -m runtime.l2.scope_builder --industry "CRM软件" --market CN [--out scopes/crm.yaml]
+python -m runtime.l2.requirement_to_request --requirement-id <ikr_xxx> [--out request.txt]
 ```
 
 > **爬取说明**：`--crawl` 会真正调用 geo-research 爬网并生成报告，耗时较长（搜索+抓取+LLM 写报告，可能几分钟）。geo-research 的报告生成模型用它所处目录的 `llm-config.local.json`（已同步为 DeepSeek）。若抓取某站点卡住，可调大 `GEO_RESEARCH_TIMEOUT` 或先排查该站点网络。
