@@ -47,7 +47,7 @@ COMMENT ON TABLE tenant IS '客户租户，L3 数据安全边界';
 -- 10.2 关键 DDL (VERBATIM — 以下 5 张表严格按 README §10.2 原文，一字不改)
 -- brand_workspace
 -- ============================================================================
-CREATE TABLE brand_workspace (
+CREATE TABLE IF NOT EXISTS brand_workspace (
   id UUID PRIMARY KEY,
   tenant_id UUID NOT NULL,
   brand_entity_id UUID NOT NULL REFERENCES entity(id),
@@ -67,7 +67,7 @@ COMMENT ON TABLE brand_workspace IS '品牌接入范围、默认权限和 L2 映
 -- ============================================================================
 -- assertion
 -- ============================================================================
-CREATE TABLE assertion (
+CREATE TABLE IF NOT EXISTS assertion (
   id UUID PRIMARY KEY,
   tenant_id UUID NOT NULL,
   brand_id UUID NOT NULL,
@@ -100,7 +100,7 @@ COMMENT ON TABLE assertion IS '统一事实、主张和推断，附证据和条�
 -- ============================================================================
 -- assertion_evidence
 -- ============================================================================
-CREATE TABLE assertion_evidence (
+CREATE TABLE IF NOT EXISTS assertion_evidence (
   assertion_id UUID NOT NULL REFERENCES assertion(id),
   evidence_id UUID NOT NULL REFERENCES evidence(id),
   support_status VARCHAR(20) NOT NULL,
@@ -114,7 +114,7 @@ COMMENT ON TABLE assertion_evidence IS 'Assertion 与 Evidence 多对多支持�
 -- ============================================================================
 -- brand_mapping
 -- ============================================================================
-CREATE TABLE brand_mapping (
+CREATE TABLE IF NOT EXISTS brand_mapping (
   id UUID PRIMARY KEY,
   tenant_id UUID NOT NULL,
   brand_id UUID NOT NULL,
@@ -133,7 +133,7 @@ COMMENT ON TABLE brand_mapping IS 'L3 原始概念到 L2 规范实体的映射';
 -- ============================================================================
 -- claim_policy
 -- ============================================================================
-CREATE TABLE claim_policy (
+CREATE TABLE IF NOT EXISTS claim_policy (
   id UUID PRIMARY KEY,
   tenant_id UUID NOT NULL,
   brand_id UUID NOT NULL,

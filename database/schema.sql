@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS knowledge_version (
     CONSTRAINT      chk_kv_change_type CHECK (change_type IN ('major', 'minor', 'patch'))
 );
 
-CREATE INDEX idx_kv_definition ON knowledge_version(definition_id);
-CREATE INDEX idx_kv_version ON knowledge_version(version);
+CREATE INDEX IF NOT EXISTS idx_kv_definition ON knowledge_version(definition_id);
+CREATE INDEX IF NOT EXISTS idx_kv_version ON knowledge_version(version);
 
 COMMENT ON TABLE knowledge_version IS '知识定义版本变更历史，支持回滚和审计';
 
@@ -76,8 +76,8 @@ CREATE TABLE IF NOT EXISTS entity_type (
     CONSTRAINT      chk_et_status CHECK (status IN ('active', 'inactive', 'deprecated'))
 );
 
-CREATE INDEX idx_et_type_code ON entity_type(type_code);
-CREATE INDEX idx_et_status ON entity_type(status);
+CREATE INDEX IF NOT EXISTS idx_et_type_code ON entity_type(type_code);
+CREATE INDEX IF NOT EXISTS idx_et_status ON entity_type(status);
 
 COMMENT ON TABLE entity_type IS '实体类型定义，系统支持的 21 种实体类型';
 
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS relation_type (
     CONSTRAINT      chk_rt_status CHECK (status IN ('active', 'inactive', 'deprecated'))
 );
 
-CREATE INDEX idx_rt_relation_code ON relation_type(relation_code);
+CREATE INDEX IF NOT EXISTS idx_rt_relation_code ON relation_type(relation_code);
 
 COMMENT ON TABLE relation_type IS '关系类型定义，系统支持的 31 种关系类型';
 
@@ -137,8 +137,8 @@ CREATE TABLE IF NOT EXISTS intent_definition (
     CONSTRAINT      chk_id_status CHECK (status IN ('active', 'inactive', 'deprecated'))
 );
 
-CREATE INDEX idx_id_intent_code ON intent_definition(intent_code);
-CREATE INDEX idx_id_decision_stage ON intent_definition(decision_stage);
+CREATE INDEX IF NOT EXISTS idx_id_intent_code ON intent_definition(intent_code);
+CREATE INDEX IF NOT EXISTS idx_id_decision_stage ON intent_definition(decision_stage);
 
 COMMENT ON TABLE intent_definition IS '搜索意图类型定义，包含 13 种主意图和 7 个决策阶段';
 
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS task_template (
     CONSTRAINT      chk_tt_status CHECK (status IN ('active', 'inactive', 'deprecated'))
 );
 
-CREATE INDEX idx_tt_task_code ON task_template(task_code);
+CREATE INDEX IF NOT EXISTS idx_tt_task_code ON task_template(task_code);
 
 COMMENT ON TABLE task_template IS '任务模板定义，系统支持的 9 种任务类型';
 
@@ -221,9 +221,9 @@ CREATE TABLE IF NOT EXISTS quality_rule (
     CONSTRAINT      chk_qr_status CHECK (status IN ('active', 'inactive', 'deprecated'))
 );
 
-CREATE INDEX idx_qr_rule_code ON quality_rule(rule_code);
-CREATE INDEX idx_qr_category ON quality_rule(category);
-CREATE INDEX idx_qr_priority ON quality_rule(priority);
+CREATE INDEX IF NOT EXISTS idx_qr_rule_code ON quality_rule(rule_code);
+CREATE INDEX IF NOT EXISTS idx_qr_category ON quality_rule(category);
+CREATE INDEX IF NOT EXISTS idx_qr_priority ON quality_rule(priority);
 
 COMMENT ON TABLE quality_rule IS '质量规则定义，20 条规则覆盖事实主张、来源适用、证据链和检索质量';
 
@@ -257,8 +257,8 @@ CREATE TABLE IF NOT EXISTS example_case (
     CONSTRAINT      chk_ec_status CHECK (status IN ('active', 'inactive', 'deprecated'))
 );
 
-CREATE INDEX idx_ec_task ON example_case(task_id);
-CREATE INDEX idx_ec_type ON example_case(case_type);
+CREATE INDEX IF NOT EXISTS idx_ec_task ON example_case(task_id);
+CREATE INDEX IF NOT EXISTS idx_ec_type ON example_case(case_type);
 
 COMMENT ON TABLE example_case IS '示例案例库，包含正例和反例，用于培训和回归验证';
 

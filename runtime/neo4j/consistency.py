@@ -76,14 +76,22 @@ def main() -> int:
         print(f"{'entity edges (n4j)':18} {'—':5} {all_rel}")
 
         ok = True
-        if not args.counts_only and pa == na and pe == ne:
-            # Spot-check a sample of assertions exist in both
+        # Counts comparison applies in both modes.
+        counts_match = (pe == ne) and (pa == na)
+        if counts_match:
+            print("\n[consistency] counts match (PG == Neo4j)")
+        else:
+            print("\n[consistency] MISMATCH — counts differ between PG and Neo4j")
+            ok = False
+
+        # Optional sample spot-check (only when not counts-only).
+        if not args.counts_only and counts_match and args.sample:
             with DB() as pg_db:
                 rows = pg_db.query(
                     "SELECT id, subject_entity_id, object_entity_id FROM statement "
-                    "WHERE status='active' LIMIT %s", (args.sample or 0,),
+                    "WHERE status='active' LIMIT %s", (args.sample,),
                 )
-            if args.sample and rows:
+            if rows:
                 missing = 0
                 for r in rows:
                     found = proj.driver.execute_query(
@@ -95,10 +103,6 @@ def main() -> int:
                 print(f"\nsample check: {len(rows)} sampled, {missing} missing in Neo4j")
                 if missing:
                     ok = False
-            print("\n[consistency] PENDING full reconciliation: entity & assertion counts match")
-        else:
-            print("\n[consistency] MISMATCH — counts differ between PG and Neo4j")
-            ok = False
 
         print("[consistency] OK" if ok else "[consistency] INCONSISTENT")
         return 0 if ok else 1

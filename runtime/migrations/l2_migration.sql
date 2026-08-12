@@ -222,12 +222,12 @@ COMMENT ON COLUMN entity.id IS '被 L3 brand_l3_migration 的 brand_workspace/as
 -- 生成列：从 JSONB 扁平化常用查询字段
 ALTER TABLE entity ADD COLUMN IF NOT EXISTS owner_brand UUID;
 
-CREATE UNIQUE INDEX idx_entity_business_unique
-    ON entity (tenant_id, entity_type, canonical_name, COALESCE(owner_brand, '') )
+CREATE UNIQUE INDEX IF NOT EXISTS idx_entity_business_unique
+    ON entity (tenant_id, entity_type, canonical_name, COALESCE(owner_brand::text, '') )
     WHERE tenant_id IS NOT NULL;
 
-CREATE INDEX idx_entity_type ON entity(entity_type);
-CREATE INDEX idx_entity_status ON entity(status);
+CREATE INDEX IF NOT EXISTS idx_entity_type ON entity(entity_type);
+CREATE INDEX IF NOT EXISTS idx_entity_status ON entity(status);
 
 -- ============================================================================
 -- 9. entity_alias — 实体别名
@@ -264,9 +264,9 @@ CREATE TABLE IF NOT EXISTS relation (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 COMMENT ON TABLE relation IS '实体关系实例';
-CREATE INDEX idx_relation_subject ON relation(subject_id);
-CREATE INDEX idx_relation_object ON relation(object_id);
-CREATE INDEX idx_relation_type ON relation(relation_type);
+CREATE INDEX IF NOT EXISTS idx_relation_subject ON relation(subject_id);
+CREATE INDEX IF NOT EXISTS idx_relation_object ON relation(object_id);
+CREATE INDEX IF NOT EXISTS idx_relation_type ON relation(relation_type);
 
 -- ============================================================================
 -- 11. statement — fact/claim/observation/inference
@@ -299,9 +299,9 @@ CREATE TABLE IF NOT EXISTS statement (
     CONSTRAINT chk_stmt_value CHECK (object_entity_id IS NOT NULL OR object_value IS NOT NULL)
 );
 COMMENT ON TABLE statement IS 'fact/claim/observation/inference 统一陈述';
-CREATE INDEX idx_stmt_tenant ON statement(tenant_id);
-CREATE INDEX idx_stmt_subject ON statement(subject_entity_id);
-CREATE INDEX idx_stmt_class ON statement(statement_class);
+CREATE INDEX IF NOT EXISTS idx_stmt_tenant ON statement(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_stmt_subject ON statement(subject_entity_id);
+CREATE INDEX IF NOT EXISTS idx_stmt_class ON statement(statement_class);
 
 -- ============================================================================
 -- 12. evidence — 原文证据片段
