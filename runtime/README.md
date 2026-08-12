@@ -70,15 +70,26 @@ python -m runtime.l2.executor --pipeline requirement_compilation --scope <scope.
 # 报告摄入：把 geo-research 生成的 Markdown 报告解析成候选
 python -m runtime.l2.executor --pipeline report_ingestion --report <report.md>
 
+# 【爬取】直接调用 geo-research 爬虫生成行业报告（SearXNG 搜索 + Playwright 抓取 + LLM 生成）
+python -m runtime.l2.executor --pipeline geo_research_report_job --crawl --request "研究中国CRM行业"
+#   可配置（环境变量）：
+#   GEO_RESEARCH_ROOT      = geo-research 根目录（默认 d:/Brand Atlas/geo-research）
+#   GEO_RESEARCH_PYTHON    = 其 python（默认 .venv-browser/Scripts/python.exe）
+#   GEO_RESEARCH_LLM_CONFIG= 其 llm-config.local.json
+#   GEO_RESEARCH_TIMEOUT   = 爬取超时秒数（默认 900）
+
 # 知识抽取：LLM 从报告候选抽出 实体/关系/事实（--dry-run 先试跑不写库）
 python -m runtime.l2.executor --pipeline extraction --report <report.md> --dry-run
 
 # 晋升：10 道门禁，通过即稳定
 python -m runtime.l2.executor --pipeline promotion
 
-# 一键全流程
+# 一键全流程（--report 用已有报告，或 --crawl 自动爬取）
 python -m runtime.l2.executor --all --scope <scope.yaml> --report <report.md>
+python -m runtime.l2.executor --all --scope <scope.yaml> --crawl --request "研究需求"
 ```
+
+> **爬取说明**：`--crawl` 会真正调用 geo-research 爬网并生成报告，耗时较长（搜索+抓取+LLM 写报告，可能几分钟）。geo-research 的报告生成模型用它所处目录的 `llm-config.local.json`（已同步为 DeepSeek）。若抓取某站点卡住，可调大 `GEO_RESEARCH_TIMEOUT` 或先排查该站点网络。
 
 ## 5. L3 品牌知识层执行器
 

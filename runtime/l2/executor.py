@@ -6,11 +6,13 @@ namespace to each pipeline's `run(db, args)` function.
 Usage:
     python -m runtime.l2.executor --pipeline requirement_compilation --scope <scope.yaml>
     python -m runtime.l2.executor --pipeline geo_research_report_job --report <file.md>
+    python -m runtime.l2.executor --pipeline geo_research_report_job --crawl --request "研究需求"
     python -m runtime.l2.executor --pipeline report_ingestion --report <file.md>
     python -m runtime.l2.executor --pipeline evidence_resolution --evidence <evidence.json>
     python -m runtime.l2.executor --pipeline extraction --report <file.md> [--dry-run]
     python -m runtime.l2.executor --pipeline promotion --report-id <id> [--dry-run]
     python -m runtime.l2.executor --all --scope <scope.yaml> --report <file.md> [--dry-run]
+    python -m runtime.l2.executor --all --scope <scope.yaml> --crawl --request "研究需求" [--dry-run]
 
 `--dry-run` is honored by pipelines that can skip DB writes (extraction still
 calls the LLM but prints instead of upserting).
@@ -63,6 +65,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--scope", help="Path to industry scope manifest YAML.")
     parser.add_argument("--report", help="Path to markdown report (or geo-research report).")
+    parser.add_argument(
+        "--crawl",
+        action="store_true",
+        help="Trigger geo-research web crawl to generate the report (uses SearXNG + Playwright + LLM).",
+    )
+    parser.add_argument(
+        "--request",
+        help="Research demand text passed to geo-research in crawl mode (default built from scope/requirement).",
+    )
     parser.add_argument("--report-id", help="research_report.report_id to attach/scope to.")
     parser.add_argument("--evidence", help="Path to evidence index JSON.")
     parser.add_argument("--text", help="Raw text input for extraction.")
@@ -115,13 +126,15 @@ def main(argv: list[str] | None = None) -> int:
 
     names = [args.pipeline] if args.pipeline else ALL_ORDER
 
-    # --all needs a scope for requirement_compilation and a report for the
-    # downstream ingests.
+    # --all needs a scope for requirement_compilation and either a report or
+    # --crawl (which lets geo-research generate the report).
     if args.all:
         if not args.scope:
             parser.error("--all requires --scope <scope.yaml>")
-        if not args.report:
-            parser.error("--all requires --report <file.md> (serves as geo-research report)")
+        if not args.report and not args.crawl:
+            parser.error(
+                "--all requires --report <file.md>, or --crawl to have geo-research generate it"
+            )
 
     results = {}
     with DB.from_env() as db:
