@@ -2,3 +2,10 @@
 # Base: PyYAML, jsonschema, psycopg2-binary (already in ../requirements.txt)
 neo4j>=5.20,<6
 requests>=2.31
+
+# Visualization (Jupyter + interactive graph)
+# Install the VSCode "Jupyter" extension (ms-toolsai.jupyter) to open the notebook.
+jupyter>=1.0,<2
+ipykernel>=6.29
+pyvis>=0.3.2
+networkx>=3.2

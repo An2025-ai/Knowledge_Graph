@@ -125,9 +125,29 @@ runtime/
 ├── l2/                # L2 六条 Pipeline 执行器
 ├── l3/                # L3 十条 Pipeline 执行器
 ├── neo4j/             # 图投影服务 + 一致性校验
+├── visualize/         # Jupyter + pyvis 交互式图谱查看
 ├── docker-compose.yml # PostgreSQL + Neo4j 一键启动
 └── requirements.txt   # runtime 额外依赖
 ```
+
+## 7.5 在 VSCode 查看阶段性结果（交互式图谱）
+
+用 **Jupyter + pyvis** 在 VSCode 里渲染可交互的知识图（缩放/拖拽/按类型筛色）。
+
+```bash
+# 1. 装 VSCode 插件: Jupyter (ms-toolsai.jupyter)
+# 2. 装 Python 包
+pip install -r runtime/requirements.txt
+
+# 3. 跑完执行器后，导出图谱数据
+python -m runtime.visualize.export
+#   python -m runtime.visualize.export --brand <id> --tenant <id>   # 只看某品牌
+#   python -m runtime.visualize.export --industry <id>              # 只看某行业
+
+# 4. 在 VSCode 打开 runtime/visualize/knowledge_graph.ipynb → 选内核 → 运行全部
+```
+
+详见 `runtime/visualize/README.md`。备选：Neo4j Browser（localhost:7474）。
 
 ## 8. 数据流总览
 
@@ -135,4 +155,5 @@ runtime/
 L1 定义 → [L2] 行业情报(geo-research报告) → 抽实体/关系/事实 → PostgreSQL
         → [L3] 品牌资料(官网/文档) → 抽实体/映射L2/核证据 → PostgreSQL
         → [Neo4j] 从 PostgreSQL 幂等投影（可重建）
+        → [可视化] PostgreSQL → JSON → Jupyter+pyvis 交互图
 ```
