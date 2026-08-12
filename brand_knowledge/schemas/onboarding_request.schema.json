@@ -14,7 +14,7 @@
       "properties": {
         "canonical_name": {"type": "string"},
         "known_aliases": {"type": "array", "items": {"type": "string"}},
-        "official_domains": {"type": "array", "items": {"type": "string", "format": "uri"}, "minItems": 1}
+        "official_domains": {"type": "array", "items": {"type": "string", "format": "hostname"}, "minItems": 1}
       }
     },
     "markets": {"type": "array", "items": {"type": "string"}, "minItems": 1},

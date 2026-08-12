@@ -1,16 +1,24 @@
 # Brand Atlas Knowledge Graph — YAML → PostgreSQL 发布脚本
-# 版本: 1.1.0
+# 版本: 1.2.0
 # 用途: 将 common_knowledge/ 中的 YAML 文件同步到 PostgreSQL 数据库
 # 依赖: pip install pyyaml psycopg2-binary
 # 用法: python publish.py [--dry-run] [--file <path>]
 
 import argparse
 import hashlib
+import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 import yaml
+
+try:
+    from jsonschema import Draft202012Validator, FormatChecker
+    HAS_JSONSCHEMA = True
+except ImportError:
+    HAS_JSONSCHEMA = False
 
 try:
     import psycopg2
@@ -292,10 +300,67 @@ FIELD_MAPPING = {
 # 核心函数
 # ============================================================================
 
+class UniqueKeyLoader(yaml.SafeLoader):
+    """拒绝 YAML 重复键，避免 safe_load 静默覆盖前一个值。"""
+
+
+def _construct_unique_mapping(loader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
+
 def load_yaml(filepath):
     """加载 YAML 文件"""
     with open(filepath, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        return yaml.load(f, Loader=UniqueKeyLoader)
+
+
+def json_default(value):
+    """把 YAML 自动解析出的日期转换为可写入 JSONB 的 ISO 8601 字符串。"""
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+def json_dumps(value):
+    return json.dumps(value, ensure_ascii=False, default=json_default)
+
+
+def to_json_compatible(value):
+    """将 YAML 数据转换为 JSON Schema 可验证的 JSON 值。"""
+    return json.loads(json_dumps(value))
+
+
+def semver_change_type(previous_version, current_version):
+    """根据语义化版本号判断 major/minor/patch，异常格式按 patch 处理。"""
+    try:
+        previous = tuple(int(part) for part in previous_version.split("."))
+        current = tuple(int(part) for part in current_version.split("."))
+        if len(previous) != 3 or len(current) != 3:
+            raise ValueError
+    except (AttributeError, ValueError):
+        return "patch"
+    if current[0] != previous[0]:
+        return "major"
+    if current[1] != previous[1]:
+        return "minor"
+    return "patch"
 
 
 def compute_hash(filepath):
@@ -331,7 +396,7 @@ def map_fields(data, table_name, extra_fields=None):
         if value is not None:
             # JSONB 字段保持为 dict/list
             if isinstance(value, (dict, list)):
-                row[db_column] = Json(value)
+                row[db_column] = Json(value, dumps=json_dumps)
             else:
                 row[db_column] = value
 
@@ -339,23 +404,27 @@ def map_fields(data, table_name, extra_fields=None):
     if extra_fields:
         for key, val in extra_fields.items():
             if key not in row:
-                row[key] = val if not isinstance(val, (dict, list)) else Json(val)
+                row[key] = val if not isinstance(val, (dict, list)) else Json(val, dumps=json_dumps)
 
     return row
 
 
 def publish_file(conn, relpath, dry_run=False):
     """发布单个 YAML 文件到数据库"""
+    relpath = relpath.replace("\\", "/")
     filepath = os.path.join(COMMON_KNOWLEDGE_DIR, relpath)
 
     if not os.path.exists(filepath):
         print(f"  [SKIP] 文件不存在: {relpath}")
         return False
 
-    config = FILE_TABLE_MAP.get(relpath)
-    if not config:
-        print(f"  [SKIP] 无映射配置: {relpath}")
+    try:
+        Path(filepath).resolve().relative_to(Path(COMMON_KNOWLEDGE_DIR).resolve())
+    except ValueError:
+        print(f"  [SKIP] 文件超出 common_knowledge 目录: {relpath}")
         return False
+
+    config = FILE_TABLE_MAP.get(relpath)
 
     # 加载 YAML
     data = load_yaml(filepath)
@@ -367,16 +436,22 @@ def publish_file(conn, relpath, dry_run=False):
     version = meta.get("version", "1.0.0")
     file_hash = compute_hash(filepath)
 
-    table_name = config["table"]
-    key_field = config["key_field"]
-    key_path = config["key_path"]
+    table_name = config["table"] if config else None
+    key_field = config["key_field"] if config else None
+    key_path = config["key_path"] if config else None
 
     if dry_run:
-        print(f"  [DRY-RUN] {relpath} → {table_name} (v{version})")
+        target = table_name if config else "knowledge_definition (metadata only)"
+        print(f"  [DRY-RUN] {relpath} → {target} (v{version})")
         return True
 
     # 更新 knowledge_definition
     with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, version FROM knowledge_definition WHERE file_path = %s",
+            (relpath,),
+        )
+        existing = cur.fetchone()
         cur.execute(
             """INSERT INTO knowledge_definition (file_path, file_name, category, version, description, content_hash, published_at)
                VALUES (%s, %s, %s, %s, %s, %s, NOW())
@@ -384,7 +459,8 @@ def publish_file(conn, relpath, dry_run=False):
                    version = EXCLUDED.version,
                    content_hash = EXCLUDED.content_hash,
                    published_at = NOW(),
-                   updated_at = NOW()""",
+                   updated_at = NOW()
+               RETURNING id""",
             (
                 relpath,
                 os.path.basename(relpath),
@@ -394,7 +470,32 @@ def publish_file(conn, relpath, dry_run=False):
                 file_hash,
             ),
         )
+        definition_id = cur.fetchone()[0]
+        if existing and existing[1] != version:
+            changelog = data.get("changelog", [])
+            latest_change = changelog[0] if changelog else {}
+            summary = latest_change.get("changes", f"发布 {relpath} v{version}")
+            if isinstance(summary, list):
+                summary = "; ".join(str(item) for item in summary)
+            cur.execute(
+                """INSERT INTO knowledge_version
+                       (definition_id, version, previous_version, change_type,
+                        change_summary, change_details, author)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    definition_id,
+                    version,
+                    existing[1],
+                    semver_change_type(existing[1], version),
+                    str(summary),
+                    Json(to_json_compatible(latest_change), dumps=json_dumps),
+                    latest_change.get("author"),
+                ),
+            )
+    if not config:
         conn.commit()
+        print(f"  [OK] {relpath} → knowledge_definition (metadata only)")
+        return True
 
     # 处理数据记录
     if config.get("is_single"):
@@ -404,7 +505,7 @@ def publish_file(conn, relpath, dry_run=False):
         key_value = get_nested(record_data, key_path)
         if not key_value:
             print(f"  [WARN] 无法提取 key: {key_path} from {relpath}")
-            return False
+            raise ValueError(f"无法提取 key: {key_path}")
 
         row = map_fields(record_data, table_name, config.get("extra_fields"))
         upsert_record(conn, table_name, key_field, key_value, row)
@@ -431,7 +532,7 @@ def publish_file(conn, relpath, dry_run=False):
         items = data.get(data_path, [])
         if not items:
             print(f"  [WARN] 无数据: {relpath}.{data_path}")
-            return False
+            raise ValueError(f"无数据: {relpath}.{data_path}")
 
         for item in items:
             key_value = get_nested(item, key_path)
@@ -444,6 +545,7 @@ def publish_file(conn, relpath, dry_run=False):
 
         print(f"  [OK] {relpath} → {table_name} ({len(items)} 条记录)")
 
+    conn.commit()
     return True
 
 
@@ -459,7 +561,7 @@ def upsert_record(conn, table, key_field, key_value, row):
         if isinstance(v, Json):
             safe_values.append(v)
         elif isinstance(v, (dict, list)):
-            safe_values.append(Json(v))
+            safe_values.append(Json(v, dumps=json_dumps))
         else:
             safe_values.append(v)
 
@@ -476,13 +578,16 @@ def upsert_record(conn, table, key_field, key_value, row):
 
     with conn.cursor() as cur:
         cur.execute(sql, safe_values)
-    conn.commit()
 
 
 def publish_all(dry_run=False):
     """发布所有文件"""
+    if not validate_all():
+        print("发布已取消：项目校验失败。")
+        return False
+
     print(f"\n{'='*60}")
-    print(f"Brand Atlas Knowledge Graph — 发布脚本 v1.0.0")
+    print("Brand Atlas Knowledge Graph — 发布脚本 v1.2.0")
     print(f"时间: {datetime.now(timezone.utc).isoformat()}")
     print(f"模式: {'DRY-RUN (仅验证)' if dry_run else 'LIVE (写入数据库)'}")
     print(f"{'='*60}\n")
@@ -505,19 +610,28 @@ def publish_all(dry_run=False):
     try:
         success = 0
         failed = 0
-        for relpath in sorted(FILE_TABLE_MAP.keys()):
+        yaml_files = sorted(
+            path.relative_to(COMMON_KNOWLEDGE_DIR).as_posix()
+            for path in Path(COMMON_KNOWLEDGE_DIR).rglob("*.yaml")
+        )
+        for relpath in yaml_files:
             try:
                 if publish_file(conn, relpath, dry_run):
                     success += 1
                 else:
                     failed += 1
+                    if conn:
+                        conn.rollback()
             except Exception as e:
                 print(f"  [ERROR] {relpath}: {e}")
                 failed += 1
+                if conn:
+                    conn.rollback()
 
         print(f"\n{'='*60}")
         print(f"发布完成: {success} 成功, {failed} 失败")
         print(f"{'='*60}\n")
+        return failed == 0
 
     finally:
         if conn:
@@ -529,59 +643,164 @@ def publish_all(dry_run=False):
 # ============================================================================
 
 def validate_all():
-    """验证所有 YAML 文件的可解析性和完整性"""
+    """验证全项目 YAML/JSON、Schema 示例、发布映射和 L1 交叉引用。"""
     print(f"\n{'='*60}")
-    print(f"Brand Atlas Knowledge Graph — YAML 验证")
+    print("Brand Atlas Knowledge Graph — 全项目验证")
     print(f"{'='*60}\n")
 
     errors = []
-    for relpath in sorted(FILE_TABLE_MAP.keys()):
-        filepath = os.path.join(COMMON_KNOWLEDGE_DIR, relpath)
-        if not os.path.exists(filepath):
-            errors.append(f"文件不存在: {relpath}")
-            continue
+    yaml_data = {}
+    json_data = {}
+    project_path = Path(PROJECT_DIR)
+    yaml_files = sorted(project_path.rglob("*.yaml"))
+    json_files = sorted(project_path.rglob("*.json"))
 
+    for filepath in yaml_files:
+        relpath = filepath.relative_to(project_path).as_posix()
         try:
             data = load_yaml(filepath)
             if not data:
-                errors.append(f"空文件: {relpath}")
+                errors.append(f"空 YAML: {relpath}")
                 continue
-
-            # 检查 meta
-            meta = data.get("meta")
+            yaml_data[relpath] = data
+            meta = data.get("meta") if isinstance(data, dict) else None
             if not meta:
                 errors.append(f"缺少 meta 块: {relpath}")
             elif not meta.get("version"):
-                errors.append(f"缺少 version: {relpath}")
+                errors.append(f"缺少 meta.version: {relpath}")
+        except Exception as exc:
+            errors.append(f"YAML 解析错误 {relpath}: {exc}")
 
-            # 检查数据
-            config = FILE_TABLE_MAP[relpath]
-            if config.get("is_single"):
-                record_key = config.get("record_key", "task")
-                record = data.get(record_key, data)
-                key = get_nested(record, config["key_path"])
-                if not key:
-                    errors.append(f"缺少 key '{config['key_path']}': {relpath}")
-            elif config.get("is_multi_group"):
-                prefix = config.get("group_prefix", "")
-                suffix = config.get("group_suffix", "")
-                total = 0
-                for group_key, items in data.items():
-                    if isinstance(items, list) and group_key.startswith(prefix) and group_key.endswith(suffix):
-                        total += len(items)
-                if total == 0:
-                    errors.append(f"空数据（多组）: {relpath}")
-            else:
-                items = data.get(config["data_path"], [])
-                if not items:
-                    errors.append(f"空数据 '{config['data_path']}': {relpath}")
+    for filepath in json_files:
+        relpath = filepath.relative_to(project_path).as_posix()
+        try:
+            json_data[relpath] = json.loads(filepath.read_text(encoding="utf-8"))
+        except Exception as exc:
+            errors.append(f"JSON 解析错误 {relpath}: {exc}")
 
-            print(f"  [OK] {relpath}")
+    # 检查 L1 发布映射的结构和 JSONB 可序列化性。
+    for relpath, config in FILE_TABLE_MAP.items():
+        project_relpath = f"common_knowledge/{relpath}"
+        data = yaml_data.get(project_relpath)
+        if data is None:
+            errors.append(f"发布文件不存在或无法解析: {project_relpath}")
+            continue
+        records = []
+        if config.get("is_single"):
+            records = [data.get(config.get("record_key", "task"), data)]
+        elif config.get("is_multi_group"):
+            prefix = config.get("group_prefix", "")
+            suffix = config.get("group_suffix", "")
+            for group_key, items in data.items():
+                if isinstance(items, list) and group_key.startswith(prefix) and group_key.endswith(suffix):
+                    records.extend(items)
+        else:
+            records = data.get(config["data_path"], [])
+        if not records:
+            errors.append(f"发布数据为空: {project_relpath}")
+            continue
+        for index, record in enumerate(records):
+            if not get_nested(record, config["key_path"]):
+                errors.append(f"缺少发布 key '{config['key_path']}': {project_relpath}[{index}]")
+            for field in FIELD_MAPPING[config["table"]]:
+                value = record.get(field)
+                if isinstance(value, (dict, list)):
+                    try:
+                        json_dumps(value)
+                    except TypeError as exc:
+                        errors.append(f"JSONB 序列化失败 {project_relpath}[{index}].{field}: {exc}")
 
-        except yaml.YAMLError as e:
-            errors.append(f"YAML 解析错误 {relpath}: {e}")
-        except Exception as e:
-            errors.append(f"未知错误 {relpath}: {e}")
+    # L1 注册表之间的引用一致性。
+    try:
+        entities = yaml_data["common_knowledge/ontology/entities.yaml"]["entity_types"]
+        relations = yaml_data["common_knowledge/ontology/relations.yaml"]["relation_types"]
+        intents = yaml_data["common_knowledge/intents/intent_types.yaml"]["intent_types"]
+        patterns = yaml_data["common_knowledge/intents/prompt_patterns.yaml"]["patterns"]
+        entity_types = {item["type"] for item in entities}
+        relation_codes = {item["relation"] for item in relations}
+        intent_codes = {item["id"] for item in intents}
+        task_codes = {
+            data["task"]["id"]
+            for path, data in yaml_data.items()
+            if path.startswith("common_knowledge/tasks/")
+        }
+        allowed_non_entity_types = {"intent", "assertion"}
+
+        for label, items, key in (
+            ("entity type", entities, "type"),
+            ("relation", relations, "relation"),
+            ("intent", intents, "id"),
+            ("prompt pattern", patterns, "id"),
+        ):
+            values = [item[key] for item in items]
+            duplicates = sorted({value for value in values if values.count(value) > 1})
+            if duplicates:
+                errors.append(f"重复 {label}: {', '.join(duplicates)}")
+
+        for relation in relations:
+            for field in ("subject_types", "object_types"):
+                for type_code in relation.get(field, []):
+                    if type_code not in entity_types | allowed_non_entity_types:
+                        errors.append(f"未知实体类型 {relation['relation']}.{field}: {type_code}")
+            inverse = relation.get("inverse_relation")
+            if inverse and inverse not in relation_codes:
+                errors.append(f"未知反向关系 {relation['relation']}: {inverse}")
+
+        for pattern in patterns:
+            if pattern.get("intent_id") not in intent_codes:
+                errors.append(f"未知意图引用 {pattern['id']}: {pattern.get('intent_id')}")
+
+        positive = yaml_data["common_knowledge/examples/positive_examples.yaml"]["examples"]
+        negative = yaml_data["common_knowledge/examples/negative_examples.yaml"]
+        examples = list(positive)
+        for group, items in negative.items():
+            if group.startswith("task_") and group.endswith("_examples") and isinstance(items, list):
+                examples.extend(items)
+        for example in examples:
+            if example.get("task_id") not in task_codes:
+                errors.append(f"未知任务引用 {example.get('id')}: {example.get('task_id')}")
+    except (KeyError, TypeError) as exc:
+        errors.append(f"L1 交叉引用检查失败: {exc}")
+
+    # 校验 JSON Schema 本身以及仓库中与 Schema 对应的示例。
+    if not HAS_JSONSCHEMA:
+        errors.append("缺少 jsonschema 依赖；请运行 pip install -r requirements.txt")
+    else:
+        schemas = {
+            path: data for path, data in json_data.items() if path.endswith(".schema.json")
+        }
+        for path, schema in schemas.items():
+            try:
+                Draft202012Validator.check_schema(schema)
+            except Exception as exc:
+                errors.append(f"无效 JSON Schema {path}: {exc}")
+
+        def validate_instance(label, schema_path, instance):
+            schema = schemas.get(schema_path)
+            if schema is None:
+                errors.append(f"Schema 不存在: {schema_path}")
+                return
+            validator = Draft202012Validator(schema, format_checker=FormatChecker())
+            for error in sorted(
+                validator.iter_errors(to_json_compatible(instance)),
+                key=lambda item: tuple(str(part) for part in item.path),
+            ):
+                location = ".".join(str(part) for part in error.absolute_path) or "<root>"
+                errors.append(f"Schema 校验失败 {label}.{location}: {error.message}")
+
+        requirement = yaml_data.get("industry_knowledge/requirements/industry_requirement.example.yaml")
+        onboarding = yaml_data.get("brand_knowledge/scopes/deepcleer/brand_onboarding_request.yaml")
+        assertion = json_data.get("brand_knowledge/examples/deepcleer/assertion_sample.json")
+        inventory = yaml_data.get("brand_knowledge/sources/source_inventory.example.yaml")
+        if requirement:
+            validate_instance("industry_requirement.example", "industry_knowledge/schemas/industry_requirement.schema.json", requirement)
+        if onboarding:
+            validate_instance("brand_onboarding_request", "brand_knowledge/schemas/onboarding_request.schema.json", onboarding.get("request", {}))
+        if assertion:
+            validate_instance("assertion_sample", "brand_knowledge/schemas/assertion.schema.json", assertion)
+        if inventory:
+            for index, source in enumerate(inventory.get("source_instances", [])):
+                validate_instance(f"source_inventory[{index}]", "brand_knowledge/schemas/source_instance.schema.json", source)
 
     if errors:
         print(f"\n验证失败 ({len(errors)} 个错误):")
@@ -589,7 +808,10 @@ def validate_all():
             print(f"  X {e}")
         return False
     else:
-        print(f"\n全部 {len(FILE_TABLE_MAP)} 个文件验证通过!")
+        print(
+            f"\n验证通过: {len(yaml_files)} 个 YAML、{len(json_files)} 个 JSON、"
+            f"{len(FILE_TABLE_MAP)} 组 L1 发布映射。"
+        )
         return True
 
 
@@ -609,7 +831,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--validate",
         action="store_true",
-        help="仅验证 YAML 文件的可解析性和完整性",
+        help="验证全项目 YAML/JSON、Schema、示例和交叉引用",
     )
     parser.add_argument(
         "--file",
@@ -650,14 +872,25 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if args.file:
+        if not validate_all():
+            sys.exit(1)
         if not args.dry_run and not HAS_PSYCOPG2:
             print("错误: 需要 psycopg2 来写入数据库（或使用 --dry-run）。")
             sys.exit(1)
         conn = None if args.dry_run else psycopg2.connect(**DB_CONFIG)
         try:
-            publish_file(conn, args.file, args.dry_run)
+            success = publish_file(conn, args.file, args.dry_run)
+            if not success:
+                if conn:
+                    conn.rollback()
+                sys.exit(1)
+        except Exception:
+            if conn:
+                conn.rollback()
+            raise
         finally:
             if conn:
                 conn.close()
     else:
-        publish_all(dry_run=args.dry_run)
+        success = publish_all(dry_run=args.dry_run)
+        sys.exit(0 if success else 1)

@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: brand_atlas_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: brand_atlas_kg
+      POSTGRES_USER: kg_admin
+      POSTGRES_PASSWORD: kg_admin_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kg_admin -d brand_atlas_kg"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: brand_atlas_neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/neo4j_admin_password
+      NEO4J_PLUGINS: '["apoc"]'
+    ports:
+      - "7474:7474"   # HTTP browser
+      - "7687:7687"   # Bolt
+    volumes:
+      - neo4j_data:/data
+
+volumes:
+  pg_data:
+  neo4j_data:

@@ -63,13 +63,44 @@
       "type": "array",
       "description": "Data dimensions that must be covered in the report",
       "items": {
-        "type": "string",
-        "enum": [
-          "market_definition", "category_structure", "market_participants",
-          "audience_and_decision_chain", "problems_and_jobs", "use_cases",
-          "capabilities", "decision_factors", "topics_and_questions",
-          "market_facts_and_trends", "regulation_and_risks"
-        ]
+        "type": "object",
+        "required": ["dimension_code", "required", "questions", "expected_fields", "required_source_classes", "evidence_rules"],
+        "properties": {
+          "dimension_code": {
+            "type": "string",
+            "enum": [
+              "market_definition", "category_structure", "market_participants",
+              "audience_and_decision_chain", "problems_and_jobs", "use_cases",
+              "capabilities", "decision_factors", "topics_and_questions",
+              "market_facts_and_trends", "regulation_and_risks",
+              "competition_structure", "source_ecology", "evidence_gaps"
+            ]
+          },
+          "required": {"type": "boolean"},
+          "questions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1
+          },
+          "expected_fields": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1
+          },
+          "required_source_classes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "government", "regulator", "standards_body", "industry_association",
+                "industry_research", "academic", "brokerage_research", "reliable_media",
+                "competitor_official", "company_disclosure"
+              ]
+            }
+          },
+          "evidence_rules": {"type": "object"}
+        },
+        "additionalProperties": false
       },
       "minItems": 1
     },

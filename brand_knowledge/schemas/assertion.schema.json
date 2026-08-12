@@ -25,10 +25,10 @@
     "verification_status": {"type": "string"},
     "publication_status": {"type": "string"},
     "access_level": {"type": "string", "enum": ["public", "internal", "confidential", "restricted"]},
-    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
     "valid_from": {"type": "string", "format": "date"},
     "valid_to": {"type": "string", "format": "date"},
     "evidence_refs": {"type": "array", "items": {"type": "string"}},
-    "supersedes_id": {"type": "string"}
+    "supersedes_id": {"type": ["string", "null"]}
   }
 }

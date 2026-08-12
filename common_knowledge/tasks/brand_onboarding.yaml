@@ -121,7 +121,6 @@ task:
     - rule: product_version_required_when_asserting
       description: 能力、定价和命名随版本变化，断言必须限定 product_version
       severity: high
-      severity: high
 
     - rule: duplicate_check
       description: 创建前检查是否已存在同名品牌实体

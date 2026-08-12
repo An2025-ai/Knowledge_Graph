@@ -1,0 +1,11 @@
+{
+  "base_url": "https://YOUR-LLM-GATEWAY/v1",
+  "model": "YOUR-MODEL-NAME",
+  "endpoint": null,
+  "api_key": "",
+  "api_key_env": "BRAND_ATLAS_LLM_API_KEY",
+  "api_key_required": true,
+  "timeout_seconds": 120,
+  "max_output_tokens": 6000,
+  "temperature": 0.2
+}

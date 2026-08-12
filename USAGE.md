@@ -16,7 +16,7 @@
 ├──────────────┬──────────────────────────────────────────────────┤
 │ L1 通用知识层 │ 定义对象/关系/意图/任务/证据规则（方法与规范）        │
 │ L2 行业知识层 │ 实例化共享行业坐标系（品类/角色/问题/能力/主题）      │
-│ L3 品牌认知层 │ 将具体品牌映射到 L2（未实现，仅定义引用接口）         │
+│ L3 品牌认知层 │ 契约/样例已定义；数据处理执行器和图投影尚未实现       │
 │ L4 动态观测层 │ 保存搜索和 AI 回答的时序结果（未实现，仅定义对象）     │
 └──────────────┴──────────────────────────────────────────────────┘
 ```
@@ -42,7 +42,7 @@ Knowledge_Graph/
 │   │   └── relations.yaml           # 31 种关系类型定义
 │   ├── intents/
 │   │   ├── intent_types.yaml        # 13 种意图 + 7 个决策阶段
-│   │   └── prompt_patterns.yaml     # 39 个提问词模式
+│   │   └── prompt_patterns.yaml     # 41 个提问词模式
 │   ├── sources/
 │   │   ├── source_types.yaml        # 13 种来源类型（3级权威）
 │   │   └── authority_rules.yaml     # 20 条质量规则
@@ -97,7 +97,7 @@ Knowledge_Graph/
 │   └── skills/                      # 12 个逻辑 Skills
 │
 └── database/                        # ── L1 数据库层 ──
-    ├── schema.sql                   # PostgreSQL 9 张核心表（L1 定义注册库）
+    ├── schema.sql                   # PostgreSQL 10 张表（9 核心 + 1 辅助）
     ├── publish.py                   # YAML → 数据库 发布脚本
     └── README.md                    # 数据库初始化指南
 ```
@@ -108,7 +108,7 @@ Knowledge_Graph/
 
 ### 3.1 核心概念速查
 
-**19 种实体类型**（`ontology/entities.yaml`）：
+**21 种实体类型**（`ontology/entities.yaml`）：
 
 | 实体 | 中文 | 描述 |
 |------|------|------|
@@ -132,7 +132,7 @@ Knowledge_Graph/
 | claim | 主张 | 有来源的主观陈述 |
 | observation | 观测 | 特定时间的快照 |
 
-**27 种关系类型**（`ontology/relations.yaml`）已覆盖：
+**31 种关系类型**（`ontology/relations.yaml`）已覆盖：
 - 结构：`belongs_to`, `operates_in`
 - 行为：`serves`, `supports_use_case`, `solves`, `has_capability`, `capability_supports_use_case`
 - 市场：`competes_with`, `alternative_to`, `partner_of`
@@ -360,6 +360,8 @@ proof_and_case, service_and_poc, messaging_and_content, competition_mapping
 
 `brand_knowledge/database/brand_l3_migration.sql` 定义了 11 张业务表（tenant、brand_workspace、assertion、assertion_evidence、brand_mapping、claim_policy 等）+ RLS。这是与 L1 定义注册库（`database/schema.sql`）**独立**的迁移。
 
+该迁移依赖尚未提供的 L2 基础表（`entity`、`evidence`、`document` 等），当前不能在只初始化 L1 Schema 的数据库上直接执行。需要先实现 L2 migration，随后才能执行 L3 migration 和 Neo4j 投影。
+
 ### 5.7 L3 IS NOT
 
 - 不做 Context Builder、向量召回、混合检索、Rerank（后续应用阶段）
@@ -371,11 +373,11 @@ proof_and_case, service_and_poc, messaging_and_content, competition_mapping
 
 ## 6. 数据库使用说明
 
-### 5.1 初始化数据库
+### 6.1 初始化 L1 数据库
 
 ```bash
 # 1. 安装依赖
-pip install pyyaml psycopg2-binary
+pip install -r requirements.txt
 
 # 2. 创建数据库（在 PostgreSQL 中执行）
 CREATE DATABASE brand_atlas_kg;
@@ -394,13 +396,15 @@ cd "d:\Brand Atlas\Knowledge_Graph"
 python database/publish.py --init-db
 ```
 
-### 5.2 验证 YAML（无需数据库）
+### 6.2 验证全项目（无需数据库）
 
 ```bash
 python database/publish.py --validate
 ```
 
-### 5.3 发布到数据库
+该命令检查全部 YAML/JSON、重复键、JSON Schema 与示例、L1 交叉引用，以及发布字段能否写入 JSONB。
+
+### 6.3 发布 L1 到数据库
 
 ```bash
 # 先 dry-run 验证（不写入）
@@ -413,14 +417,14 @@ python database/publish.py
 python database/publish.py --file ontology/entities.yaml
 ```
 
-### 5.4 数据库 9 张核心表
+### 6.4 数据库 10 张表（9 核心 + 1 辅助）
 
 | 表名 | 对应 YAML | 用途 |
 |------|-----------|------|
 | `knowledge_definition` | 所有文件 | 文件版本元数据 |
 | `knowledge_version` | 自动 | 版本变更历史 |
-| `entity_type` | ontology/entities.yaml | 19 种实体类型 |
-| `relation_type` | ontology/relations.yaml | 27 种关系类型 |
+| `entity_type` | ontology/entities.yaml | 21 种实体类型 |
+| `relation_type` | ontology/relations.yaml | 31 种关系类型 |
 | `intent_definition` | intents/intent_types.yaml | 13 种意图 |
 | `task_template` | tasks/*.yaml | 9 个任务模板 |
 | `source_policy` | sources/source_types.yaml | 13 种来源类型 |

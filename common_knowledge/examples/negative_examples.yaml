@@ -549,7 +549,7 @@ task_topic_planning_examples:
         canonical_name: "CRM 选型"
         parent_topic_id: "ent_topic_crm"  # 正确的父主题
       # 如果 "ent_topic_crm" 不存在，应先创建
-      topic:
+      parent_topic:
         id: "ent_topic_crm"
         type: "topic"
         canonical_name: "CRM"

@@ -6,7 +6,7 @@
 ## 概述
 
 本目录包含第一层通用知识层的数据库相关文件：
-- `schema.sql` — PostgreSQL 数据库 Schema（9 张核心表）
+- `schema.sql` — PostgreSQL 数据库 Schema（9 张核心表 + `decision_stage` 辅助表）
 - `publish.py` — YAML → PostgreSQL 发布脚本
 
 ## 前置条件
@@ -23,7 +23,7 @@
 ### 2. Python 依赖
 
 ```bash
-pip install pyyaml psycopg2-binary
+pip install -r requirements.txt
 ```
 
 ## 快速开始
@@ -61,7 +61,7 @@ cd "d:\Brand Atlas\Knowledge_Graph"
 python database/publish.py --init-db
 ```
 
-### 步骤 4：验证 YAML 文件
+### 步骤 4：验证全项目数据契约
 
 ```bash
 python database/publish.py --validate
@@ -101,7 +101,7 @@ python database/publish.py
 ## 发布脚本用法
 
 ```bash
-# 验证所有 YAML 文件（不连接数据库）
+# 验证所有 YAML/JSON、Schema 示例、交叉引用和发布映射（不连接数据库）
 python database/publish.py --validate
 
 # Dry-run 模式（验证但不写入）
@@ -121,11 +121,13 @@ python database/publish.py --init-db
 
 发布脚本自动处理版本管理：
 1. 每次发布时，`knowledge_definition` 表更新 `content_hash` 和 `published_at`
-2. 版本变更时，在 `knowledge_version` 表记录变更历史
+2. 已发布文件的版本号变化时，在 `knowledge_version` 表追加变更历史
 3. 使用 `ON CONFLICT ... DO UPDATE` 实现 upsert 语义
+
+`publish.py` 只把 L1 注册数据写入数据库。L2/L3 的 Pipeline YAML 是执行契约，不是可执行程序；当前仓库也没有 L2 基础表 migration 或 Neo4j 投影服务。
 
 ## 未来扩展
 
-- **图数据库迁移**：当实体规模增大后，可迁移到 Neo4j/ArangoDB，Schema 中的 `entity_type` 和 `relation_type` 表可直接映射为图数据库的节点标签和关系类型
+- **图数据库投影**：实现 L2/L3 权威业务表后，再从 PostgreSQL 投影到 Neo4j；当前仅有设计说明
 - **指标计算层**：`task_template.metric_refs` 字段预留了指标集成接口
 - **L2/L3 层接入**：`knowledge_definition` 表的 `category` 字段支持扩展为 `industry` 和 `brand` 类别

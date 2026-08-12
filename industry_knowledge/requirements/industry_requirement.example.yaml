@@ -68,7 +68,7 @@ excluded_source_classes:
 # ============================================================
 # Required Dimensions (Section 4.3)
 # ============================================================
-# All 15 standard dimensions from the L2 specification.
+# All 14 standard dimensions used by the current L2 requirement contract.
 # Each dimension must be covered in the research report.
 # Coverage status per dimension: covered_by_whitelist |
 #   covered_by_extended_sources | partial | missing |
@@ -384,7 +384,7 @@ changelog:
     date: 2026-08-11
     changes:
       - Initial Industry Knowledge Requirement for CRM in China market
-      - Compiled all 15 required dimensions from L2 Section 4.3
+      - Compiled all 14 required dimensions from L2 Section 4.3
       - Set source whitelist with 10 allowed source classes
       - Set critical claim minimum of 2 independent sources
       - Established report contract with [S#] citation format

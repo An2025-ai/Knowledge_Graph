@@ -1,0 +1,4 @@
+# Runtime execution engines — additional deps beyond project requirements.txt
+# Base: PyYAML, jsonschema, psycopg2-binary (already in ../requirements.txt)
+neo4j>=5.20,<6
+requests>=2.31
