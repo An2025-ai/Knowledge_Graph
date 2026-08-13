@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Any
 
@@ -36,7 +37,13 @@ DB_CONFIG = {
 def json_dumps(obj):
     if isinstance(obj, (date, datetime)):
         return obj.isoformat()
-    return json.dumps(obj, ensure_ascii=False)
+    return json.dumps(
+        obj,
+        ensure_ascii=False,
+        default=lambda value: value.isoformat()
+        if isinstance(value, (date, datetime))
+        else str(value),
+    )
 
 
 def connect():
@@ -51,6 +58,7 @@ class DB:
     def __init__(self, conn=None):
         self._conn = conn if conn is not None else connect()
         self._conn.autocommit = True
+        self._transaction_depth = 0
 
     @classmethod
     def from_env(cls):
@@ -67,6 +75,33 @@ class DB:
         self.close()
         return False
 
+    @contextmanager
+    def transaction(self):
+        """Run a pipeline atomically, with savepoints for nested callers."""
+        outermost = self._transaction_depth == 0
+        savepoint = f"kg_sp_{self._transaction_depth}"
+        if outermost:
+            self._conn.autocommit = False
+        else:
+            self.execute(f"SAVEPOINT {savepoint}")
+        self._transaction_depth += 1
+        try:
+            yield self
+            if outermost:
+                self._conn.commit()
+            else:
+                self.execute(f"RELEASE SAVEPOINT {savepoint}")
+        except BaseException:
+            if outermost:
+                self._conn.rollback()
+            else:
+                self.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            raise
+        finally:
+            self._transaction_depth -= 1
+            if outermost:
+                self._conn.autocommit = True
+
     def _json(self, value: Any):
         if Json is None:
             raise RuntimeError("psycopg2 not installed")
@@ -80,9 +115,13 @@ class DB:
         values = [self._json(row[c]) for c in columns]
         placeholders = ", ".join(["%s"] * len(columns))
         updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in columns if c != key_field)
+        if updates:
+            conflict = f"DO UPDATE SET {updates}, updated_at = NOW()"
+        else:
+            conflict = "DO NOTHING"
         sql = (
             f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders}) "
-            f"ON CONFLICT ({key_field}) DO UPDATE SET {updates}, updated_at = NOW()"
+            f"ON CONFLICT ({key_field}) {conflict}"
         )
         with self._conn.cursor() as cur:
             cur.execute(sql, values)

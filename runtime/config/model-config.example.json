@@ -1,0 +1,14 @@
+{
+  "embedding": {
+    "provider": "api",
+    "model": "YOUR-EMBEDDING-MODEL",
+    "dimension": 1024,
+    "base_url": "https://YOUR-LLM-GATEWAY/v1",
+    "api_key_env": "BRAND_ATLAS_LLM_API_KEY"
+  },
+  "reranker": {
+    "provider": "api",
+    "model": "YOUR-RERANK-MODEL"
+  },
+  "_note": "provider 'api' uses the gateway; 'local' would use sentence-transformers (bge-m3) which requires HuggingFace download. Copy to model-config.local.json."
+}

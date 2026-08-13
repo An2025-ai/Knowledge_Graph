@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from runtime.db import check_connection, DB
@@ -124,7 +125,19 @@ def _load_run(module_path: str):
 def _run_pipeline(name: str, args: argparse.Namespace, db: DB) -> dict:
     run = _load_run(PIPELINES[name])
     print(f"\n=== L2 pipeline: {name} ===")
-    return run(db, args)
+    if getattr(args, "dry_run", False):
+        return run(db, args)
+    with db.transaction():
+        return run(db, args)
+
+
+def _propagate_result(name: str, result: dict, args: argparse.Namespace) -> None:
+    """Carry identifiers produced by one --all step into the next step."""
+    for key in ("requirement_id", "report_id"):
+        if result.get(key):
+            setattr(args, key, result[key])
+    if result.get("report_path"):
+        args.report = result["report_path"]
 
 
 def _build_scope_from_industry(args: argparse.Namespace) -> str:
@@ -187,19 +200,30 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(
                 "--all requires --report <file.md>, or --crawl / --requirement-id to have geo-research generate it"
             )
+        if not args.evidence and not os.environ.get("GEO_RESEARCH_EVIDENCE_PATH"):
+            parser.error(
+                "--all requires --evidence <index.json> or GEO_RESEARCH_EVIDENCE_PATH"
+            )
 
     results = {}
+    failed = False
     with DB.from_env() as db:
         for name in names:
             try:
-                results[name] = _run_pipeline(name, args, db)
-            except Exception as exc:  # noqa: BLE001 - report and continue
+                result = _run_pipeline(name, args, db)
+                if result.get("error"):
+                    raise RuntimeError(str(result["error"]))
+                results[name] = result
+                _propagate_result(name, result, args)
+            except Exception as exc:  # noqa: BLE001 - summarize the failed step
                 print(f"[executor] pipeline '{name}' FAILED: {exc}", file=sys.stderr)
                 results[name] = {"pipeline": name, "error": str(exc)}
+                failed = True
+                break
 
     print("\n=== L2 executor summary ===")
     print(json.dumps(results, ensure_ascii=False, indent=2, default=str))
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

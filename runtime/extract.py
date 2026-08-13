@@ -11,6 +11,8 @@ import json
 from typing import Any
 
 from runtime.llm_client import LLMClient, LLMConfig, extract_json_object
+from runtime.extraction_schema import validate_extraction
+from runtime.ontology_validator import validate_ontology
 
 
 def load_llm(config_path=None) -> LLMClient:
@@ -57,9 +59,62 @@ produces_outcome, achieves_outcome, owns_brand, offers, version_of, supersedes
 """
 
 
-def extract_entities_relations(client: LLMClient, text: str, *, max_tokens: int | None = None) -> dict[str, Any]:
-    """Run structured extraction over a chunk of text. Returns normalized dict."""
+def extract_entities_relations(
+    client: LLMClient,
+    text: str,
+    *,
+    max_tokens: int | None = None,
+    validate: bool = True,
+    retries: int = 1,
+    on_error=None,
+) -> dict[str, Any]:
+    """Run structured extraction over a chunk of text.
+
+    If `validate` is True, the LLM output is checked with Pydantic
+    (extraction_schema) and the ontology (ontology_validator). Invalid output is
+    repaired by re-prompting up to `retries` times; failures still return the
+    raw parsed dict so downstream can decide. `on_error` is called with a message
+    on each failed attempt (e.g. for metrics).
+    """
     result = extract_json(client, EXTRACTION_SYSTEM, text, max_tokens=max_tokens)
+    if not validate:
+        return _normalized(result)
+
+    for attempt in range(retries + 1):
+        validation_errors: list[str] = []
+        # Pydantic shape validation
+        try:
+            validated = validate_extraction(result)
+        except Exception as exc:  # noqa: BLE001 - Pydantic ValidationError
+            validation_errors.append(f"shape: {exc}")
+        else:
+            result = validated.model_dump(exclude_none=True)
+            # Ontology business-rule validation
+            v = validate_ontology(result)
+            if not v.ok:
+                validation_errors.extend(v.errors[:5])
+
+        if not validation_errors:
+            return _normalized(result)
+
+        if on_error:
+            on_error("; ".join(validation_errors))
+        if attempt >= retries:
+            return _normalized(result)
+        # Repair: tell the LLM what was invalid and ask it to fix.
+        repair_prompt = (
+            text
+            + "\n\n[校验失败] 上次输出字段类型/本体不合法。请修正后重新按 JSON 输出：\n- "
+            + "\n- ".join(validation_errors[:6])
+        )
+        try:
+            result = extract_json(client, EXTRACTION_SYSTEM, repair_prompt, max_tokens=max_tokens)
+        except Exception:
+            return _normalized(result)
+    return _normalized(result)
+
+
+def _normalized(result: dict) -> dict[str, Any]:
     return {
         "entities": result.get("entities", []),
         "relations": result.get("relations", []),

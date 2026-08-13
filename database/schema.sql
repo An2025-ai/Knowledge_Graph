@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS relation_type (
     description_en  TEXT,                                -- 英文描述
     subject_types   JSONB NOT NULL,                      -- 允许的主体实体类型数组
     object_types    JSONB NOT NULL,                      -- 允许的客体实体类型数组
-    cardinality     VARCHAR(20) NOT NULL,                -- one-to-one / one-to-many / many-to-many
+    cardinality     VARCHAR(20) NOT NULL,                -- one-to-one / one-to-many / many-to-one / many-to-many
     bidirectional   BOOLEAN NOT NULL DEFAULT FALSE,
     inverse_relation VARCHAR(50),                        -- 反向关系代码
     confidence_required BOOLEAN NOT NULL DEFAULT FALSE,
@@ -102,13 +102,17 @@ CREATE TABLE IF NOT EXISTS relation_type (
     status          VARCHAR(20) NOT NULL DEFAULT 'active',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT      chk_rt_cardinality CHECK (cardinality IN ('one-to-one', 'one-to-many', 'many-to-many')),
+    CONSTRAINT      chk_rt_cardinality CHECK (cardinality IN ('one-to-one', 'one-to-many', 'many-to-one', 'many-to-many')),
     CONSTRAINT      chk_rt_status CHECK (status IN ('active', 'inactive', 'deprecated'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_rt_relation_code ON relation_type(relation_code);
 
 COMMENT ON TABLE relation_type IS '关系类型定义，系统支持的 31 种关系类型';
+
+ALTER TABLE relation_type DROP CONSTRAINT IF EXISTS chk_rt_cardinality;
+ALTER TABLE relation_type ADD CONSTRAINT chk_rt_cardinality
+    CHECK (cardinality IN ('one-to-one', 'one-to-many', 'many-to-one', 'many-to-many'));
 
 -- ============================================================================
 -- 5. intent_definition — 意图定义

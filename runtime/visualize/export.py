@@ -62,6 +62,21 @@ def build_graph(entities, relations, statements=None):
     }
 
 
+def _relations_for_entity_ids(db, entity_ids):
+    """Return the induced relation subgraph for a selected entity set."""
+    ids = [str(value) for value in entity_ids]
+    if not ids:
+        return []
+    placeholders = ", ".join(["%s"] * len(ids))
+    return _query_rows(
+        db,
+        f"SELECT id, subject_id, relation_type, object_id, confidence, verification_status "
+        f"FROM relation WHERE status='active' "
+        f"AND subject_id IN ({placeholders}) AND object_id IN ({placeholders})",
+        tuple(ids + ids),
+    )
+
+
 def export_industry(db, industry_id=None, out_path=None) -> dict:
     """Export entities/relations tagged to an industry (L2)."""
     where = ""
@@ -75,53 +90,63 @@ def export_industry(db, industry_id=None, out_path=None) -> dict:
         "FROM entity" + where + " ORDER BY entity_type",
         params,
     )
-    relations = _query_rows(
-        db,
-        "SELECT id, subject_id, relation_type, object_id, confidence, verification_status "
-        "FROM relation WHERE status='active'",
-    )
+    relations = _relations_for_entity_ids(db, [e["id"] for e in entities])
     return write_output(build_graph(entities, relations), out_path)
 
 
 def export_brand(db, brand_id, tenant_id=None, out_path=None) -> dict:
     """Export entities/relations for a specific brand (L3)."""
-    # L3 entities are stored in `entity` with owner_brand/attributes JSONB brand key.
-    params = [brand_id]
-    brand_where = " (attributes->>'brand_id' = %s OR owner_brand = %s::uuid OR entity_id = %s)"
-    params.append(brand_id)
-    params.append(brand_id)
+    # Resolve UUID, business entity_id, or canonical brand name first. This
+    # avoids casting arbitrary user input to UUID.
+    brand_params = [brand_id, brand_id, brand_id]
+    tenant_clause = ""
     if tenant_id:
-        brand_where += " AND tenant_id = %s"
-        params.append(tenant_id)
+        tenant_clause = " AND tenant_id::text = %s"
+        brand_params.append(tenant_id)
+    brands = _query_rows(
+        db,
+        "SELECT id FROM entity WHERE entity_type='brand' "
+        "AND (id::text = %s OR entity_id = %s OR canonical_name = %s)"
+        + tenant_clause + " LIMIT 1",
+        tuple(brand_params),
+    )
+    if not brands:
+        raise ValueError(f"brand not found: {brand_id}")
+    brand_uuid = str(brands[0]["id"])
+    entity_params = [brand_uuid, brand_uuid, brand_uuid]
+    entity_tenant_clause = ""
+    if tenant_id:
+        entity_tenant_clause = " AND tenant_id::text = %s"
+        entity_params.append(tenant_id)
     entities = _query_rows(
         db,
         "SELECT id, entity_id, canonical_name, entity_type, status, scope "
-        "FROM entity WHERE" + brand_where + " ORDER BY entity_type",
-        tuple(params),
+        "FROM entity WHERE (id::text = %s OR owner_brand = %s::uuid "
+        "OR attributes->>'brand_id' = %s)" + entity_tenant_clause
+        + " ORDER BY entity_type",
+        tuple(entity_params),
     )
-    # relations where either endpoint is one of these brand entities
     ids = [str(e["id"]) for e in entities]
-    relations = []
+    relations = _relations_for_entity_ids(db, ids)
+    statements = []
     if ids:
         placeholders = ", ".join(["%s"] * len(ids))
-        relations = _query_rows(
-            db,
-            f"SELECT id, subject_id, relation_type, object_id, confidence, verification_status "
-            f"FROM relation WHERE status='active' "
-            f"AND (subject_id IN ({placeholders}) OR object_id IN ({placeholders}))",
-            tuple(ids + ids),
-        )
-    # statements/assertions for this brand (from statement or assertion tables)
-    statements = []
-    try:
         statements = _query_rows(
             db,
             "SELECT id, statement_text, statement_class, status FROM statement "
-            "WHERE status='active' AND (attributes->>'brand_id' = %s OR tenant_id = %s) LIMIT 200",
-            (brand_id, tenant_id or ""),
+            f"WHERE status='active' AND (subject_entity_id IN ({placeholders}) "
+            f"OR object_entity_id IN ({placeholders})) LIMIT 200",
+            tuple(ids + ids),
         )
-    except Exception:
-        pass
+    assertions = _query_rows(
+        db,
+        "SELECT id, statement_text, statement_class, status FROM assertion "
+        "WHERE status='active' AND brand_id = %s::uuid "
+        + ("AND tenant_id::text = %s " if tenant_id else "")
+        + "LIMIT 200",
+        (brand_uuid, tenant_id) if tenant_id else (brand_uuid,),
+    )
+    statements.extend(assertions)
     return write_output(build_graph(entities, relations, statements), out_path)
 
 

@@ -1,0 +1,89 @@
+"""Ontology validation for LLM extraction output (OPTIMIZATION_TECH_PLAN.md §4.3).
+
+Applies business-rule checks against the L1 ontology after Pydantic shape
+validation:
+  - entity type in ontology
+  - relation type in ontology
+  - relation domain/range valid
+  - statement_class in the four allowed classes
+  - confidence in [0,1]
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+from runtime.ontology import get_ontology
+
+
+@dataclass
+class ValidationResult:
+    ok: bool = True
+    errors: list[str] = field(default_factory=list)
+
+    def add(self, msg: str) -> None:
+        self.ok = False
+        self.errors.append(msg)
+
+
+class OntologyValidator:
+    def __init__(self, ontology=None) -> None:
+        self.ontology = ontology or get_ontology()
+
+    def validate_entity(self, entity: dict) -> list[str]:
+        errors: list[str] = []
+        etype = entity.get("type")
+        if not self.ontology.is_valid_entity_type(etype):
+            errors.append(f"unknown entity type '{etype}'")
+        return errors
+
+    def validate_relation(self, relation: dict, entity_by_id: dict[str, dict]) -> list[str]:
+        errors: list[str] = []
+        rtype = relation.get("relation")
+        if not self.ontology.is_valid_relation_type(rtype):
+            errors.append(f"unknown relation type '{rtype}'")
+            return errors
+        subj_id = relation.get("subject")
+        obj_id = relation.get("object")
+        subj = entity_by_id.get(subj_id)
+        obj = entity_by_id.get(obj_id)
+        if subj is None:
+            errors.append(f"relation {rtype}: subject '{subj_id}' not found")
+        if obj is None:
+            errors.append(f"relation {rtype}: object '{obj_id}' not found")
+        if subj and obj:
+            subject_type = subj.get("type")
+            object_type = obj.get("type")
+            if not self.ontology.is_valid_domain_range(rtype, subject_type, object_type):
+                errors.append(
+                    f"relation {rtype}: domain/range invalid "
+                    f"({subject_type} -> {object_type})"
+                )
+        conf = relation.get("confidence")
+        if conf is not None and not (0.0 <= conf <= 1.0):
+            errors.append(f"relation {rtype}: confidence {conf} out of [0,1]")
+        return errors
+
+    def validate_result(self, payload: dict[str, Any]) -> ValidationResult:
+        """Validate the full extracted payload (entities/relations/statements)."""
+        result = ValidationResult()
+        entities = payload.get("entities", [])
+        relations = payload.get("relations", [])
+        statements = payload.get("statements", [])
+        entity_by_id = {e.get("id"): e for e in entities}
+
+        for e in entities:
+            for err in self.validate_entity(e):
+                result.add(f"entity {e.get('id')}: {err}")
+        for r in relations:
+            for err in self.validate_relation(r, entity_by_id):
+                result.add(f"relation {r.get('subject')}-{r.get('relation')}: {err}")
+        for s in statements:
+            sc = s.get("statement_class")
+            if sc and not self.ontology.is_valid_statement_class(sc):
+                result.add(f"statement: invalid statement_class '{sc}'")
+        return result
+
+
+def validate_ontology(payload: dict[str, Any], ontology=None) -> ValidationResult:
+    return OntologyValidator(ontology).validate_result(payload)

@@ -1,0 +1,44 @@
+# Brand Atlas — 词典：组织后缀（candidate_pre_extraction 使用）
+# 版本: 1.0.0
+# 用途: 识别组织/公司名候选
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-12
+  status: active
+  scope: brand
+  layer: L3
+
+# 中文组织后缀
+zh_suffixes:
+  - 有限公司
+  - 股份有限公司
+  - 集团
+  - 科技
+  - 信息技术
+  - 网络科技
+  - 软件
+  - 控股
+
+# 英文组织后缀
+en_suffixes:
+  - Inc
+  - Inc.
+  - Corporation
+  - Corp
+  - Corp.
+  - LLC
+  - Ltd
+  - Limited
+  - LLC
+  - Group
+  - Technologies
+  - Technology
+  - Software
+  - Systems
+
+# 组织名正则（中文）
+zh_pattern: '[一-龥]{2,20}(?:有限公司|股份有限公司|集团|科技|信息技术|控股)'
+
+# 组织名正则（英文）
+en_pattern: '[A-Za-z][A-Za-z0-9 ]{1,30}(?:Inc|Corporation|Corp|LLC|Ltd|Limited|Group|Technologies|Technology|Software|Systems)'

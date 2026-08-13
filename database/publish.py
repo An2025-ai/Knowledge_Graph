@@ -725,6 +725,9 @@ def validate_all():
             if path.startswith("common_knowledge/tasks/")
         }
         allowed_non_entity_types = {"intent", "assertion"}
+        allowed_cardinalities = {
+            "one-to-one", "one-to-many", "many-to-one", "many-to-many"
+        }
 
         for label, items, key in (
             ("entity type", entities, "type"),
@@ -738,6 +741,10 @@ def validate_all():
                 errors.append(f"重复 {label}: {', '.join(duplicates)}")
 
         for relation in relations:
+            if relation.get("cardinality") not in allowed_cardinalities:
+                errors.append(
+                    f"未知关系基数 {relation['relation']}: {relation.get('cardinality')}"
+                )
             for field in ("subject_types", "object_types"):
                 for type_code in relation.get(field, []):
                     if type_code not in entity_types | allowed_non_entity_types:

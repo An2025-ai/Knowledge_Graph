@@ -9,3 +9,11 @@ jupyter>=1.0,<2
 ipykernel>=6.29
 pyvis>=0.3.2
 networkx>=3.2
+
+# Optimization (OPTIMIZATION_TECH_PLAN.md)
+# Strict extraction contracts + rule/dictionary pre-extraction + pgvector
+pydantic>=2.0
+regex>=2024.0.0
+pyahocorasick>=2.0
+pgvector>=0.3.0
+numpy>=1.26

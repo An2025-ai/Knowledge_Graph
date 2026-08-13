@@ -331,9 +331,24 @@ CREATE INDEX IF NOT EXISTS idx_assertion_access
 CREATE OR REPLACE FUNCTION brand_l3_block_assertion_update()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- Candidate rows are work-in-progress and may receive classification,
+    -- verification metadata, or the final candidate -> active transition.
+    -- Once active, every revision must be appended with supersedes_id.
+    IF OLD.status = 'candidate'
+       AND NEW.status IN ('candidate', 'active')
+       AND NEW.id = OLD.id
+       AND NEW.tenant_id = OLD.tenant_id
+       AND NEW.brand_id = OLD.brand_id
+       AND NEW.subject_id IS NOT DISTINCT FROM OLD.subject_id
+       AND NEW.predicate IS NOT DISTINCT FROM OLD.predicate
+       AND NEW.object_entity_id IS NOT DISTINCT FROM OLD.object_entity_id
+       AND NEW.object_value IS NOT DISTINCT FROM OLD.object_value
+       AND NEW.statement_text = OLD.statement_text
+       AND NEW.supersedes_id IS NOT DISTINCT FROM OLD.supersedes_id THEN
+        RETURN NEW;
+    END IF;
     RAISE EXCEPTION
-        'assertion 表不允许原地 UPDATE：所有修订必须 append + supersedes (PK=%s)',
-        OLD.id;
+        'active assertion 不允许原地 UPDATE：修订必须 append + supersedes (PK=%s)', OLD.id;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -341,6 +356,13 @@ DROP TRIGGER IF EXISTS trg_assertion_no_update ON assertion;
 CREATE TRIGGER trg_assertion_no_update
     BEFORE UPDATE ON assertion
     FOR EACH ROW EXECUTE FUNCTION brand_l3_block_assertion_update();
+
+-- L2 migration defines the shared outbox function. Only active assertions are
+-- projected; candidate changes remain private to the PostgreSQL review flow.
+DROP TRIGGER IF EXISTS trg_assertion_graph_outbox ON assertion;
+CREATE TRIGGER trg_assertion_graph_outbox
+    AFTER INSERT OR UPDATE OR DELETE ON assertion
+    FOR EACH ROW EXECUTE FUNCTION kg_enqueue_graph_change();
 
 -- ============================================================================
 -- updated_at 触发器（写入型审计表，允许 append）

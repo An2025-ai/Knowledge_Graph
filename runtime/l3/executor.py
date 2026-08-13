@@ -28,6 +28,7 @@ PIPELINES = [
     "original_file_gate",
     "layout_aware_parsing",
     "semantic_chunking",
+    "candidate_pre_extraction",
     "candidate_extraction",
     "entity_resolution",
     "l2_mapping",
@@ -40,6 +41,7 @@ PIPELINES = [
 REQUIRE_DOCUMENT_ID = {
     "layout_aware_parsing",
     "semantic_chunking",
+    "candidate_pre_extraction",
     "candidate_extraction",
 }
 
@@ -62,7 +64,11 @@ def load_pipeline(name: str):
 def run_one(db: DB, name: str, args) -> dict[str, Any]:
     run = load_pipeline(name)
     print(f"\n=== L3 pipeline: {name} ===")
-    result = run(db, args)
+    if getattr(args, "dry_run", False):
+        result = run(db, args)
+    else:
+        with db.transaction():
+            result = run(db, args)
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     return result
 
@@ -129,9 +135,18 @@ def main(argv: list[str] | None = None) -> int:
 
     with DB.from_env() as db:
         results = {}
+        failed = False
         for name in names:
-            result = run_one(db, name, args)
-            results[name] = result
+            try:
+                result = run_one(db, name, args)
+                if result.get("error"):
+                    raise RuntimeError(str(result["error"]))
+                results[name] = result
+            except Exception as exc:  # noqa: BLE001 - summarize failed pipeline
+                print(f"[executor] pipeline '{name}' FAILED: {exc}", file=sys.stderr)
+                results[name] = {"pipeline": name, "error": str(exc)}
+                failed = True
+                break
             # --all: chain the auto document_id/source_id we already set; also
             # carry the content hash forward for the final snapshot.
             if args.all and name == "source_registration":
@@ -144,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
                                     "promoted", "queued") if k in res]
                 brief = {k: res[k] for k in keys}
                 print(f"  {name}: {brief or res.get('status', 'ok')}")
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@
 
 本说明涵盖知识图谱的完整使用流程：理解四层架构、浏览知识定义、修改与发布知识、数据库接入、L2 行业层的使用，以及 L3 品牌认知层的使用。
 
+> 本文保留概念说明。当前执行器的准确输入输出、CLI、限制和图谱阶段判断以 [DATA_FLOW_AND_USAGE.md](DATA_FLOW_AND_USAGE.md) 为准。
+
 ---
 
 ## 1. 系统总体架构
@@ -16,7 +18,7 @@
 ├──────────────┬──────────────────────────────────────────────────┤
 │ L1 通用知识层 │ 定义对象/关系/意图/任务/证据规则（方法与规范）        │
 │ L2 行业知识层 │ 实例化共享行业坐标系（品类/角色/问题/能力/主题）      │
-│ L3 品牌认知层 │ 契约/样例已定义；数据处理执行器和图投影尚未实现       │
+│ L3 品牌认知层 │ 十步执行器已实现；真实数据、治理门禁和图投影需集成验收 │
 │ L4 动态观测层 │ 保存搜索和 AI 回答的时序结果（未实现，仅定义对象）     │
 └──────────────┴──────────────────────────────────────────────────┘
 ```
@@ -360,7 +362,7 @@ proof_and_case, service_and_poc, messaging_and_content, competition_mapping
 
 `brand_knowledge/database/brand_l3_migration.sql` 定义了 11 张业务表（tenant、brand_workspace、assertion、assertion_evidence、brand_mapping、claim_policy 等）+ RLS。这是与 L1 定义注册库（`database/schema.sql`）**独立**的迁移。
 
-该迁移依赖尚未提供的 L2 基础表（`entity`、`evidence`、`document` 等），当前不能在只初始化 L1 Schema 的数据库上直接执行。需要先实现 L2 migration，随后才能执行 L3 migration 和 Neo4j 投影。
+该迁移依赖 `runtime/migrations/l2_migration.sql` 提供的 `entity`、`evidence`、`document` 等基础表。使用 `python -m runtime.migrations migrate` 按 L1 → L2 → L3 顺序初始化，随后可以运行 Neo4j 投影。
 
 ### 5.7 L3 IS NOT
 

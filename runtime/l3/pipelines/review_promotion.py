@@ -7,8 +7,8 @@ moves verified brand knowledge from ``candidate`` to ``active``. It:
      (absolute claims, certification/performance numbers, competitive claims,
      internal->public transitions, L2 new mappings),
   2. Creates ``review_queue`` rows for every forced-review assertion,
-  3. Promotes approved assertions to ``status='active'`` (in-place via the
-     session-scoped trigger bypass, mirroring the append+supersedes intent),
+  3. Promotes approved candidate assertions to ``status='active'``; revisions
+     after activation remain append+supersedes only,
   4. Creates a ``brand_snapshot`` row summarising current entity / assertion /
      conflict counts for the brand.
 

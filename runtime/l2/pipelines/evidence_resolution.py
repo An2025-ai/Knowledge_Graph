@@ -17,6 +17,7 @@ support_status='insufficient' so downstream promotion can block them.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from typing import Any
@@ -83,6 +84,60 @@ def _source_uuid(db: DB, source_id: str) -> str | None:
     return rows[0]["id"] if rows else None
 
 
+def _ensure_evidence(db: DB, entry: dict, dry_run: bool) -> str | None:
+    """Resolve or create a traceable evidence row from an index entry."""
+    evidence_id = entry.get("evidence_id")
+    quote = entry.get("quote") or entry.get("evidence_text")
+    if not evidence_id or not quote:
+        return None
+    existing = _evidence_uuid(db, evidence_id)
+    if existing or dry_run:
+        return existing or f"dry:{evidence_id}"
+
+    source_uuid = None
+    source_id = entry.get("source_id")
+    if source_id:
+        source_uuid = _source_uuid(db, source_id)
+        if not source_uuid:
+            db.upsert(
+                "source_instance",
+                {
+                    "source_id": source_id,
+                    "industry_id": entry.get("industry_id"),
+                    "source_class": entry.get("source_class"),
+                    "source_type": entry.get("source_type") or "official",
+                    "publisher": entry.get("publisher"),
+                    "title": entry.get("title") or source_id,
+                    "canonical_url": entry.get("url"),
+                    "access_level": entry.get("access_level") or "public",
+                    # Approval is a database-side governance decision. An
+                    # imported evidence file may not self-authorize a source.
+                    "approval_status": "pending",
+                    "l2_enabled": False,
+                    "status": "registered",
+                },
+                key_field="source_id",
+            )
+            source_uuid = _source_uuid(db, source_id)
+
+    db.upsert(
+        "evidence",
+        {
+            "evidence_id": evidence_id,
+            "source_id": source_uuid,
+            "content_path": entry.get("content_path"),
+            "page_ref": entry.get("page_ref"),
+            "quote": quote,
+            "content_hash": entry.get("content_hash")
+            or hashlib.sha256(quote.encode("utf-8")).hexdigest(),
+            "access_level": entry.get("access_level") or "public",
+            "support_status": entry.get("support_status") or "insufficient",
+        },
+        key_field="evidence_id",
+    )
+    return _evidence_uuid(db, evidence_id)
+
+
 def run(db: DB, args) -> dict[str, Any]:
     """Resolve citation labels to evidence for report candidates."""
     evidence_path = (
@@ -116,23 +171,26 @@ def run(db: DB, args) -> dict[str, Any]:
                     "support_reason": "no evidence record found for citation label",
                 }
             else:
-                support_status = entry.get("support_status", "directly_supports")
+                evidence_uuid = _ensure_evidence(db, entry, dry_run)
+                support_status = entry.get("support_status") or "insufficient"
+                if not evidence_uuid:
+                    support_status = "insufficient"
+                    flagged_unresolved += 1
                 resolution = {
                     "report_candidate_id": cand["id"],
                     "citation_label": label,
                     "original_url": entry.get("url"),
-                    "access_status": entry.get("access_status", "verified"),
+                    "access_status": entry.get("access_status", "verified")
+                    if evidence_uuid else "unresolved",
                     "evidence_location": entry.get("page_ref") or entry.get("content_path"),
                     "support_status": support_status,
                     "support_reason": entry.get("support_reason")
-                    or f"evidence located for {label}",
+                    or (f"evidence located for {label}" if evidence_uuid
+                        else "evidence_id and quote/evidence_text are required"),
                     "verifier_version": "l2-evidence-resolution-1.0.0",
                 }
-                # Resolve evidence_id / source_id to UUID FKs when available.
-                if entry.get("evidence_id"):
-                    ev_uuid = _evidence_uuid(db, entry["evidence_id"])
-                    if ev_uuid:
-                        resolution["evidence_id"] = ev_uuid
+                if evidence_uuid and not str(evidence_uuid).startswith("dry:"):
+                    resolution["evidence_id"] = evidence_uuid
                 if entry.get("source_id"):
                     src_uuid = _source_uuid(db, entry["source_id"])
                     if src_uuid:
@@ -144,7 +202,13 @@ def run(db: DB, args) -> dict[str, Any]:
                     "INSERT INTO citation_resolution (report_candidate_id, citation_label, "
                     "source_id, evidence_id, original_url, access_status, evidence_location, "
                     "support_status, support_reason, verifier_version) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                    "ON CONFLICT (report_candidate_id, citation_label) DO UPDATE SET "
+                    "source_id=EXCLUDED.source_id, evidence_id=EXCLUDED.evidence_id, "
+                    "original_url=EXCLUDED.original_url, access_status=EXCLUDED.access_status, "
+                    "evidence_location=EXCLUDED.evidence_location, "
+                    "support_status=EXCLUDED.support_status, support_reason=EXCLUDED.support_reason, "
+                    "verifier_version=EXCLUDED.verifier_version",
                     (resolution.get("report_candidate_id"), resolution.get("citation_label"),
                      resolution.get("source_id"), resolution.get("evidence_id"),
                      resolution.get("original_url"), resolution.get("access_status"),

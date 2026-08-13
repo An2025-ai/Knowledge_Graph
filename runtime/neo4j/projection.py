@@ -63,6 +63,24 @@ RELATION_LABEL_MAP = {
     "owns_brand": "OWNS_BRAND",
     "version_of": "VERSION_OF",
     "supersedes": "SUPERSEDES",
+    "targets": "TARGETS",
+    "has_topic": "HAS_TOPIC",
+    "mentions": "MENTIONS",
+    "expresses_intent": "EXPRESSES_INTENT",
+    "cites": "CITES",
+    "supports": "SUPPORTS",
+    "contradicts": "CONTRADICTS",
+    "derived_from": "DERIVED_FROM",
+    "recommended_for": "RECOMMENDED_FOR",
+    "has_content_gap": "HAS_CONTENT_GAP",
+    "alternative_to": "ALTERNATIVE_TO",
+    "partner_of": "PARTNER_OF",
+    "has_decision_factor": "HAS_DECISION_FACTOR",
+    "capability_supports_use_case": "CAPABILITY_SUPPORTS_USE_CASE",
+    "requires_capability": "REQUIRES_CAPABILITY",
+    "performs": "PERFORMS",
+    "produces_outcome": "PRODUCES_OUTCOME",
+    "achieves_outcome": "ACHIEVES_OUTCOME",
 }
 
 
@@ -94,11 +112,11 @@ class ProjectionService:
     def init_schema(self):
         if not CYPHER_INIT.exists():
             raise FileNotFoundError(f"cypher_init.cypher not found: {CYPHER_INIT}")
-        statements = [
-            s.strip()
-            for s in CYPHER_INIT.read_text(encoding="utf-8").split(";")
-            if s.strip() and not s.strip().startswith("//")
-        ]
+        cypher = "\n".join(
+            line for line in CYPHER_INIT.read_text(encoding="utf-8").splitlines()
+            if not line.lstrip().startswith("//")
+        )
+        statements = [s.strip() for s in cypher.split(";") if s.strip()]
         for stmt in statements:
             self.run(stmt)
         print("[neo4j] schema initialized")
@@ -133,25 +151,30 @@ class ProjectionService:
         )
 
     def merge_assertion(self, assertion_id, subject_id, object_id, predicate,
-                        statement_text, statement_class, tenant_id=None, access_level=None):
+                        statement_text, statement_class, tenant_id=None, access_level=None,
+                        source_table="statement"):
         self.run(
             "MERGE (n:Assertion {id: $id}) "
             "SET n.predicate = $predicate, n.statement_text = $text, "
-            "n.statement_class = $cls, n.tenant_id = $tenant, n.access_level = $access",
+            "n.statement_class = $cls, n.tenant_id = $tenant, n.access_level = $access, "
+            "n.source_table = $source_table",
             {"id": str(assertion_id), "predicate": predicate, "text": statement_text,
-             "cls": statement_class, "tenant": tenant_id and str(tenant_id), "access": access_level},
+             "cls": statement_class, "tenant": tenant_id and str(tenant_id),
+             "access": access_level, "source_table": source_table},
         )
         # SUBJECT / OBJECT links
-        self.run(
-            "MATCH (a:Assertion {id: $aid}), (e:Entity {id: $eid}) "
-            "MERGE (a)-[:SUBJECT]->(e)",
-            {"aid": str(assertion_id), "eid": str(subject_id)},
-        )
-        self.run(
-            "MATCH (a:Assertion {id: $aid}), (e:Entity {id: $eid}) "
-            "MERGE (a)-[:OBJECT]->(e)",
-            {"aid": str(assertion_id), "eid": str(object_id)},
-        )
+        if subject_id:
+            self.run(
+                "MATCH (a:Assertion {id: $aid}), (e:Entity {id: $eid}) "
+                "MERGE (a)-[:SUBJECT]->(e)",
+                {"aid": str(assertion_id), "eid": str(subject_id)},
+            )
+        if object_id:
+            self.run(
+                "MATCH (a:Assertion {id: $aid}), (e:Entity {id: $eid}) "
+                "MERGE (a)-[:OBJECT]->(e)",
+                {"aid": str(assertion_id), "eid": str(object_id)},
+            )
 
     def merge_evidence(self, evidence_id, source_id=None, quote=None):
         self.run(
@@ -177,9 +200,34 @@ class ProjectionService:
             {"id": str(report_id), "title": title},
         )
 
+    def delete_aggregate(self, aggregate_type, aggregate_id):
+        labels = {
+            "entity": "Entity",
+            "statement": "Assertion",
+            "assertion": "Assertion",
+            "evidence": "Evidence",
+            "source": "Source",
+            "report": "Report",
+        }
+        if aggregate_type == "relation":
+            self.run("MATCH ()-[r {id: $id}]->() DELETE r", {"id": str(aggregate_id)})
+            return
+        label = labels.get(aggregate_type)
+        if label:
+            self.run(
+                f"MATCH (n:{label} {{id: $id}}) DETACH DELETE n",
+                {"id": str(aggregate_id)},
+            )
+
 
 def full_resync(pg_db, proj: ProjectionService):
     """Full rebuild from PostgreSQL (entity + relation + statement/assertion)."""
+    proj.run(
+        "MATCH (n) WHERE any(label IN labels(n) WHERE label IN "
+        "['Entity','Assertion','Evidence','Source','Report','Content','Conflict']) "
+        "DETACH DELETE n"
+    )
+    print("[projection] cleared previous projection")
     entities = pg_db.query(
         "SELECT id, entity_type, canonical_name, tenant_id, scope, status FROM entity WHERE status='active'"
     )
@@ -197,16 +245,26 @@ def full_resync(pg_db, proj: ProjectionService):
                             r.get("tenant_id"), r.get("confidence"), r.get("verification_status"))
     print(f"[projection] merged {len(relations)} relations")
 
-    assertions = pg_db.query(
+    statements = pg_db.query(
         "SELECT id, subject_entity_id, object_entity_id, predicate, statement_text, "
         "statement_class, tenant_id, access_level FROM statement WHERE status='active'"
     )
-    for s in assertions:
-        if s.get("subject_entity_id") and s.get("object_entity_id"):
-            proj.merge_assertion(s["id"], s["subject_entity_id"], s["object_entity_id"],
-                                 s.get("predicate"), s.get("statement_text"),
-                                 s.get("statement_class"), s.get("tenant_id"), s.get("access_level"))
-    print(f"[projection] merged {len(assertions)} assertions")
+    for s in statements:
+        proj.merge_assertion(s["id"], s.get("subject_entity_id"), s.get("object_entity_id"),
+                             s.get("predicate"), s.get("statement_text"),
+                             s.get("statement_class"), s.get("tenant_id"), s.get("access_level"),
+                             source_table="statement")
+
+    brand_assertions = pg_db.query(
+        "SELECT id, subject_id, object_entity_id, predicate, statement_text, "
+        "statement_class, tenant_id, access_level FROM assertion WHERE status='active'"
+    )
+    for a in brand_assertions:
+        proj.merge_assertion(a["id"], a.get("subject_id"), a.get("object_entity_id"),
+                             a.get("predicate"), a.get("statement_text"),
+                             a.get("statement_class"), a.get("tenant_id"), a.get("access_level"),
+                             source_table="assertion")
+    print(f"[projection] merged {len(statements) + len(brand_assertions)} assertions")
 
 
 def process_outbox(pg_db, proj: ProjectionService, limit: int = 100):
@@ -221,7 +279,9 @@ def process_outbox(pg_db, proj: ProjectionService, limit: int = 100):
         agg_id = ev["aggregate_id"]
         payload = ev.get("payload") or {}
         try:
-            if agg_type == "entity":
+            if ev.get("event_type") == "delete":
+                proj.delete_aggregate(agg_type, agg_id)
+            elif agg_type == "entity":
                 proj.merge_entity(agg_id, payload.get("entity_type"), payload.get("canonical_name"),
                                   payload.get("tenant_id"), payload.get("scope"), payload.get("status"))
             elif agg_type == "relation":
@@ -232,7 +292,12 @@ def process_outbox(pg_db, proj: ProjectionService, limit: int = 100):
                 proj.merge_assertion(agg_id, payload.get("subject_entity_id"), payload.get("object_entity_id"),
                                      payload.get("predicate"), payload.get("statement_text"),
                                      payload.get("statement_class"), payload.get("tenant_id"),
-                                     payload.get("access_level"))
+                                     payload.get("access_level"), source_table="statement")
+            elif agg_type == "assertion":
+                proj.merge_assertion(agg_id, payload.get("subject_id"), payload.get("object_entity_id"),
+                                     payload.get("predicate"), payload.get("statement_text"),
+                                     payload.get("statement_class"), payload.get("tenant_id"),
+                                     payload.get("access_level"), source_table="assertion")
             elif agg_type == "evidence":
                 proj.merge_evidence(agg_id, payload.get("source_id"), payload.get("quote"))
             elif agg_type == "source":
@@ -265,8 +330,9 @@ def main() -> int:
     proj = ProjectionService()
     try:
         if args.check:
-            print("[neo4j] OK" if proj.check() else "[neo4j] FAILED")
-            return 0 if proj.check() else 1
+            connected = proj.check()
+            print("[neo4j] OK" if connected else "[neo4j] FAILED")
+            return 0 if connected else 1
         if args.init:
             proj.init_schema()
         if args.full or args.process_outbox:

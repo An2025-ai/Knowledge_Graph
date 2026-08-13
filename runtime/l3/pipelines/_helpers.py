@@ -11,16 +11,13 @@ is common to all of them:
   Security.
 - ``upsert_entity``: insert-or-reuse an ``entity`` row keyed by the L2/L3
   business-unique index ``(tenant_id, entity_type, canonical_name, owner_brand)``.
-- ``assertion_updates_allowed``: a context manager that temporarily disables
-  non-replica triggers (including L3's append+supersedes ``trg_assertion_no_update``)
-  for the current session only, so classification / promotion may refine an
-  existing assertion row in place.
+- ``update_assertion``: refine a work-in-progress candidate assertion. The
+  database trigger still blocks in-place changes after activation.
 """
 from __future__ import annotations
 
 import hashlib
 import uuid
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
@@ -31,13 +28,15 @@ from runtime.db import DB
 # Brand / tenant context resolution
 # ---------------------------------------------------------------------------
 
-def _tenant_id(db: DB, tenant_key: str, tenant_name: str) -> str:
+def _tenant_id(db: DB, tenant_key: str, tenant_name: str, *, create: bool = True) -> str:
     """Find an existing tenant by tenant_key, else create it."""
     rows = db.query(
         "SELECT id FROM tenant WHERE tenant_key = %s LIMIT 1", (tenant_key,)
     )
     if rows:
         return rows[0]["id"]
+    if not create:
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, f"brand-atlas:tenant:{tenant_key}"))
     tid = db.insert_returning_id(
         "INSERT INTO tenant (id, name, tenant_key, status) "
         "VALUES (uuid_generate_v4(), %s, %s, 'active') RETURNING id",
@@ -46,7 +45,7 @@ def _tenant_id(db: DB, tenant_key: str, tenant_name: str) -> str:
     return tid
 
 
-def _brand_entity_id(db: DB, tenant_id: str, brand_key: str) -> str:
+def _brand_entity_id(db: DB, tenant_id: str, brand_key: str, *, create: bool = True) -> str:
     """Find or create the brand ``entity`` row for the tenant.
 
     The brand is stored as an ``entity`` of type ``brand`` scoped to the tenant
@@ -55,11 +54,13 @@ def _brand_entity_id(db: DB, tenant_id: str, brand_key: str) -> str:
     rows = db.query(
         "SELECT id FROM entity "
         "WHERE tenant_id = %s AND entity_type = 'brand' AND canonical_name = %s "
-        "AND COALESCE(owner_brand, '') = '' LIMIT 1",
+        "AND owner_brand IS NULL LIMIT 1",
         (tenant_id, brand_key),
     )
     if rows:
         return rows[0]["id"]
+    if not create:
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, f"brand-atlas:brand:{tenant_id}:{brand_key}"))
     bid = db.insert_returning_id(
         "INSERT INTO entity "
         "(id, tenant_id, brand_id, entity_id, entity_type, canonical_name, "
@@ -111,13 +112,15 @@ def resolve_brand_context(db: DB, args) -> dict[str, Any]:
     tenant_key = getattr(args, "tenant", None) or getattr(args, "tenant_key", None) or "default"
     tenant_name = getattr(args, "tenant_name", None) or f"Tenant {tenant_key}"
 
-    tid = _tenant_id(db, str(tenant_key), tenant_name)
-    brand_id = _brand_entity_id(db, tid, brand_key)
+    dry_run = bool(getattr(args, "dry_run", False))
+    tid = _tenant_id(db, str(tenant_key), tenant_name, create=not dry_run)
+    brand_id = _brand_entity_id(db, tid, brand_key, create=not dry_run)
 
     # L3 tables are RLS-protected on tenant_id; set the session tenant.
     db.execute("SET app.tenant_id = %s", (tid,))
 
-    _ensure_brand_workspace(db, tid, brand_id, args)
+    if not dry_run:
+        _ensure_brand_workspace(db, tid, brand_id, args)
 
     return {
         "tenant_id": tid,
@@ -144,7 +147,8 @@ def upsert_entity(
     """Return ``(entity_uuid, entity_id)``, reusing an existing row or inserting.
 
     The reuse key is the L2/L3 business-unique index
-    ``(tenant_id, entity_type, canonical_name, COALESCE(owner_brand, ''))``.
+    ``(tenant_id, entity_type, canonical_name, owner_brand)`` with null-safe
+    equality for the optional owner UUID.
     When creating, ``owner_brand`` defaults to ``brand_id`` so brand-local
     entities are kept distinct from shared L2 entities.
     """
@@ -152,7 +156,7 @@ def upsert_entity(
     rows = db.query(
         "SELECT id, entity_id FROM entity "
         "WHERE tenant_id = %s AND entity_type = %s AND canonical_name = %s "
-        "AND COALESCE(owner_brand, '') = COALESCE(%s, '') LIMIT 1",
+        "AND owner_brand IS NOT DISTINCT FROM %s LIMIT 1",
         (tenant_id, entity_type, canonical_name, owner),
     )
     if rows:
@@ -167,6 +171,8 @@ def upsert_entity(
         candidate = f"{candidate}_{uuid.uuid4().hex[:4]}"
 
     aliases_json = aliases or []
+    import json as _json
+
     eid = db.insert_returning_id(
         "INSERT INTO entity "
         "(id, tenant_id, brand_id, entity_id, entity_type, canonical_name, "
@@ -174,7 +180,7 @@ def upsert_entity(
         "VALUES (uuid_generate_v4(), %s, %s, %s, %s, %s, %s, 'local', 'active', '1.0.0', %s::jsonb) "
         "RETURNING id",
         (tenant_id, owner, candidate, entity_type, canonical_name, owner,
-         {"aliases": aliases_json}),
+         _json.dumps({"aliases": aliases_json}, ensure_ascii=False)),
     )
     # record aliases
     for alias in aliases_json:
@@ -188,36 +194,20 @@ def upsert_entity(
 
 
 # ---------------------------------------------------------------------------
-# Assertion in-place updates (bypass the append+supersedes trigger) for the
-# classification / promotion pipelines. Session-scoped only.
+# Candidate assertion refinement. The database trigger permits updates only
+# while an assertion is still a candidate; active assertions remain append-only.
 # ---------------------------------------------------------------------------
 
-@contextmanager
-def assertion_updates_allowed(db: DB):
-    """Temporarily allow in-place assertion UPDATEs for this session.
-
-    The L3 migration installs ``trg_assertion_no_update`` which raises on any
-    ``UPDATE`` to ``assertion`` (append + supersedes only). Classification and
-    promotion need to backfill ``assertion_kind`` / ``status`` in place, so we
-    set ``session_replication_role = replica`` for the scope of the context
-    manager (disables non-replica triggers for this session only) and restore it
-    afterwards.
-    """
-    db.execute("SET session_replication_role = replica")
-    try:
-        yield
-    finally:
-        db.execute("SET session_replication_role = origin")
-
-
 def update_assertion(db: DB, assertion_id: str, **fields: Any) -> None:
-    """Update a single assertion row in place (trigger bypassed)."""
+    """Refine a candidate assertion; active rows are blocked by the DB trigger."""
     if not fields:
         return
     cols = ", ".join(f"{k} = %s" for k in fields)
     params = list(fields.values()) + [assertion_id]
-    with assertion_updates_allowed(db):
-        db.execute(f"UPDATE assertion SET {cols} WHERE id = %s", tuple(params))
+    db.execute(
+        f"UPDATE assertion SET {cols} WHERE id = %s AND status = 'candidate'",
+        tuple(params),
+    )
 
 
 # ---------------------------------------------------------------------------

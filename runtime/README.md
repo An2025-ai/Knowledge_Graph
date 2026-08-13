@@ -22,6 +22,11 @@ pip install -r runtime/requirements.txt # neo4j driver 等
 #    把 API key 设到环境变量：
 #      Windows: $env:BRAND_ATLAS_LLM_API_KEY = "你的key"
 #      Linux:   export BRAND_ATLAS_LLM_API_KEY="你的key"
+
+# 4) （优化）本地 embedding 模型 bge-m3（自动经 hf-mirror 下载）
+#    pip install -r runtime/requirements-local-models.txt
+#    配置 runtime/config/model-config.local.json（provider=local, BAAI/bge-m3）
+#    embeddings.py 已默认 HF_ENDPOINT=https://hf-mirror.com（huggingface.co 不可达时）
 ```
 
 ## 2. 初始化数据库
@@ -29,8 +34,12 @@ pip install -r runtime/requirements.txt # neo4j driver 等
 ```bash
 export KG_DB_HOST=localhost KG_DB_PORT=5432 KG_DB_NAME=brand_atlas_kg KG_DB_USER=kg_admin KG_DB_PASSWORD=kg_admin_password
 
-# 一键依次跑 L1 → L2 → L3 迁移
+# 一键依次跑 L1 → L2 → L3 → vector(pgvector) 迁移
 python -m runtime.migrations migrate
+
+# 发布 L1 类型/关系/策略注册数据（migration 只建表，不填数据）
+python database/publish.py --validate
+python database/publish.py
 
 # 或单独跑某层
 python -m runtime.migrations migrate --only l2
@@ -68,7 +77,10 @@ python -m runtime.db --check
 python -m runtime.l2.executor --pipeline requirement_compilation --scope <scope.yaml>
 
 # 报告摄入：把 geo-research 生成的 Markdown 报告解析成候选
-python -m runtime.l2.executor --pipeline report_ingestion --report <report.md>
+python -m runtime.l2.executor --pipeline report_ingestion --report <report.md> --report-id <report_id>
+
+# 引用证据解析：引用标签 → source/evidence
+python -m runtime.l2.executor --pipeline evidence_resolution --evidence <evidence.json> --report-id <report_id>
 
 # 【爬取】直接调用 geo-research 爬虫生成行业报告（SearXNG 搜索 + Playwright 抓取 + LLM 生成）
 python -m runtime.l2.executor --pipeline geo_research_report_job --crawl --request "研究中国CRM行业"
@@ -85,8 +97,8 @@ python -m runtime.l2.executor --pipeline extraction --report <report.md> --dry-r
 python -m runtime.l2.executor --pipeline promotion
 
 # 一键全流程（--report 用已有报告，或 --crawl 自动爬取）
-python -m runtime.l2.executor --all --scope <scope.yaml> --report <report.md>
-python -m runtime.l2.executor --all --scope <scope.yaml> --crawl --request "研究需求"
+python -m runtime.l2.executor --all --scope <scope.yaml> --report <report.md> --evidence <evidence.json>
+python -m runtime.l2.executor --all --scope <scope.yaml> --crawl --request "研究需求" --evidence <evidence.json>
 
 # 【推荐】从"大致信息"一键到"按需求爬取报告"：
 #   你只需给目标行业 + 市场区域，系统自动：
@@ -95,6 +107,7 @@ python -m runtime.l2.executor --all --scope <scope.yaml> --crawl --request "研�
 #   ③ 用完整需求触发 geo-research 爬取 + 生成行业报告
 #   ④ report_ingestion → extraction → promotion 入库
 python -m runtime.l2.executor --all --industry "CRM软件" --market CN --crawl \
+    --evidence <evidence.json> \
     [--audience "中小企业销售负责人"] [--competitors "销售易,纷享销客,用友"] \
     [--priority-dim "audience_and_decision_chain,problems_and_jobs"] \
     [--seed-sources "中国信通院,艾瑞咨询"]
@@ -106,14 +119,51 @@ python -m runtime.l2.requirement_to_request --requirement-id <ikr_xxx> [--out re
 
 > **爬取说明**：`--crawl` 会真正调用 geo-research 爬网并生成报告，耗时较长（搜索+抓取+LLM 写报告，可能几分钟）。geo-research 的报告生成模型用它所处目录的 `llm-config.local.json`（已同步为 DeepSeek）。若抓取某站点卡住，可调大 `GEO_RESEARCH_TIMEOUT` 或先排查该站点网络。
 
-## 5. L3 品牌知识层执行器
+> **来源审批与失败恢复**：新 evidence index 导入的来源默认为 `pending/disabled`。核验后需在 `source_instance` 设置 `approval_status='approved', l2_enabled=true`，否则 promotion 会在来源门禁拒绝。每个非 dry-run Pipeline 以单独事务执行，失败会回滚本步骤；重复运行通过唯一键复用已有 section/candidate/citation/statement/relation。
+> 事务与统一退出码由 L2/L3 executor 提供；生产运行不要直接调用 `runtime.*.pipelines.*` 子模块。
+
+## 5. L3 品牌知识层执行器（优化流水线）
+
+**优化后的流水线顺序**（OPTIMIZATION_TECH_PLAN.md §5.2）：
+```
+source_registration
+→ original_file_gate
+→ layout_aware_parsing
+→ semantic_chunking
+→ candidate_pre_extraction      ← 规则/词典候选（新增）
+→ candidate_extraction          ← LLM + Pydantic + 本体校验
+→ entity_resolution             ← blocking + embedding 语义消歧（升级）
+→ l2_mapping
+→ assertion_classification
+→ evidence_verification         ← 语义证据核验（升级）
+→ review_promotion
+```
 
 ```bash
-# 来源登记 + 文档解析 + 候选抽取（核心，走 LLM）
-python -m runtime.l3.executor --all --file <brand_doc.md> --brand <brand_id> --dry-run
+# 完整跑一条品牌文档（触发全部 11 步）
+python -m runtime.l3.executor --all --file <brand_doc.md> --brand <brand_id>
 
 # 单步
+python -m runtime.l3.executor --pipeline candidate_pre_extraction --file <doc.md> --brand <brand_id>
 python -m runtime.l3.executor --pipeline candidate_extraction --file <doc.md> --brand <brand_id>
+```
+
+> `--all --dry-run` 不会落库，因此从空库运行时后续步骤无法读取前序 document/chunk；完整预演请使用隔离测试库。
+
+## 5.5 优化能力（OPTIMIZATION_TECH_PLAN.md）
+
+| 能力 | 模块 | 说明 |
+|------|------|------|
+| 严格抽取校验 | `runtime/extraction_schema.py` (Pydantic) + `ontology_validator.py` | LLM 输出先 shape→本体校验，非法自动重试修复 |
+| 候选预抽取 | `runtime/l3/pipelines/candidate_pre_extraction.py` + `brand_knowledge/rules+dictionaries` | 正则+词典抽 URL/版本/认证/组织/能力/产品候选，LLM 只处理难例 |
+| 向量存储 | `vector_migration.sql` (pgvector) + `embeddings.py` | entity/evidence/assertion embedding + HNSW |
+| 语义消歧 | `entity_resolution.py` | 精确匹配 + 别名/embedding 打分（0.35名+0.30嵌+0.20别名），≥.90 自动合并 / .75-.90 人工 |
+| 语义证据核验 | `evidence_verification.py` | 字符串→embedding 相似度 + 高风险用 LLM 判定 direct/partial/insufficient/contradicted |
+| 指标 | `runtime/metrics.py` | 成本/重复率/接受率/核验分布 |
+
+**metrics**：
+```bash
+python -m runtime.metrics --db-check
 ```
 
 ## 6. Neo4j 图投影

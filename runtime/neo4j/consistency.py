@@ -21,7 +21,16 @@ def count_relations_pg(conn):
 
 
 def count_assertions_pg(conn):
-    return conn.query("SELECT count(*) AS c FROM statement WHERE status='active'")[0]["c"]
+    return conn.query(
+        "SELECT (SELECT count(*) FROM statement WHERE status='active') + "
+        "(SELECT count(*) FROM assertion WHERE status='active') AS c"
+    )[0]["c"]
+
+
+def count_entity_edges(proj):
+    return proj.driver.execute_query(
+        "MATCH (:Entity)-[r]->(:Entity) RETURN count(r) AS c"
+    ).records[0]["c"]
 
 
 def count_label(proj, label):
@@ -60,24 +69,19 @@ def main() -> int:
             pr = count_relations_pg(pg_db)
             pa = count_assertions_pg(pg_db)
         ne = count_label(proj, "Entity")
-        nr = count_label(proj, "Assertion")  # materialized relations live on Assertion edges
+        nr = count_entity_edges(proj)
         na = count_label(proj, "Assertion")
         orphan = orphan_entities(proj)
 
         print(f"{'':18} PG    Neo4j")
         print(f"{'entities':18} {pe:5} {ne}")
+        print(f"{'relations':18} {pr:5} {nr}")
         print(f"{'assertions':18} {pa:5} {na}")
         print(f"{'orphan entities':18} {'—':5} {orphan}")
 
-        # Actual relationship edges in Neo4j across all materialized rel types
-        all_rel = proj.driver.execute_query(
-            "MATCH (:Entity)-[r]->(:Entity) RETURN count(r) AS c"
-        ).records[0]["c"]
-        print(f"{'entity edges (n4j)':18} {'—':5} {all_rel}")
-
         ok = True
         # Counts comparison applies in both modes.
-        counts_match = (pe == ne) and (pa == na)
+        counts_match = (pe == ne) and (pr == nr) and (pa == na)
         if counts_match:
             print("\n[consistency] counts match (PG == Neo4j)")
         else:
@@ -88,8 +92,10 @@ def main() -> int:
         if not args.counts_only and counts_match and args.sample:
             with DB() as pg_db:
                 rows = pg_db.query(
-                    "SELECT id, subject_entity_id, object_entity_id FROM statement "
-                    "WHERE status='active' LIMIT %s", (args.sample,),
+                    "SELECT id FROM ("
+                    " SELECT id FROM statement WHERE status='active' "
+                    " UNION ALL SELECT id FROM assertion WHERE status='active'"
+                    ") projected_assertion LIMIT %s", (args.sample,),
                 )
             if rows:
                 missing = 0

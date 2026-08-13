@@ -58,7 +58,15 @@ def _chunk_texts(report_text: str, size: int = 2000) -> list[str]:
     return chunks or [report_text]
 
 
-def _upsert_entity(db: DB, ent: dict, existing: set[str], dry_run: bool) -> str | None:
+def _upsert_entity(
+    db: DB,
+    ent: dict,
+    existing_ids: set[str],
+    entity_registry: dict[tuple[str, str], str],
+    candidate_uuid: str | None,
+    industry_id: str | None,
+    dry_run: bool,
+) -> str | None:
     """Upsert one entity; return its entity_id. Returns None if type invalid."""
     etype = ent.get("type") or ent.get("entity_type") or "topic"
     if etype not in VALID_ENTITY_TYPES:
@@ -67,18 +75,37 @@ def _upsert_entity(db: DB, ent: dict, existing: set[str], dry_run: bool) -> str 
     if not canonical:
         return None
 
-    entity_id = normalize_entity_id(etype, canonical, existing)
+    key = (etype, canonical.strip().casefold())
+    if key in entity_registry:
+        entity_id = entity_registry[key]
+        if candidate_uuid and not dry_run:
+            _add_entity_candidate(db, entity_id, candidate_uuid)
+        return entity_id
+    entity_id = normalize_entity_id(etype, canonical, existing_ids)
+    entity_registry[key] = entity_id
     row = {
         "entity_id": entity_id,
         "entity_type": etype,
         "canonical_name": canonical,
         "semantic_subtype": ent.get("semantic_subtype"),
-        "attributes": ent.get("properties") or ent.get("attributes") or {},
+        "industry_id": industry_id,
+        "attributes": {
+            **(ent.get("properties") or ent.get("attributes") or {}),
+            **({"report_candidate_ids": [candidate_uuid]} if candidate_uuid else {}),
+        },
         "confidence": ent.get("confidence"),
-        "status": "active",
+        "status": "candidate" if candidate_uuid else "active",
     }
     if not dry_run:
-        db.upsert("entity", row, key_field="entity_id")
+        rows = db.query(
+            "SELECT id, status FROM entity WHERE entity_id = %s LIMIT 1",
+            (entity_id,),
+        )
+        if rows:
+            if candidate_uuid:
+                _add_entity_candidate(db, entity_id, candidate_uuid)
+        else:
+            db.upsert("entity", row, key_field="entity_id")
         for alias in ent.get("aliases") or []:
             db.execute(
                 "INSERT INTO entity_alias (entity_id, alias_name, alias_type) "
@@ -98,23 +125,26 @@ def run(db: DB, args) -> dict[str, Any]:
     report_path = getattr(args, "report", None)
     dry_run = getattr(args, "dry_run", False)
 
-    # Decide the text source: raw text arg > report file > report_candidate rows.
+    # Prefer report candidates when a report_id exists so every extracted item
+    # can retain the candidate lineage needed by promotion.
     text_source = getattr(args, "text", None)
-    if text_source is None and report_path and os.path.exists(report_path):
-        with open(report_path, "r", encoding="utf-8") as f:
-            text_source = f.read()
-
-    chunks: list[str] = []
+    chunk_items: list[tuple[str, str | None]] = []
     if text_source is not None:
-        chunks = _chunk_texts(text_source)
+        chunk_items = [(chunk, None) for chunk in _chunk_texts(text_source)]
     elif report_id:
         rows = db.query(
-            "SELECT statement FROM report_candidate rc "
+            "SELECT rc.id, rc.statement FROM report_candidate rc "
             "JOIN research_report rr ON rr.id = rc.report_id "
             "WHERE rr.report_id = %s AND rc.status != 'rejected'",
             (report_id,),
         )
-        chunks = [r["statement"] for r in rows if r["statement"]]
+        chunk_items = [
+            (r["statement"], str(r["id"])) for r in rows if r["statement"]
+        ]
+    elif report_path and os.path.exists(report_path):
+        with open(report_path, "r", encoding="utf-8") as f:
+            text_source = f.read()
+        chunk_items = [(chunk, None) for chunk in _chunk_texts(text_source)]
     else:
         raise ValueError(
             "No input: pass --report <file.md>, --report-id, or --text <raw>"
@@ -124,18 +154,31 @@ def run(db: DB, args) -> dict[str, Any]:
     model = client.config.model
     run_id = getattr(args, "run_id", None) or f"ext_{datetime.now(timezone.utc):%Y%m%d%H%M%S}"
 
-    existing: set[str] = set()
-    stats = {"entities": 0, "relations": 0, "statements": 0, "chunks": len(chunks)}
+    existing_ids: set[str] = set()
+    entity_registry: dict[tuple[str, str], str] = {}
+    external_entity_ids: dict[str, str] = {}
+    counted_entities: set[str] = set()
+    stats = {"entities": 0, "relations": 0, "statements": 0, "chunks": len(chunk_items)}
 
-    for chunk in chunks:
+    for chunk, candidate_uuid in chunk_items:
         if not chunk.strip():
             continue
         result = extract_entities_relations(client, chunk)
+        industry_id = _candidate_industry(db, candidate_uuid) if candidate_uuid else None
 
         # --- entities ---
+        entity_map = external_entity_ids
         for ent in result.get("entities", []):
-            if _upsert_entity(db, ent, existing, dry_run):
-                stats["entities"] += 1
+            entity_id = _upsert_entity(
+                db, ent, existing_ids, entity_registry, candidate_uuid, industry_id, dry_run
+            )
+            if entity_id:
+                external_id = ent.get("id") or entity_id
+                entity_map[external_id] = entity_id
+                entity_map[entity_id] = entity_id
+                if entity_id not in counted_entities:
+                    counted_entities.add(entity_id)
+                    stats["entities"] += 1
 
         # --- statements ---
         for stmt in result.get("statements", []):
@@ -156,10 +199,30 @@ def run(db: DB, args) -> dict[str, Any]:
                 # free-text statements carry their text as a JSON object_value.
                 "object_value": {"statement": text},
                 "confidence": stmt.get("confidence"),
-                "status": "active",
+                "scope": {
+                    "report_id": report_id,
+                    "report_candidate_id": candidate_uuid,
+                    "industry_id": industry_id,
+                },
+                "status": "candidate" if candidate_uuid else "active",
             }
             if not dry_run:
-                db.upsert("statement", row, key_field="statement_id")
+                if candidate_uuid:
+                    statement_uuid = db.insert_returning_id(
+                        "INSERT INTO statement (statement_id, statement_text, statement_class, "
+                        "object_value, confidence, scope, status) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s) "
+                        "ON CONFLICT ((scope->>'report_candidate_id'), statement_text) "
+                        "WHERE scope->>'report_candidate_id' IS NOT NULL DO UPDATE SET "
+                        "statement_class=EXCLUDED.statement_class, object_value=EXCLUDED.object_value, "
+                        "confidence=EXCLUDED.confidence RETURNING id",
+                        (stmt_id, row["statement_text"], row["statement_class"],
+                         db._json(row["object_value"]), row["confidence"],
+                         db._json(row["scope"]), row["status"]),
+                    )
+                    _link_statement_evidence_uuid(db, statement_uuid, candidate_uuid)
+                else:
+                    db.upsert("statement", row, key_field="statement_id")
             stats["statements"] += 1
             print(f"  {'[dry] ' if dry_run else ''}statement {stmt_id} [{row['statement_class']}]")
 
@@ -168,14 +231,16 @@ def run(db: DB, args) -> dict[str, Any]:
             rel_type = rel.get("relation")
             if rel_type not in VALID_RELATION_TYPES:
                 continue
-            subj_id = rel.get("subject")
-            obj_id = rel.get("object")
+            subj_id = entity_map.get(rel.get("subject"))
+            obj_id = entity_map.get(rel.get("object"))
+            if not subj_id or not obj_id:
+                continue
             row = {
                 "subject_id": subj_id,   # entity_id string; mapped to UUID below
                 "relation_type": rel_type,
                 "object_id": obj_id,
                 "confidence": rel.get("confidence"),
-                "status": "active",
+                "status": "candidate" if candidate_uuid else "active",
             }
             if not dry_run:
                 # Map subject/object entity_id strings to the authoritative UUIDs.
@@ -183,13 +248,50 @@ def run(db: DB, args) -> dict[str, Any]:
                 obj_uuid = _entity_uuid(db, obj_id) if obj_id else None
                 if subj_uuid and obj_uuid:
                     # relation has no natural unique key; insert explicitly.
-                    db.execute(
+                    relation_uuid = db.insert_returning_id(
                         "INSERT INTO relation (subject_id, relation_type, object_id, "
-                        "confidence, status) VALUES (%s, %s, %s, %s, %s)",
-                        (subj_uuid, rel_type, obj_uuid, row["confidence"], "active"),
+                        "confidence, status, scope) VALUES (%s, %s, %s, %s, %s, %s) "
+                        "ON CONFLICT (subject_id, relation_type, object_id, "
+                        "(scope->>'report_candidate_id')) "
+                        "WHERE scope->>'report_candidate_id' IS NOT NULL DO UPDATE SET "
+                        "confidence=EXCLUDED.confidence RETURNING id",
+                        (subj_uuid, rel_type, obj_uuid, row["confidence"], row["status"],
+                         db._json({"report_id": report_id,
+                                   "report_candidate_id": candidate_uuid,
+                                   "industry_id": industry_id})),
                     )
+                    _link_relation_evidence(db, relation_uuid, candidate_uuid)
+                else:
+                    continue
             stats["relations"] += 1
             print(f"  {'[dry] ' if dry_run else ''}relation {rel_type} {subj_id} -> {obj_id}")
+
+        if candidate_uuid and not dry_run:
+            confidence_values = [
+                item.get("confidence")
+                for group in (result.get("entities", []), result.get("relations", []),
+                              result.get("statements", []))
+                for item in group
+                if item.get("confidence") is not None
+            ]
+            statement_classes = [
+                item.get("statement_class") or item.get("statement_type")
+                for item in result.get("statements", [])
+            ]
+            statement_class = next(
+                (value for value in statement_classes
+                 if value in ("fact", "claim", "observation", "inference")),
+                "observation",
+            )
+            confidence = (
+                sum(confidence_values) / len(confidence_values)
+                if confidence_values else None
+            )
+            db.execute(
+                "UPDATE report_candidate SET candidate_type = %s, confidence = %s "
+                "WHERE id = %s",
+                (statement_class, confidence, candidate_uuid),
+            )
 
     # --- extraction_run log ---
     if not dry_run:
@@ -200,7 +302,7 @@ def run(db: DB, args) -> dict[str, Any]:
                 "extraction_profile": getattr(args, "profile", None) or "l2_llm_extraction",
                 "model": model,
                 "prompt_version": "l2-extraction-v1.2.0",
-                "inputs": {"report_id": report_id, "chunks": len(chunks)},
+                "inputs": {"report_id": report_id, "chunks": len(chunk_items)},
                 "outputs_summary": stats,
                 "status": "completed",
                 "completed_at": datetime.now(timezone.utc),
@@ -225,6 +327,90 @@ def run(db: DB, args) -> dict[str, Any]:
 def _entity_uuid(db: DB, entity_id: str) -> Any | None:
     rows = db.query("SELECT id FROM entity WHERE entity_id = %s LIMIT 1", (entity_id,))
     return rows[0]["id"] if rows else None
+
+
+def _candidate_industry(db: DB, candidate_uuid: str) -> str | None:
+    rows = db.query(
+        "SELECT ir.industry_id FROM report_candidate rc "
+        "JOIN research_report rr ON rr.id = rc.report_id "
+        "LEFT JOIN industry_requirement ir ON ir.id = rr.requirement_id "
+        "WHERE rc.id = %s LIMIT 1",
+        (candidate_uuid,),
+    )
+    return rows[0].get("industry_id") if rows else None
+
+
+def _add_entity_candidate(db: DB, entity_id: str, candidate_uuid: str) -> None:
+    db.execute(
+        "UPDATE entity SET attributes = jsonb_set("
+        "COALESCE(attributes, '{}'::jsonb), '{report_candidate_ids}', "
+        "COALESCE(attributes->'report_candidate_ids', '[]'::jsonb) || to_jsonb(%s::text), true) "
+        "WHERE entity_id = %s AND NOT COALESCE(attributes->'report_candidate_ids', '[]'::jsonb) "
+        "@> to_jsonb(%s::text)",
+        (candidate_uuid, entity_id, candidate_uuid),
+    )
+
+
+def _candidate_evidence(db: DB, candidate_uuid: str | None) -> list[dict]:
+    if not candidate_uuid:
+        return []
+    return db.query(
+        "SELECT evidence_id, support_status, support_reason, verifier_version "
+        "FROM citation_resolution WHERE report_candidate_id = %s "
+        "AND evidence_id IS NOT NULL",
+        (candidate_uuid,),
+    )
+
+
+def _link_statement_evidence(db: DB, statement_id: str, candidate_uuid: str | None) -> None:
+    rows = db.query("SELECT id FROM statement WHERE statement_id = %s", (statement_id,))
+    if not rows:
+        return
+    for evidence in _candidate_evidence(db, candidate_uuid):
+        db.execute(
+            "INSERT INTO statement_evidence "
+            "(statement_id, evidence_id, support_status, support_reason, verifier_version) "
+            "VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (statement_id, evidence_id) DO UPDATE SET "
+            "support_status=EXCLUDED.support_status, support_reason=EXCLUDED.support_reason, "
+            "verifier_version=EXCLUDED.verifier_version",
+            (rows[0]["id"], evidence["evidence_id"], evidence.get("support_status"),
+             evidence.get("support_reason"), evidence.get("verifier_version")),
+        )
+
+
+def _link_statement_evidence_uuid(
+    db: DB, statement_uuid: str | None, candidate_uuid: str | None
+) -> None:
+    if not statement_uuid:
+        return
+    for evidence in _candidate_evidence(db, candidate_uuid):
+        db.execute(
+            "INSERT INTO statement_evidence "
+            "(statement_id, evidence_id, support_status, support_reason, verifier_version) "
+            "VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (statement_id, evidence_id) DO UPDATE SET "
+            "support_status=EXCLUDED.support_status, support_reason=EXCLUDED.support_reason, "
+            "verifier_version=EXCLUDED.verifier_version",
+            (statement_uuid, evidence["evidence_id"], evidence.get("support_status"),
+             evidence.get("support_reason"), evidence.get("verifier_version")),
+        )
+
+
+def _link_relation_evidence(db: DB, relation_uuid: str | None, candidate_uuid: str | None) -> None:
+    if not relation_uuid:
+        return
+    for evidence in _candidate_evidence(db, candidate_uuid):
+        db.execute(
+            "INSERT INTO relation_evidence "
+            "(relation_id, evidence_id, support_status, support_reason, verifier_version) "
+            "VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (relation_id, evidence_id) DO UPDATE SET "
+            "support_status=EXCLUDED.support_status, support_reason=EXCLUDED.support_reason, "
+            "verifier_version=EXCLUDED.verifier_version",
+            (relation_uuid, evidence["evidence_id"], evidence.get("support_status"),
+             evidence.get("support_reason"), evidence.get("verifier_version")),
+        )
 
 
 if __name__ == "__main__":

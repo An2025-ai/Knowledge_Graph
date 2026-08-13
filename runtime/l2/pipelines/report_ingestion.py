@@ -142,7 +142,12 @@ def run(db: DB, args) -> dict[str, Any]:
             section_id = db.insert_returning_id(
                 "INSERT INTO report_section (report_id, section_code, section_title, "
                 "section_order, start_line, end_line, content_type, metadata) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+                "ON CONFLICT (report_id, section_code) DO UPDATE SET "
+                "section_title=EXCLUDED.section_title, section_order=EXCLUDED.section_order, "
+                "start_line=EXCLUDED.start_line, end_line=EXCLUDED.end_line, "
+                "content_type=EXCLUDED.content_type, metadata=EXCLUDED.metadata "
+                "RETURNING id",
                 (report_uuid, section_row["section_code"], section_row["section_title"],
                  section_row["section_order"], section_row["start_line"],
                  section_row["end_line"], section_row["content_type"],
@@ -170,12 +175,16 @@ def run(db: DB, args) -> dict[str, Any]:
         }
         candidate_count += 1
         if not dry_run:
-            # report_candidate has no natural unique key; insert a fresh row.
             db.execute(
                 "INSERT INTO report_candidate (report_id, section_id, section_code, "
                 "report_span, statement, candidate_type, citation_labels, "
                 "normalized_statement_hash, status) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                "ON CONFLICT (report_id, normalized_statement_hash) "
+                "WHERE normalized_statement_hash IS NOT NULL DO UPDATE SET "
+                "section_id=EXCLUDED.section_id, section_code=EXCLUDED.section_code, "
+                "report_span=EXCLUDED.report_span, statement=EXCLUDED.statement, "
+                "citation_labels=EXCLUDED.citation_labels",
                 (report_uuid, section_id, cand_row["section_code"],
                  cand_row["report_span"], cand_row["statement"],
                  cand_row["candidate_type"], db._json(cand_row["citation_labels"]),

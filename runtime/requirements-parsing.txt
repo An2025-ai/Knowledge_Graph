@@ -1,0 +1,11 @@
+# Optional document parsing libraries (OPTIMIZATION_TECH_PLAN.md §10.2)
+# Install only when the corresponding source type is needed.
+#   pip install -r runtime/requirements-parsing.txt
+#   pip install docling          # PDF/Office layout-aware parsing (heavy)
+trafilatura>=1.6            # clean web page text extraction
+beautifulsoup4>=4.12        # HTML structure extraction
+lxml>=5.0                   # HTML/XML parser
+pymupdf>=1.24               # lightweight PDF text/page extraction
+python-docx>=1.1            # DOCX structure extraction
+python-pptx>=0.6.23         # PPTX slide extraction
+openpyxl>=3.1               # XLSX table extraction

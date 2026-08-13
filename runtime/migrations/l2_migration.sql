@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS source_instance (
     tenant_id       UUID,
     industry_id     VARCHAR(50),
     source_class    VARCHAR(50),
-    source_type     VARCHAR(50) REFERENCES entity_type(type_code),
+    source_type     VARCHAR(50),
     publisher       TEXT,
     title           TEXT,
     canonical_url   TEXT,
@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS source_instance (
     CONSTRAINT chk_ss_status CHECK (status IN ('registered','gate_passed','parsing','extracted','rejected','inactive'))
 );
 COMMENT ON TABLE source_instance IS '实际来源实例';
+ALTER TABLE source_instance DROP CONSTRAINT IF EXISTS source_instance_source_type_fkey;
 
 -- ============================================================================
 -- 6. document — 文档和版本元数据
@@ -214,10 +215,14 @@ CREATE TABLE IF NOT EXISTS entity (
         'brand','product','industry','category','audience','use_case','problem',
         'topic','prompt','competitor','content','source','fact','claim','observation',
         'capability','decision_factor','job_to_be_done','outcome','organization','product_version')),
-    CONSTRAINT chk_entity_status CHECK (status IN ('active','inactive','deprecated'))
+    CONSTRAINT chk_entity_status CHECK (status IN ('candidate','active','inactive','deprecated'))
 );
 COMMENT ON TABLE entity IS 'L2/L3 实体实例（唯一权威实体表）';
 COMMENT ON COLUMN entity.id IS '被 L3 brand_l3_migration 的 brand_workspace/assertion/brand_mapping/product_record 引用';
+
+ALTER TABLE entity DROP CONSTRAINT IF EXISTS chk_entity_status;
+ALTER TABLE entity ADD CONSTRAINT chk_entity_status
+    CHECK (status IN ('candidate','active','inactive','deprecated'));
 
 -- 生成列：从 JSONB 扁平化常用查询字段
 ALTER TABLE entity ADD COLUMN IF NOT EXISTS owner_brand UUID;
@@ -364,6 +369,10 @@ CREATE TABLE IF NOT EXISTS report_candidate (
     citation_labels JSONB,
     normalized_statement_hash VARCHAR(64),
     knowledge_candidate_type VARCHAR(50),
+    confidence      NUMERIC(4,3),
+    promotion_gate_results JSONB,
+    rejection_reason TEXT,
+    review_reason   TEXT,
     status          VARCHAR(20) NOT NULL DEFAULT 'candidate',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -371,6 +380,22 @@ CREATE TABLE IF NOT EXISTS report_candidate (
         'candidate','resolved','verified','promoted','rejected','duplicate'))
 );
 COMMENT ON TABLE report_candidate IS '从报告抽取的知识候选';
+ALTER TABLE report_candidate ADD COLUMN IF NOT EXISTS confidence NUMERIC(4,3);
+ALTER TABLE report_candidate ADD COLUMN IF NOT EXISTS promotion_gate_results JSONB;
+ALTER TABLE report_candidate ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE report_candidate ADD COLUMN IF NOT EXISTS review_reason TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_report_section_code_unique
+    ON report_section(report_id, section_code);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_report_candidate_hash_unique
+    ON report_candidate(report_id, normalized_statement_hash)
+    WHERE normalized_statement_hash IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_relation_candidate_unique
+    ON relation(subject_id, relation_type, object_id, (scope->>'report_candidate_id'))
+    WHERE scope->>'report_candidate_id' IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_statement_candidate_text_unique
+    ON statement((scope->>'report_candidate_id'), statement_text)
+    WHERE scope->>'report_candidate_id' IS NOT NULL;
 
 -- ============================================================================
 -- 15. citation_resolution — 报告 [S#] 到原始证据的映射和验证
@@ -391,6 +416,8 @@ CREATE TABLE IF NOT EXISTS citation_resolution (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 COMMENT ON TABLE citation_resolution IS '报告引用到证据的映射和验证';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_citation_resolution_label_unique
+    ON citation_resolution(report_candidate_id, citation_label);
 
 -- ============================================================================
 -- 16. external_import_record — geo-research 导入血缘
@@ -481,6 +508,9 @@ CREATE TABLE IF NOT EXISTS review_queue (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 COMMENT ON TABLE review_queue IS '人工审核队列';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_review_queue_target_unique
+    ON review_queue(target_type, target_id, review_type)
+    WHERE status = 'pending';
 
 -- ============================================================================
 -- 21. graph_outbox — PostgreSQL → Neo4j 事件队列
@@ -497,6 +527,54 @@ CREATE TABLE IF NOT EXISTS graph_outbox (
     error           TEXT
 );
 COMMENT ON TABLE graph_outbox IS 'PostgreSQL 到 Neo4j 的同步事件队列';
+
+-- Active knowledge changes are projected incrementally. Candidate rows stay
+-- in PostgreSQL until promotion and never leak into the graph projection.
+CREATE OR REPLACE FUNCTION kg_enqueue_graph_change()
+RETURNS TRIGGER AS $$
+DECLARE
+    row_data JSONB;
+    row_id UUID;
+    row_status TEXT;
+    change_type TEXT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        row_data := to_jsonb(OLD);
+        row_id := OLD.id;
+        row_status := OLD.status;
+        change_type := 'delete';
+    ELSE
+        row_data := to_jsonb(NEW);
+        row_id := NEW.id;
+        row_status := NEW.status;
+        change_type := CASE WHEN row_status = 'active' THEN 'upsert' ELSE 'delete' END;
+    END IF;
+
+    IF TG_OP = 'DELETE' OR row_status = 'active'
+       OR (TG_OP = 'UPDATE' AND OLD.status = 'active') THEN
+        INSERT INTO graph_outbox (aggregate_type, aggregate_id, event_type, payload)
+        VALUES (TG_TABLE_NAME, row_id, change_type, row_data);
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+DECLARE tbl TEXT;
+BEGIN
+    FOREACH tbl IN ARRAY ARRAY['entity', 'relation', 'statement']
+    LOOP
+        EXECUTE format('DROP TRIGGER IF EXISTS trg_%s_graph_outbox ON %I;', tbl, tbl);
+        EXECUTE format(
+            'CREATE TRIGGER trg_%s_graph_outbox AFTER INSERT OR UPDATE OR DELETE ON %I '
+            'FOR EACH ROW EXECUTE FUNCTION kg_enqueue_graph_change();', tbl, tbl
+        );
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- updated_at 触发器

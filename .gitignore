@@ -29,6 +29,7 @@ Thumbs.db
 
 # Runtime local secrets/config
 runtime/config/llm-config.local.json
+runtime/config/model-config.local.json
 runtime/.env
 
 # Build artifacts

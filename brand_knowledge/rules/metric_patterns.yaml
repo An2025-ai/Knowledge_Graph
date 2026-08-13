@@ -1,0 +1,27 @@
+# Brand Atlas — 规则：指标模式（candidate_pre_extraction 使用）
+# 版本: 1.0.0
+# 用途: 抽取量化指标候选（ROI、性能、规模等）
+
+meta:
+  version: 1.0.0
+  created_at: 2026-08-12
+  status: active
+  scope: brand
+  layer: L3
+
+metric_patterns:
+  - type: roi
+    regex: '(?:ROI|投资回报率|回报)\s*[：:]?\s*\d+(?:\.\d+)?\s*%?'
+    note: ROI
+  - type: cost_saving
+    regex: '(?:节省|降低|节约)\s*[：:]?\s*(?:¥|￥)?\s*\d+(?:万|亿)?\s*元?'
+    note: 成本节省（如节省100万）
+  - type: efficiency
+    regex: '(?:提升|提高|缩短|下降)\s*[：:]?\s*\d+(?:\.\d+)?\s*%'
+    note: 效率提升（如提升35%）
+  - type: headcount
+    regex: '(?:释放|节省|减少)\s*[：:]?\s*\d+\s*(?:个)?\s*HC?'
+    note: 人力释放（如释放5个HC）
+  - type: scale
+    regex: '(?:处理|支持|承载|服务)\s*[：:]?\s*\d+\s*(?:万|亿)?\s*(?:笔|单|用户|企业|店铺|条)'
+    note: 规模（如万亿级、百万用户）

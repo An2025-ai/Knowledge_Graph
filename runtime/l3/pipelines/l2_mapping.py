@@ -28,7 +28,7 @@ def _find_l2_capability(db: DB, tenant_id: str, canonical_name: str) -> dict | N
     rows = db.query(
         "SELECT id, canonical_name FROM entity "
         "WHERE tenant_id = %s AND entity_type = 'capability' "
-        "AND COALESCE(owner_brand, '') = '' AND canonical_name = %s "
+        "AND owner_brand IS NULL AND canonical_name = %s "
         "AND status = 'active' LIMIT 1",
         (tenant_id, canonical_name),
     )
@@ -38,7 +38,7 @@ def _find_l2_capability(db: DB, tenant_id: str, canonical_name: str) -> dict | N
         "SELECT e.id, e.canonical_name FROM entity_alias a "
         "JOIN entity e ON e.id = a.entity_id "
         "WHERE e.tenant_id = %s AND e.entity_type = 'capability' "
-        "AND COALESCE(e.owner_brand, '') = '' AND e.status = 'active' "
+        "AND e.owner_brand IS NULL AND e.status = 'active' "
         "AND a.alias_name = %s LIMIT 1",
         (tenant_id, canonical_name),
     )

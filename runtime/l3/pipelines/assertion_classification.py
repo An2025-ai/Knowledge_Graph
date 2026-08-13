@@ -13,10 +13,10 @@ whether the source is "official". A small LLM prompt is used to pick the
 ``assertion_kind`` (and can refine ``statement_class``); the decision plus a
 reason are recorded.
 
-Because the L3 ``assertion`` table is append+supersedes (``trg_assertion_no_update``
-raises on UPDATE), in-place refinement is done through a session-scoped trigger
-bypass (:func:`runtime.l3.pipelines._helpers.update_assertion`). ``inference``
-assertions are flagged for review (``requires_review`` via ``scope``).
+Candidate assertions may be refined in place before activation. The database
+trigger continues to enforce append+supersedes for active assertions.
+``inference`` assertions are flagged for review (``requires_review`` via
+``scope``).
 """
 from __future__ import annotations
 

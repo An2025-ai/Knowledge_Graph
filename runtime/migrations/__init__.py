@@ -16,9 +16,10 @@ MIGRATIONS = {
     "l1": ROOT / "database" / "schema.sql",
     "l2": ROOT / "runtime" / "migrations" / "l2_migration.sql",
     "l3": ROOT / "brand_knowledge" / "database" / "brand_l3_migration.sql",
+    "vector": ROOT / "runtime" / "migrations" / "vector_migration.sql",
 }
 
-ORDER = ["l1", "l2", "l3"]
+ORDER = ["l1", "l2", "l3", "vector"]
 
 
 def run_layer(db, key: str):
