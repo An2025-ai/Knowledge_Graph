@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Reach"
+  short_description: "Search and read across web and social platforms"
+  default_prompt: "Use $agent-reach to research this topic across the most relevant web and social sources."

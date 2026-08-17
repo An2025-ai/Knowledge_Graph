@@ -204,6 +204,27 @@ ALLOWED_SOURCE_CLASSES = [
 # Excluded source classes (L2: no UGC / community).
 EXCLUDED_SOURCE_CLASSES = ["community", "social_media", "ugc_review"]
 
+# Per-dimension required source classes (authoritative, mirrors the L2 requirement
+# contract). Each dimension gets its SPECIFIC set rather than the global whitelist,
+# so the geo-research two-layer source strategy can target the right source types
+# per industry dimension.
+DIMENSION_SOURCE_CLASSES = {
+    "market_definition": ["government", "standards_body", "industry_association", "industry_research"],
+    "category_structure": ["industry_research", "standards_body", "competitor_official"],
+    "market_participants": ["industry_research", "company_disclosure", "competitor_official", "reliable_media"],
+    "audience_and_decision_chain": ["industry_research", "academic", "reliable_media"],
+    "problems_and_jobs": ["industry_research", "reliable_media", "competitor_official"],
+    "use_cases": ["competitor_official", "industry_research", "reliable_media"],
+    "capabilities": ["competitor_official", "standards_body", "industry_research"],
+    "decision_factors": ["industry_research", "academic", "reliable_media"],
+    "topics_and_questions": ["reliable_media", "industry_research", "competitor_official"],
+    "market_facts_and_trends": ["government", "industry_research", "brokerage_research"],
+    "regulation_and_risks": ["government", "regulator", "standards_body"],
+    "competition_structure": ["industry_research", "competitor_official", "company_disclosure"],
+    "source_ecology": ["government", "industry_research", "academic", "reliable_media"],
+    "evidence_gaps": ["industry_research", "reliable_media"],
+}
+
 
 def _slug(value: str) -> str:
     """Lowercase alnum slug for ids/filenames."""
@@ -240,7 +261,10 @@ def build_scope(
                 "order": i,
                 "questions": questions,
                 "expected_fields": dim["expected_fields"],
-                "required_source_classes": ALLOWED_SOURCE_CLASSES,
+                # Per-dimension specific source classes (fallback to global whitelist).
+                "required_source_classes": DIMENSION_SOURCE_CLASSES.get(
+                    dim["dimension_code"], ALLOWED_SOURCE_CLASSES
+                ),
                 "evidence_rules": {"min_independent_sources": 1},
             }
         )

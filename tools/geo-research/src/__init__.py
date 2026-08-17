@@ -1,0 +1,1 @@
+"""GEO research collector."""

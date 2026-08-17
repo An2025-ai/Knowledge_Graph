@@ -20,7 +20,7 @@ def _candidates(db: DB, report_id: str | None) -> list[dict]:
     select = (
         "SELECT rc.id AS candidate_uuid, rc.report_id, rc.section_id, rc.statement, "
         "rc.candidate_type, rc.citation_labels, rc.status, "
-        "rc.normalized_statement_hash, rc.confidence, ir.industry_id, "
+        "rc.normalized_statement_hash, rc.knowledge_candidate_type, rc.confidence, ir.industry_id, "
         "ir.source_requirements "
         "FROM report_candidate rc "
         "JOIN research_report rr ON rr.id = rc.report_id "
@@ -233,20 +233,36 @@ def _evaluate_gates(db: DB, cand: dict, threshold: float) -> tuple[list[dict], s
     ))
 
     allowed_classes = _allowed_source_classes(cand)
-    valid_sources = [
-        row for row in evidence
-        if row.get("source_uuid")
-        and row.get("approval_status") == "approved"
-        and row.get("l2_enabled") is True
-        and row.get("policy_status") == "active"
-        and row.get("authority_level") in ("high", "medium")
-        and (not allowed_classes or row.get("source_class") in allowed_classes)
-    ]
-    source_ok = bool(evidence) and len(valid_sources) == len(evidence)
-    results.append(_result(
-        "gate_4_source", source_ok,
-        f"approved_sources={len(valid_sources)}/{len(evidence)}",
-    ))
+    if cand.get("knowledge_candidate_type") == "source_enrichment":
+        # First-pass enrichment is constrained to sources already cited by the
+        # report. It uses a light source gate here: the source must be resolved
+        # into the graph, but it does not require manual l2_enabled approval.
+        recognizable_sources = [
+            row for row in evidence
+            if row.get("source_uuid")
+            and row.get("source_type")
+            and (not allowed_classes or row.get("source_class") in allowed_classes)
+        ]
+        source_ok = bool(evidence) and len(recognizable_sources) == len(evidence)
+        results.append(_result(
+            "gate_4_source", source_ok,
+            f"recognizable_sources={len(recognizable_sources)}/{len(evidence)}",
+        ))
+    else:
+        valid_sources = [
+            row for row in evidence
+            if row.get("source_uuid")
+            and row.get("approval_status") == "approved"
+            and row.get("l2_enabled") is True
+            and row.get("policy_status") == "active"
+            and row.get("authority_level") in ("high", "medium")
+            and (not allowed_classes or row.get("source_class") in allowed_classes)
+        ]
+        source_ok = bool(evidence) and len(valid_sources) == len(evidence)
+        results.append(_result(
+            "gate_4_source", source_ok,
+            f"approved_sources={len(valid_sources)}/{len(evidence)}",
+        ))
 
     supported = [
         row for row in evidence

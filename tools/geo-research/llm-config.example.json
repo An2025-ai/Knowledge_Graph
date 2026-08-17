@@ -1,0 +1,11 @@
+{
+  "base_url": "https://api.example.com/v1",
+  "model": "your-model-name",
+  "endpoint": null,
+  "api_key": null,
+  "api_key_env": "BRAND_ATLAS_LLM_API_KEY",
+  "api_key_required": true,
+  "timeout_seconds": 120,
+  "max_output_tokens": 6000,
+  "temperature": 0.2
+}

@@ -1,0 +1,48 @@
+use_default_settings: true
+
+general:
+  instance_name: "Brand Atlas Research"
+
+server:
+  # Change this for a real deployment. The repository value is a placeholder.
+  secret_key: "change-me-before-deployment"
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  formats:
+    - html
+    - json
+
+engines:
+  # Lean engine set for speed. yandex returns good relevant content for both EN
+  # and ZH; bing is the always-available fallback; sogou adds Chinese depth.
+  # baidu/360search typically CAPTCHA-suspend; mojeek/ddg/qwant/startpage/wikipedia
+  # timeout from the container and stall the 128-query search — all dropped.
+  - name: yandex
+    disabled: false
+    timeout: 8.0
+  - name: bing
+    disabled: false
+    base_url: https://cn.bing.com
+    timeout: 8.0
+  - name: sogou
+    disabled: false
+    timeout: 8.0
+  # Engines needing an API key, or commonly flaky — leave disabled unless configured.
+  - name: google
+    disabled: true
+    timeout: 10.0
+  - name: google cse
+    disabled: true
+  - name: brave
+    disabled: true
+  - name: braveapi
+    disabled: true
+
+ui:
+  static_use_hash: true

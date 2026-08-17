@@ -35,6 +35,7 @@ PIPELINES = {
     "report_ingestion": "runtime.l2.pipelines.report_ingestion",
     "evidence_resolution": "runtime.l2.pipelines.evidence_resolution",
     "extraction": "runtime.l2.pipelines.extraction",
+    "source_enrichment": "runtime.l2.pipelines.source_enrichment",
     "promotion": "runtime.l2.pipelines.promotion",
 }
 
@@ -47,6 +48,7 @@ ALL_ORDER = [
     "report_ingestion",
     "evidence_resolution",
     "extraction",
+    "source_enrichment",
     "promotion",
 ]
 
@@ -110,6 +112,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--text", help="Raw text input for extraction.")
     parser.add_argument("--run-id", help="Explicit extraction run id.")
     parser.add_argument("--geo-research-run-id", help="Geo-research run id for lineage.")
+    parser.add_argument(
+        "--skip-source-enrichment",
+        action="store_true",
+        help="Skip first-pass L2 enrichment from report-cited source full text.",
+    )
+    parser.add_argument(
+        "--enrichment-max-candidates",
+        type=int,
+        default=40,
+        help="Maximum report skeleton candidates considered by source_enrichment.",
+    )
+    parser.add_argument(
+        "--enrichment-max-spans-per-source",
+        type=int,
+        default=3,
+        help="Maximum accepted supplemental spans per cited source.",
+    )
     parser.add_argument(
         "--confidence-threshold",
         type=float,
@@ -207,6 +226,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     names = [args.pipeline] if args.pipeline else ALL_ORDER
+    if args.all and getattr(args, "skip_source_enrichment", False):
+        names = [name for name in names if name != "source_enrichment"]
 
     # If --industry is given (but no --scope), build a scope manifest first.
     if args.industry and not args.scope:

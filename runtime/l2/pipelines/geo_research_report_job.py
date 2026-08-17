@@ -60,9 +60,9 @@ def _geo_research_llm_config(root: str) -> str:
 
 def _geo_research_timeout() -> int:
     try:
-        return int(os.environ.get("GEO_RESEARCH_TIMEOUT", "900"))
+        return int(os.environ.get("GEO_RESEARCH_TIMEOUT", "1800"))
     except ValueError:
-        return 900
+        return 1800
 
 
 def _build_request(args, db=None) -> str:
@@ -96,18 +96,50 @@ def _build_request(args, db=None) -> str:
     return "请对指定行业进行公开权威研究，覆盖市场、产品、竞品、用户与趋势维度。"
 
 
+def _build_source_config(args, db=None) -> str | None:
+    """Return a source-config JSON path for geo-research, or None if not derivable.
+
+    Reuses the same requirement as `_build_request` and serializes the structured
+    source whitelist (allowed_source_classes + per-dimension required classes) so
+    the crawler can run a two-layer authoritative-source strategy. Writes a temp
+    JSON file and returns its path; caller passes it as `--source-config`.
+    """
+    requirement_id = getattr(args, "requirement_id", None) or getattr(args, "requirement", None)
+    if not requirement_id or db is None:
+        return None
+    try:
+        from runtime.l2.requirement_to_request import (
+            load_requirement,
+            requirement_to_source_config,
+        )
+
+        req = load_requirement(db, requirement_id)
+        market = getattr(args, "market", None) or req.get("market", "CN")
+        cfg = requirement_to_source_config(req, market=market)
+        import tempfile
+
+        fd, path = tempfile.mkstemp(suffix=".source-config.json", prefix="kg_src_")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        return path
+    except Exception as exc:  # noqa: BLE001 - source config is best-effort
+        print(f"[geo_research_report_job] source-config skip: {exc}")
+        return None
+
+
 def trigger_geo_research(args, db=None) -> str:
     """Shell out to geo-research to crawl + synthesize a report. Returns report path.
 
     Runs:
         <python> -m src.llm_report --config <llm-config.local.json> run \
-            --request "<request>"
+            --request "<request>" [--source-config <json>]
     in the geo-research root. Returns the path to the latest generated report.
     """
     root = _geo_research_root()
     python = _geo_research_python(root)
     llm_config = _geo_research_llm_config(root)
     request = _build_request(args, db=db)
+    source_config = _build_source_config(args, db=db)
     timeout = _geo_research_timeout()
     dry_run = getattr(args, "dry_run", False)
 
@@ -128,6 +160,8 @@ def trigger_geo_research(args, db=None) -> str:
         "--request",
         request,
     ]
+    if source_config:
+        cmd += ["--source-config", source_config]
     if getattr(args, "query_profile", None):
         cmd += ["--query-profile", args.query_profile]
 
@@ -135,6 +169,8 @@ def trigger_geo_research(args, db=None) -> str:
     print(f"  root:     {root}")
     print(f"  python:   {python}")
     print(f"  request:  {request}")
+    if source_config:
+        print(f"  source_config: {source_config}")
     print(f"  timeout:  {timeout}s")
 
     if dry_run:

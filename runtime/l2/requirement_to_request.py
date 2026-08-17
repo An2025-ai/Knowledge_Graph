@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from typing import Any
 
@@ -28,8 +29,20 @@ def requirement_to_request(requirement: dict, market: str = "CN") -> str:
     if not dims and isinstance(requirement.get("industry"), dict):
         dims = requirement["industry"].get("required_dimensions") or []
 
+    # Readable research topic: prefer the industry's canonical name (from the
+    # scope manifest / question wording), falling back to a stripped industry_id.
+    # NEVER put `ind_<slug>` directly in the search line — geo-research uses this
+    # line to derive the topic for its `site:` authoritative queries, so a slug
+    # like `ind_游戏笔记本` would make every Layer-1 query search that string.
+    industry_name = (
+        requirement.get("industry_name")
+        or _readable_name_from_questions(dims)
+        or _strip_id(industry_id)
+        or "行业"
+    )
+
     lines: list[str] = []
-    lines.append(f"研究行业：{industry_id or '（行业）'}（市场：{market}）。")
+    lines.append(f"研究行业：{industry_name}（市场：{market}）。")
     lines.append("请基于公开权威来源（政府、监管、标准组织、行业协会、行业研究机构、券商、权威媒体、厂商官网），生成一份覆盖以下维度的完整行业研究报告。")
     lines.append("所有事实性陈述须带 [S#] 引用。")
 
@@ -51,6 +64,85 @@ def requirement_to_request(requirement: dict, market: str = "CN") -> str:
     lines.append("")
     lines.append("报告应包含：执行摘要、研究方法、各维度发现、来源清单、搜索覆盖清单和缺失数据说明。")
     return "\n".join(lines)
+
+
+def _readable_name_from_questions(dims: list[dict]) -> str | None:
+    """Pull a readable industry name from the first dimension question, e.g.
+    '游戏笔记本 在 CN 市场的定义...' -> '游戏笔记本'. Returns None if ambiguous."""
+    # Markers a template question can use to reference the market, e.g.
+    # "<行业> 在 <CN|中国> 市场的定义...". Cut the topic off before any of these.
+    for dim in dims:
+        questions = dim.get("questions") or []
+        for q in questions:
+            text = str(q).strip()
+            if not text:
+                continue
+            cut = re.split(r"\s*在\s*(?:CN|中国|[A-Z]{2,3})\s*市场|:\s*$", text)[0].strip()
+            cut = cut.strip("，。；：: ")
+            if cut and len(cut) <= 40:
+                return cut
+    return None
+
+
+def _strip_id(industry_id: str | None) -> str | None:
+    """'ind_游戏笔记本' / 'cat_x' -> '游戏笔记本' / 'x'."""
+    if not industry_id:
+        return None
+    return re.sub(r"^(?:ind|cat|industry)_", "", industry_id).strip() or None
+
+
+def requirement_to_source_config(requirement: dict, market: str = "CN") -> dict:
+    """Extract a machine-readable authoritative-source contract for geo-research.
+
+    The crawled `--request` is free text and loses the structured source whitelist.
+    This returns a JSON slice the crawler can parse to run a two-layer source
+    strategy: (1) hardcoded trusted domains per source class, (2) dynamic
+    per-dimension authoritative-source discovery driven by the requirement's
+    allowed_source_classes + per-dimension required_source_classes.
+
+    The requirement dict is the single source of truth (NOT any module-level
+    hardcoded mapping), so any industry shares the same contract.
+    """
+    industry_id = requirement.get("industry_id") or requirement.get("industry", {}).get("industry_id")
+    req_id = requirement.get("requirement_id")
+
+    dims = requirement.get("required_dimensions") or requirement.get("dimensions") or []
+    if not dims and isinstance(requirement.get("industry"), dict):
+        dims = requirement["industry"].get("required_dimensions") or []
+
+    src_reqs = requirement.get("source_requirements") or {}
+    allowed = src_reqs.get("allowed_source_classes") or list(
+        requirement.get("allowed_source_classes") or []
+    )
+    excluded = src_reqs.get("excluded_source_classes") or list(
+        requirement.get("excluded_source_classes") or []
+    )
+
+    per_dim: dict[str, list[str]] = {}
+    for i, dim in enumerate(dims, start=1):
+        code = dim.get("dimension_code") or dim.get("dimension", f"dimension_{i}")
+        required = dim.get("required_source_classes")
+        # fall back to the global allowed list when a dimension has no explicit set
+        per_dim[code] = list(required) if required else list(allowed)
+
+    return {
+        "requirement_id": req_id,
+        "industry_id": industry_id,
+        # Readable topic for geo-research's `site:` queries (NOT the ind_ slug).
+        "industry_name": (
+            requirement.get("industry_name")
+            or _readable_name_from_questions(dims)
+            or _strip_id(industry_id)
+            or ""
+        ),
+        "market": market or requirement.get("market", "CN"),
+        "allowed_source_classes": list(allowed),
+        "excluded_source_classes": list(excluded),
+        "per_dimension_source_classes": per_dim,
+        "critical_claim_min_independent_sources": src_reqs.get(
+            "critical_claim_min_independent_sources", 2
+        ),
+    }
 
 
 def load_requirement(db: DB, requirement_id: str) -> dict:
