@@ -812,6 +812,35 @@ Recommendation:
 - Add `HanLP` or `PaddleNLP` if Chinese NER quality becomes a bottleneck.
 - Add `GLiNER` if flexible schema-based entity extraction is needed without calling a large LLM.
 
+**Implementation note (NER small-model layer):** PaddleNLP is now wired in as the
+optional small-model NER layer in the L3 candidate chain. See
+`runtime/ner_client.py` (provider abstraction mirroring `embeddings.py`) and its
+integration in `runtime/l3/pipelines/candidate_pre_extraction.py` (a
+`_ner_entities` layer injected via `pre_extract(text, ner_client)` after the
+rule/dictionary extractors). It emits `extraction_candidate` rows tagged
+`generator="paddlenlp:ner:<type>"`. The dependency (`paddlenlp` + `paddlepaddle`,
+added to `runtime/requirements-local-models.txt`) is strictly optional: if not
+installed (or a model fails to initialize — PaddlePaddle can be finicky on some
+Python/Windows combos), the layer degrades to empty and the L2/L3 pipelines run
+untouched. Configuration lives under the `"ner"` key of
+`runtime/config/model-config.local.json` (`enabled`/`provider`/`model`/`schema`),
+toggleable at the CLI with `--skip-ner`.
+
+**Runtime-verified notes (2026-08-13, Windows/Py3.12):**
+- Model: `uie-base` (UIE ERNIE). paddlenlp 2.6's `information_extraction`
+  Taskflow does **not** accept `uie-base-zh` — valid Catalina names are
+  `uie-base` / `uie-medium` / `uie-mini` / `uie-micro` / `uie-nano`.
+- **Paddle compatibility:** the task uses the static-graph export
+  (`static/inference.pdmodel`). This export **fails under paddlepaddle 3.x** but
+  succeeds under **paddlepaddle 2.6.x**. Pin `paddlepaddle==2.6.2` +
+  `paddlenlp==2.6.1` as a working pair (both have cp312 Windows wheels).
+- **Chinese schema required:** UIE is a Chinese model — it returns empty spans
+  when given **English** schema labels. The NER client therefore translates the
+  config's English schema to Chinese (`公司`/`产品`/`能力`/`认证`) before the call
+  and maps UIE labels back to English `candidate_type`.
+- Span cleaning (`_clean_span`) trims dangling/unbalanced brackets UIE sometimes
+  leaves at a span boundary while preserving balanced parenthesized spans.
+
 ### 10.4 Recommended Local Embedding and Reranker Models
 
 Default local model stack:

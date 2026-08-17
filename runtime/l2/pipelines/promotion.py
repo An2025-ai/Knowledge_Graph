@@ -12,6 +12,8 @@ VALID_STATEMENT_CLASSES = ("fact", "claim", "observation", "inference")
 REVIEW_GATES = {"gate_7_duplicate", "gate_8_conflict", "gate_10_quality"}
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
 NEAR_DUPLICATE_THRESHOLD = 0.85
+# Semantic (embedding) near-duplicate threshold for gate_7 semantic dedup stage.
+SEMANTIC_NEAR_DUPLICATE_THRESHOLD = 0.92
 
 
 def _candidates(db: DB, report_id: str | None) -> list[dict]:
@@ -121,11 +123,55 @@ def _near_duplicate(db: DB, candidate: dict) -> dict | None:
         (candidate["candidate_uuid"], candidate.get("industry_id")),
     )
     normalized = " ".join((candidate.get("statement") or "").casefold().split())
+    # Character-level near-duplicate check (existing).
     for row in rows:
         other = " ".join((row.get("statement") or "").casefold().split())
         if normalized and other and SequenceMatcher(None, normalized, other).ratio() >= NEAR_DUPLICATE_THRESHOLD:
             return row
+    # Semantic near-duplicate check (pgvector/embedding): catches same-meaning
+    # statements phrased differently that character similarity misses.
+    cand_vec = _embed_statement(candidate.get("statement") or "")
+    if cand_vec is None:
+        return None
+    for row in rows:
+        other_text = row.get("statement") or ""
+        if not other_text:
+            continue
+        other_vec = _embed_statement(other_text)
+        if other_vec is None:
+            continue
+        if _cosine(cand_vec, other_vec) >= SEMANTIC_NEAR_DUPLICATE_THRESHOLD:
+            return row
     return None
+
+
+_SEMANTIC_NN_CACHE: dict[str, list[float]] = {}
+
+
+def _embed_statement(text: str) -> list[float] | None:
+    """Embed statement text (cached per text) for semantic dedup; None if unavailable."""
+    if not text:
+        return None
+    if text in _SEMANTIC_NN_CACHE:
+        return _SEMANTIC_NN_CACHE[text]
+    try:
+        from runtime.embeddings import get_embedding_client
+
+        vec = get_embedding_client().embed_one(text)
+        _SEMANTIC_NN_CACHE[text] = vec
+        return vec
+    except Exception:  # noqa: BLE001 - optional vector layer
+        return None
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    try:
+        import numpy as np
+
+        va, vb = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+        return float(np.dot(va, vb) / (np.linalg.norm(va) * np.linalg.norm(vb)))
+    except Exception:
+        return 0.0
 
 
 def _relation_conflict(db: DB, relations: list[dict]) -> dict | None:

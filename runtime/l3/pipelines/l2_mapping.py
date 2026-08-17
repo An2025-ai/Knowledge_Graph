@@ -23,53 +23,55 @@ from runtime.l3.pipelines._helpers import resolve_brand_context
 MAPPER_VERSION = "l2_mapping.v1.0.0"
 
 
-def _find_l2_capability(db: DB, tenant_id: str, canonical_name: str) -> dict | None:
-    """Find a shared L2 capability entity by canonical_name or alias."""
+def _find_l2_entity(
+    db: DB, tenant_id: str, entity_type: str, canonical_name: str
+) -> dict | None:
+    """Find an active cross-tenant L2 entity by canonical name or alias."""
+    # L2 is the cross-tenant industry layer.  Its entities are written with a
+    # NULL tenant_id; tenant_id is accepted only to preserve the pipeline API.
+    # Filtering L2 by the L3 tenant made every real shared entity invisible.
     rows = db.query(
         "SELECT id, canonical_name FROM entity "
-        "WHERE tenant_id = %s AND entity_type = 'capability' "
-        "AND owner_brand IS NULL AND canonical_name = %s "
+        "WHERE tenant_id IS NULL AND entity_type = %s "
+        "AND owner_brand IS NULL AND scope = 'shared' AND canonical_name = %s "
         "AND status = 'active' LIMIT 1",
-        (tenant_id, canonical_name),
+        (entity_type, canonical_name),
     )
     if rows:
         return {"entity": rows[0], "via": "canonical_name"}
     alias_rows = db.query(
         "SELECT e.id, e.canonical_name FROM entity_alias a "
         "JOIN entity e ON e.id = a.entity_id "
-        "WHERE e.tenant_id = %s AND e.entity_type = 'capability' "
-        "AND e.owner_brand IS NULL AND e.status = 'active' "
+        "WHERE e.tenant_id IS NULL AND e.entity_type = %s "
+        "AND e.owner_brand IS NULL AND e.scope = 'shared' AND e.status = 'active' "
         "AND a.alias_name = %s LIMIT 1",
-        (tenant_id, canonical_name),
+        (entity_type, canonical_name),
     )
     if alias_rows:
         return {"entity": alias_rows[0], "via": "alias"}
     return None
 
 
+def _find_l2_capability(db: DB, tenant_id: str, canonical_name: str) -> dict | None:
+    """Backward-compatible capability-specific L2 lookup."""
+    return _find_l2_entity(db, tenant_id, "capability", canonical_name)
+
+
 def run(db: DB, args) -> dict[str, Any]:
-    """Map L3 brand capability entities onto L2 capability entities."""
+    """Optionally map L3 brand capabilities onto shared L2 capabilities."""
     ctx = resolve_brand_context(db, args)
     tenant_id, brand_id = ctx["tenant_id"], ctx["brand_id"]
 
-    capabilities = db.query(
-        "SELECT id, canonical_name FROM entity "
-        "WHERE tenant_id = %s AND entity_type = 'capability' AND owner_brand = %s "
-        "AND status = 'active'",
-        (tenant_id, brand_id),
-    )
-
     mappings = []
-    for cap in capabilities:
-        match = _find_l2_capability(db, tenant_id, cap["canonical_name"])
-        if not match:
-            continue
-        exact = match["via"] == "canonical_name"
-        mapping_type = "exactMatch" if exact else "closeMatch"
+
+    def record(local_id, local_name, target, mapping_type, note=""):
+        if not target:
+            return
+        exact = target["via"] == "canonical_name"
+        mt = mapping_type if mapping_type else ("exactMatch" if exact else "closeMatch")
         confidence = 1.0 if exact else 0.6
         review_status = "approved" if exact else "pending"
-        mapping_note = f"matched via {match['via']}"
-
+        mapping_note = note or f"matched via {target['via']}"
         if not getattr(args, "dry_run", False):
             db.execute(
                 "INSERT INTO brand_mapping "
@@ -79,32 +81,45 @@ def run(db: DB, args) -> dict[str, Any]:
                 "ON CONFLICT (tenant_id, local_entity_id, l2_entity_id, mapping_type) "
                 "DO UPDATE SET review_status = EXCLUDED.review_status, "
                 "confidence = EXCLUDED.confidence",
-                (tenant_id, brand_id, cap["id"], match["entity"]["id"], mapping_type,
+                (tenant_id, brand_id, local_id, target["entity"]["id"], mt,
                  confidence, mapping_note, review_status, MAPPER_VERSION),
             )
         mappings.append({
-            "local_entity_id": cap["id"],
-            "local_name": cap["canonical_name"],
-            "l2_entity_id": match["entity"]["id"],
-            "l2_name": match["entity"]["canonical_name"],
-            "mapping_type": mapping_type,
+            "local_entity_id": local_id,
+            "local_name": local_name,
+            "l2_entity_id": target["entity"]["id"],
+            "l2_name": target["entity"]["canonical_name"],
+            "mapping_type": mt,
             "confidence": confidence,
             "review_status": review_status,
         })
 
+    # resident entities created earlier
+    capabilities = db.query(
+        "SELECT id, canonical_name FROM entity "
+        "WHERE tenant_id = %s AND entity_type = 'capability' AND owner_brand = %s "
+        "AND status = 'active'",
+        (tenant_id, brand_id),
+    )
+    for cap in capabilities:
+        match = _find_l2_capability(db, tenant_id, cap["canonical_name"])
+        record(cap["id"], cap["canonical_name"], match,
+               mapping_type=None, note=f"capability -> shared capability")
+
+    candidates = len(capabilities)
+
     if getattr(args, "dry_run", False):
-        print(f"[l2_mapping] DRY-RUN: {len(capabilities)} capability candidates, "
-              f"{len(mappings)} mappings")
+        print(f"[l2_mapping] DRY-RUN: {candidates} candidates, {len(mappings)} mappings")
         for m in mappings[:10]:
             print(f"  {m['local_name']} [{m['mapping_type']}] -> {m['l2_name']}")
         return {**ctx, "pipeline": "l2_mapping", "dry_run": True,
-                "candidate_count": len(capabilities), "mapping_count": len(mappings),
+                "candidate_count": candidates, "mapping_count": len(mappings),
                 "mappings": mappings}
 
     print(f"[l2_mapping] {len(mappings)} brand_mapping rows created "
-          f"({len(capabilities)} capability candidates)")
+          f"({candidates} candidates)")
     return {**ctx, "pipeline": "l2_mapping",
-            "candidate_count": len(capabilities), "mapping_count": len(mappings),
+            "candidate_count": candidates, "mapping_count": len(mappings),
             "mappings": mappings}
 
 

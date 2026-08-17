@@ -10,5 +10,11 @@
     "provider": "api",
     "model": "YOUR-RERANK-MODEL"
   },
-  "_note": "provider 'api' uses the gateway; 'local' would use sentence-transformers (bge-m3) which requires HuggingFace download. Copy to model-config.local.json."
+  "ner": {
+    "enabled": true,
+    "provider": "local",
+    "model": "uie-base",
+    "schema": ["organization", "product", "capability", "certification"]
+  },
+  "_note": "provider 'api' uses the gateway; 'local' would use sentence-transformers (bge-m3) which requires HuggingFace download. 'ner' uses PaddleNLP (optional dep, see requirements-local-models.txt); missing model degrades to empty. Copy to model-config.local.json."
 }

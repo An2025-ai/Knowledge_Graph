@@ -190,6 +190,14 @@ def upsert_entity(
             "ON CONFLICT (entity_id, alias_name) DO NOTHING",
             (eid, alias),
         )
+    # Persist the entity's vector so entity_embedding/`<=>` retrieval is usable.
+    # Optional + non-fatal: if the embedding layer is unavailable we skip silently.
+    try:
+        from runtime.embeddings import write_embedding
+
+        write_embedding(db, "entity_embedding", eid, canonical_name, tenant_id)
+    except Exception:  # noqa: BLE001 - optional vector layer
+        pass
     return eid, candidate
 
 

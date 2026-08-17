@@ -8,3 +8,16 @@ sentence-transformers>=3.0
 torch
 transformers
 accelerate
+
+# PaddleNLP small-model NER (OPTIMIZATION_TECH_PLAN.md §10.3) — OPTIONAL.
+# Adds the PaddleNLP NER layer in candidate_pre_extraction (organization /
+# product / capability / certification candidates). Heavy; PaddlePaddle may not
+# build on every Python/Windows combo. NOT installed -> the NER layer degrades to
+# empty and the L2/L3 pipelines run unchanged. Install only if NER is needed.
+#
+# VERSION PIN: the UIE Taskflow needs the static-graph export, which FAILS under
+# paddlepaddle 3.x (missing static/inference.pdmodel). Verified working pair on
+# Windows/Py3.12: paddlepaddle==2.6.2 + paddlenlp==2.6.1.
+#   pip install -r runtime/requirements-local-models.txt
+paddlenlp==2.6.1
+paddlepaddle==2.6.2

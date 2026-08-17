@@ -156,6 +156,7 @@ python -m runtime.l3.executor --pipeline candidate_extraction --file <doc.md> --
 |------|------|------|
 | 严格抽取校验 | `runtime/extraction_schema.py` (Pydantic) + `ontology_validator.py` | LLM 输出先 shape→本体校验，非法自动重试修复 |
 | 候选预抽取 | `runtime/l3/pipelines/candidate_pre_extraction.py` + `brand_knowledge/rules+dictionaries` | 正则+词典抽 URL/版本/认证/组织/能力/产品候选，LLM 只处理难例 |
+| NER 小模型 | `runtime/ner_client.py`（PaddleNLP）+ `candidate_pre_extraction._ner_entities` | 可选第三层：UIE/ERNIE 通用 NER 抽组织/产品/能力/认证，`generator="paddlenlp:ner:<type>"`；未装 paddlenlp 时降级为空，不影响主链路（配置 `"ner"` 段，`--skip-ner` 可关）。模型 `uie-base`，需 **paddlepaddle 2.6.x**（3.x 下静态导出失败），schema 需中文（客户端自动中英互译） |
 | 向量存储 | `vector_migration.sql` (pgvector) + `embeddings.py` | entity/evidence/assertion embedding + HNSW |
 | 语义消歧 | `entity_resolution.py` | 精确匹配 + 别名/embedding 打分（0.35名+0.30嵌+0.20别名），≥.90 自动合并 / .75-.90 人工 |
 | 语义证据核验 | `evidence_verification.py` | 字符串→embedding 相似度 + 高风险用 LLM 判定 direct/partial/insufficient/contradicted |

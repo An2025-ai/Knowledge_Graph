@@ -432,9 +432,13 @@ CREATE TABLE IF NOT EXISTS external_import_record (
     package_hash    VARCHAR(64),
     status          VARCHAR(20) NOT NULL DEFAULT 'imported',
     registered_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     metadata        JSONB
 );
 COMMENT ON TABLE external_import_record IS '外部文件级导入血缘，不直接作为知识事实';
+-- 幂等补齐 updated_at（DB.upsert 的 ON CONFLICT DO UPDATE 假设每表都有 updated_at）
+ALTER TABLE external_import_record ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE external_import_record ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 -- ============================================================================
 -- 17. topic_membership — 主题层级和成员关系

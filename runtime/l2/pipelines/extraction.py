@@ -113,6 +113,22 @@ def _upsert_entity(
                 "ON CONFLICT (entity_id, alias_name) DO NOTHING",
                 (alias, "alt_label", entity_id),
             )
+        # Persist the entity vector (optional, non-fatal) so entity_embedding can
+        # be used for semantic retrieval/dedup downstream.
+        try:
+            from runtime.embeddings import write_embedding
+
+            uuid_rows = db.query(
+                "SELECT id, tenant_id FROM entity WHERE entity_id = %s LIMIT 1",
+                (entity_id,),
+            )
+            if uuid_rows:
+                write_embedding(
+                    db, "entity_embedding", uuid_rows[0]["id"], canonical,
+                    uuid_rows[0].get("tenant_id"),
+                )
+        except Exception:  # noqa: BLE001 - optional vector layer
+            pass
         print(f"  entity  {entity_id} ({etype})")
     else:
         print(f"  [dry] entity {entity_id} ({etype}) canonical={canonical}")
@@ -176,6 +192,11 @@ def run(db: DB, args) -> dict[str, Any]:
                 external_id = ent.get("id") or entity_id
                 entity_map[external_id] = entity_id
                 entity_map[entity_id] = entity_id
+                # Link the entity back to this report candidate so promotion's
+                # gate_2_entity_type (entity.attributes->'report_candidate_ids')
+                # can find it and the candidate passes the type gate.
+                if candidate_uuid and not dry_run:
+                    _add_entity_candidate(db, external_id, str(candidate_uuid))
                 if entity_id not in counted_entities:
                     counted_entities.add(entity_id)
                     stats["entities"] += 1

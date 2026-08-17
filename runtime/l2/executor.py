@@ -30,6 +30,7 @@ from runtime.db import check_connection, DB
 # Map of pipeline name -> (module import path, run function).
 PIPELINES = {
     "requirement_compilation": "runtime.l2.pipelines.requirement_compilation",
+    "source_discovery": "runtime.l2.pipelines.source_discovery",
     "geo_research_report_job": "runtime.l2.pipelines.geo_research_report_job",
     "report_ingestion": "runtime.l2.pipelines.report_ingestion",
     "evidence_resolution": "runtime.l2.pipelines.evidence_resolution",
@@ -41,6 +42,7 @@ PIPELINES = {
 # path must already exist (GEO_RESEARCH_REPORT_PATH or --report).
 ALL_ORDER = [
     "requirement_compilation",
+    "source_discovery",
     "geo_research_report_job",
     "report_ingestion",
     "evidence_resolution",
@@ -76,7 +78,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--priority-dim", help="Comma-separated priority dimension codes (scope builder).")
     parser.add_argument("--questions", help="Extra research questions (semicolon-separated) (scope builder).")
     parser.add_argument("--seed-sources", help="Comma-separated seed authoritative sources (scope builder).")
+    parser.add_argument("--trusted-domains", help="Comma-separated trusted domains for L2 source discovery.")
     parser.add_argument("--report", help="Path to markdown report (or geo-research report).")
+    parser.add_argument("--source-list", help="Source candidate JSON from source_discovery.")
+    parser.add_argument("--sources-out", help="Output path for source_discovery candidate JSON.")
+    parser.add_argument("--research-package", "--package", dest="research_package", help="Research package directory.")
+    parser.add_argument("--package-out", help="Output directory for a generated research_package.")
+    parser.add_argument("--dimensions", help="Comma-separated L2 dimension codes for source discovery.")
+    parser.add_argument("--max-results-per-query", type=int, default=3, help="Source discovery results per query.")
+    parser.add_argument("--max-sources-per-dimension", type=int, default=5, help="Accepted source cap per L2 dimension.")
+    parser.add_argument("--min-authority-score", type=float, default=0.4, help="Minimum authority score for accepted sources.")
+    parser.add_argument("--strict-authority", action="store_true", help="Only accept sources with strong authority signals.")
+    parser.add_argument("--include-exploratory", action="store_true", help="Allow lower-authority but relevant sources into discovery output.")
+    parser.add_argument("--offline", action="store_true", help="Skip search provider calls and emit fallback source candidates.")
+    parser.add_argument("--no-fetch", action="store_true", help="Build research_package without fetching candidate URLs.")
     parser.add_argument(
         "--crawl",
         action="store_true",
@@ -138,6 +153,12 @@ def _propagate_result(name: str, result: dict, args: argparse.Namespace) -> None
             setattr(args, key, result[key])
     if result.get("report_path"):
         args.report = result["report_path"]
+    if result.get("source_list"):
+        args.source_list = result["source_list"]
+    if result.get("research_package"):
+        args.research_package = result["research_package"]
+    if result.get("evidence_path"):
+        args.evidence = result["evidence_path"]
 
 
 def _build_scope_from_industry(args: argparse.Namespace) -> str:
@@ -196,13 +217,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.all:
         if not args.scope:
             parser.error("--all requires --scope <scope.yaml> or --industry <名称>")
-        if not args.report and not args.crawl and not args.requirement_id:
+        if (not args.report and not args.crawl and not args.requirement_id
+                and not args.source_list and not args.research_package and not args.industry):
             parser.error(
-                "--all requires --report <file.md>, or --crawl / --requirement-id to have geo-research generate it"
+                "--all requires --report, --source-list, --research-package, --industry, "
+                "or --crawl / --requirement-id"
             )
-        if not args.evidence and not os.environ.get("GEO_RESEARCH_EVIDENCE_PATH"):
+        if (not args.evidence and not args.source_list and not args.research_package
+                and not args.industry and not os.environ.get("GEO_RESEARCH_EVIDENCE_PATH")):
             parser.error(
-                "--all requires --evidence <index.json> or GEO_RESEARCH_EVIDENCE_PATH"
+                "--all requires --evidence, or a source-list/research-package/industry "
+                "that can produce evidence_index.json"
             )
 
     results = {}

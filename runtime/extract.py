@@ -76,7 +76,12 @@ def extract_entities_relations(
     raw parsed dict so downstream can decide. `on_error` is called with a message
     on each failed attempt (e.g. for metrics).
     """
-    result = extract_json(client, EXTRACTION_SYSTEM, text, max_tokens=max_tokens)
+    try:
+        result = extract_json(client, EXTRACTION_SYSTEM, text, max_tokens=max_tokens)
+    except (ValueError, json.JSONDecodeError) as exc:  # truncated/invalid JSON
+        if on_error:
+            on_error(f"json: {exc}")
+        result = {}
     if not validate:
         return _normalized(result)
 
@@ -102,15 +107,18 @@ def extract_entities_relations(
         if attempt >= retries:
             return _normalized(result)
         # Repair: tell the LLM what was invalid and ask it to fix.
+        reason = validation_errors[:6] if validation_errors else ["输出 JSON 不完整或被截断，请重新输出完整合法的 JSON"]
         repair_prompt = (
             text
-            + "\n\n[校验失败] 上次输出字段类型/本体不合法。请修正后重新按 JSON 输出：\n- "
-            + "\n- ".join(validation_errors[:6])
+            + "\n\n[校验失败] 上次输出字段类型/本体不合法或 JSON 不完整。请修正后重新按 JSON 输出：\n- "
+            + "\n- ".join(reason)
         )
         try:
             result = extract_json(client, EXTRACTION_SYSTEM, repair_prompt, max_tokens=max_tokens)
-        except Exception:
-            return _normalized(result)
+        except (ValueError, json.JSONDecodeError) as exc:
+            if on_error:
+                on_error(f"json-repair: {exc}")
+            result = {}
     return _normalized(result)
 
 

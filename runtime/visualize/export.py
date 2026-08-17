@@ -1,9 +1,11 @@
-"""Export knowledge graph results from PostgreSQL to a JSON file for Jupyter visualization.
+"""Export knowledge graph results from PostgreSQL to JSON for visualization.
 
 Usage:
-    python -m runtime.visualize.export --out runtime/visualize/output/graph.json
-    python -m runtime.visualize.export --industry <industry_id> --out out.json
-    python -m runtime.visualize.export --brand <brand_id> --tenant <tenant_id> --out out.json
+    python -m runtime.visualize.export --layer L1 --out runtime/visualize/output/l1.json
+    python -m runtime.visualize.export --layer L2 --out runtime/visualize/output/l2.json
+    python -m runtime.visualize.export --layer L3 --out runtime/visualize/output/l3.json
+    python -m runtime.visualize.export --all --out runtime/visualize/output/all.json
+    python -m runtime.visualize.export --all --include-mappings
 """
 from __future__ import annotations
 
@@ -17,8 +19,19 @@ def _query_rows(db, sql, params=None):
     return db.query(sql, params)
 
 
-def build_graph(entities, relations, statements=None):
-    """Convert DB rows into {nodes, edges, stats} for pyvis/networkx."""
+def _layer_for(e: dict) -> str:
+    """Infer L1/L2/L3 layer for runtime entity rows."""
+    owner = e.get("owner_brand")
+    brand_id = e.get("brand_id") or (e.get("attributes") or {}).get("brand_id")
+    if owner or brand_id:
+        return "L3"
+    if e.get("industry_id") or (e.get("attributes") or {}).get("industry_id"):
+        return "L2"
+    return "L1"
+
+
+def build_graph(entities, relations, statements=None, brand_mappings=None):
+    """Convert DB rows into {nodes, edges, statements, stats}."""
     nodes = []
     for e in entities:
         nodes.append({
@@ -29,8 +42,24 @@ def build_graph(entities, relations, statements=None):
             "canonical_name": e.get("canonical_name"),
             "status": e.get("status"),
             "scope": e.get("scope"),
+            "layer": _layer_for(e),
+            "brand_id": e.get("brand_id"),
+            "industry_id": e.get("industry_id"),
+            "market": e.get("market"),
         })
+
     edges = []
+    for m in (brand_mappings or []):
+        edges.append({
+            "id": f"bm_{m.get('local_entity_id')}_{m.get('l2_entity_id')}",
+            "relation_id": f"bm_{m.get('local_entity_id')}_{m.get('l2_entity_id')}",
+            "subject_id": str(m.get("local_entity_id")),
+            "object_id": str(m.get("l2_entity_id")),
+            "type": m.get("mapping_type") or "SAME_AS",
+            "confidence": float(m.get("confidence")) if m.get("confidence") is not None else None,
+            "cross_layer": True,
+            "verification_status": m.get("review_status"),
+        })
     for r in relations:
         edges.append({
             "id": str(r.get("id")),
@@ -41,15 +70,16 @@ def build_graph(entities, relations, statements=None):
             "confidence": float(r.get("confidence")) if r.get("confidence") is not None else None,
             "verification_status": r.get("verification_status"),
         })
+
     stmts = []
-    if statements:
-        for s in statements:
-            stmts.append({
-                "id": str(s.get("id")),
-                "text": s.get("statement_text") or s.get("text"),
-                "class": s.get("statement_class") or s.get("assertion_kind"),
-                "status": s.get("status"),
-            })
+    for s in (statements or []):
+        stmts.append({
+            "id": str(s.get("id")),
+            "text": s.get("statement_text") or s.get("text"),
+            "class": s.get("statement_class") or s.get("assertion_kind"),
+            "status": s.get("status"),
+        })
+
     return {
         "nodes": nodes,
         "edges": edges,
@@ -77,27 +107,89 @@ def _relations_for_entity_ids(db, entity_ids):
     )
 
 
+def _active_entities(db):
+    return _query_rows(
+        db,
+        "SELECT id, entity_id, canonical_name, entity_type, status, scope, "
+        "owner_brand, brand_id, industry_id, market, attributes FROM entity "
+        "WHERE status='active' ORDER BY entity_type",
+    )
+
+
+def _statements_for_entity_ids(db, ids, include_assertions=False):
+    if not ids:
+        return []
+    placeholders = ", ".join(["%s"] * len(ids))
+    statements = _query_rows(
+        db,
+        "SELECT id, statement_text, statement_class, status FROM statement "
+        f"WHERE status='active' AND (subject_entity_id IN ({placeholders}) "
+        f"OR object_entity_id IN ({placeholders})) LIMIT 500",
+        tuple(ids + ids),
+    )
+    if include_assertions:
+        statements.extend(_query_rows(
+            db,
+            "SELECT id, statement_text, statement_class, status FROM assertion "
+            f"WHERE status='active' AND (subject_id IN ({placeholders}) "
+            f"OR object_entity_id IN ({placeholders})) LIMIT 500",
+            tuple(ids + ids),
+        ))
+    return statements
+
+
+def export_layer(db, layer: str, out_path=None) -> dict:
+    """Export one logical layer only."""
+    layer = layer.upper()
+    if layer == "L1":
+        entity_types = _query_rows(
+            db,
+            "SELECT type_code AS id, type_code AS entity_id, canonical_name, "
+            "'entity_type' AS entity_type, status, 'definition' AS scope "
+            "FROM entity_type WHERE status='active' ORDER BY type_code",
+        )
+        relation_types = _query_rows(
+            db,
+            "SELECT relation_code AS id, relation_code AS entity_id, relation_code AS canonical_name, "
+            "'relation_type' AS entity_type, status, 'definition' AS scope "
+            "FROM relation_type WHERE status='active' ORDER BY relation_code",
+        )
+        graph = build_graph(entity_types + relation_types, [])
+        for node in graph["nodes"]:
+            node["layer"] = "L1"
+        return write_output(graph, out_path)
+
+    if layer not in {"L2", "L3"}:
+        raise ValueError("--layer must be one of: L1, L2, L3")
+    entities = [e for e in _active_entities(db) if _layer_for(e) == layer]
+    ids = [str(e["id"]) for e in entities]
+    relations = _relations_for_entity_ids(db, ids)
+    statements = _statements_for_entity_ids(db, ids, include_assertions=(layer == "L3"))
+    return write_output(build_graph(entities, relations, statements), out_path)
+
+
 def export_industry(db, industry_id=None, out_path=None) -> dict:
     """Export entities/relations tagged to an industry (L2)."""
-    where = ""
+    where = " WHERE status='active'"
     params = None
     if industry_id:
-        where = " WHERE (industry_id = %s OR attributes->>'industry_id' = %s)"
+        where += " AND (industry_id = %s OR attributes->>'industry_id' = %s)"
         params = (industry_id, industry_id)
     entities = _query_rows(
         db,
-        "SELECT id, entity_id, canonical_name, entity_type, status, scope "
-        "FROM entity" + where + " ORDER BY entity_type",
+        "SELECT id, entity_id, canonical_name, entity_type, status, scope, "
+        "owner_brand, brand_id, industry_id, market, attributes FROM entity"
+        + where + " ORDER BY entity_type",
         params,
     )
-    relations = _relations_for_entity_ids(db, [e["id"] for e in entities])
-    return write_output(build_graph(entities, relations), out_path)
+    ids = [str(e["id"]) for e in entities]
+    relations = _relations_for_entity_ids(db, ids)
+    statements = _statements_for_entity_ids(db, ids)
+    return write_output(build_graph(entities, relations, statements), out_path)
 
 
 def export_brand(db, brand_id, tenant_id=None, out_path=None) -> dict:
     """Export entities/relations for a specific brand (L3)."""
-    # Resolve UUID, business entity_id, or canonical brand name first. This
-    # avoids casting arbitrary user input to UUID.
     brand_params = [brand_id, brand_id, brand_id]
     tenant_clause = ""
     if tenant_id:
@@ -112,6 +204,7 @@ def export_brand(db, brand_id, tenant_id=None, out_path=None) -> dict:
     )
     if not brands:
         raise ValueError(f"brand not found: {brand_id}")
+
     brand_uuid = str(brands[0]["id"])
     entity_params = [brand_uuid, brand_uuid, brand_uuid]
     entity_tenant_clause = ""
@@ -120,50 +213,44 @@ def export_brand(db, brand_id, tenant_id=None, out_path=None) -> dict:
         entity_params.append(tenant_id)
     entities = _query_rows(
         db,
-        "SELECT id, entity_id, canonical_name, entity_type, status, scope "
-        "FROM entity WHERE (id::text = %s OR owner_brand = %s::uuid "
+        "SELECT id, entity_id, canonical_name, entity_type, status, scope, "
+        "owner_brand, brand_id, industry_id, market, attributes "
+        "FROM entity WHERE status='active' AND (id::text = %s OR owner_brand = %s::uuid "
         "OR attributes->>'brand_id' = %s)" + entity_tenant_clause
         + " ORDER BY entity_type",
         tuple(entity_params),
     )
     ids = [str(e["id"]) for e in entities]
     relations = _relations_for_entity_ids(db, ids)
-    statements = []
-    if ids:
-        placeholders = ", ".join(["%s"] * len(ids))
-        statements = _query_rows(
-            db,
-            "SELECT id, statement_text, statement_class, status FROM statement "
-            f"WHERE status='active' AND (subject_entity_id IN ({placeholders}) "
-            f"OR object_entity_id IN ({placeholders})) LIMIT 200",
-            tuple(ids + ids),
-        )
-    assertions = _query_rows(
-        db,
-        "SELECT id, statement_text, statement_class, status FROM assertion "
-        "WHERE status='active' AND brand_id = %s::uuid "
-        + ("AND tenant_id::text = %s " if tenant_id else "")
-        + "LIMIT 200",
-        (brand_uuid, tenant_id) if tenant_id else (brand_uuid,),
-    )
-    statements.extend(assertions)
+    statements = _statements_for_entity_ids(db, ids, include_assertions=True)
     return write_output(build_graph(entities, relations, statements), out_path)
 
 
-def export_all(db, out_path=None) -> dict:
-    entities = _query_rows(
-        db,
-        "SELECT id, entity_id, canonical_name, entity_type, status, scope FROM entity ORDER BY entity_type",
-    )
+def export_all(db, out_path=None, include_mappings=False) -> dict:
+    entities = _active_entities(db)
     relations = _query_rows(
         db,
         "SELECT id, subject_id, relation_type, object_id, confidence, verification_status "
         "FROM relation WHERE status='active'",
     )
     statements = _query_rows(
-        db, "SELECT id, statement_text, statement_class, status FROM statement WHERE status='active' LIMIT 500"
+        db,
+        "SELECT id, statement_text, statement_class, status FROM statement "
+        "WHERE status='active' LIMIT 500",
     )
-    return write_output(build_graph(entities, relations, statements), out_path)
+    statements.extend(_query_rows(
+        db,
+        "SELECT id, statement_text, statement_class, status FROM assertion "
+        "WHERE status='active' LIMIT 500",
+    ))
+    mappings = []
+    if include_mappings:
+        mappings = _query_rows(
+            db,
+            "SELECT local_entity_id, l2_entity_id, mapping_type, confidence, review_status "
+            "FROM brand_mapping",
+        )
+    return write_output(build_graph(entities, relations, statements, brand_mappings=mappings), out_path)
 
 
 def write_output(graph: dict, out_path=None) -> dict:
@@ -175,24 +262,28 @@ def write_output(graph: dict, out_path=None) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Export PG knowledge graph to JSON for Jupyter.")
-    parser.add_argument("--out", default=None, help="output JSON path (default runtime/visualize/output/knowledge_graph.json)")
+    parser = argparse.ArgumentParser(description="Export PG knowledge graph to JSON for visualization.")
+    parser.add_argument("--out", default=None, help="output JSON path")
     parser.add_argument("--industry", default=None, help="filter to an industry tree")
-    parser.add_argument("--brand", default=None, help="filter to a brand id")
+    parser.add_argument("--brand", default=None, help="filter to a brand id/name")
     parser.add_argument("--tenant", default=None, help="tenant id for brand export")
     parser.add_argument("--all", dest="all_", action="store_true", help="export everything")
+    parser.add_argument("--layer", choices=["L1", "L2", "L3", "l1", "l2", "l3"], help="export one layer only")
+    parser.add_argument("--include-mappings", action="store_true", help="include optional L3-to-L2 mapping edges")
     args = parser.parse_args()
 
     from runtime.db import DB
 
     with DB() as db:
-        if args.brand:
+        if args.layer:
+            export_layer(db, args.layer, args.out)
+        elif args.brand:
             export_brand(db, args.brand, args.tenant, args.out)
         elif args.industry:
             export_industry(db, args.industry, args.out)
         else:
-            export_all(db, args.out)
-    print("[export] done — open the notebook to visualize")
+            export_all(db, args.out, include_mappings=args.include_mappings)
+    print("[export] done - open the notebook to visualize")
     return 0
 
 

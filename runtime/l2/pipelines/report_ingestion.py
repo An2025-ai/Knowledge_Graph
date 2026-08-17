@@ -102,7 +102,17 @@ def parse_report(text: str) -> dict[str, Any]:
 
 def run(db: DB, args) -> dict[str, Any]:
     """Ingest a markdown report into report_section + report_candidate rows."""
+    package_dir = getattr(args, "research_package", None) or getattr(args, "package", None)
     report_path = getattr(args, "report", None)
+    if package_dir and not report_path:
+        manifest_path = os.path.join(package_dir, "manifest.json")
+        report_name = "report.md"
+        if os.path.exists(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            report_name = (manifest.get("files") or {}).get("report", report_name)
+        report_path = os.path.join(package_dir, report_name)
+        args.report = report_path
     if not report_path or not os.path.exists(report_path):
         raise FileNotFoundError(f"Report not found: {report_path}")
 
@@ -171,6 +181,10 @@ def run(db: DB, args) -> dict[str, Any]:
             "candidate_type": "statement",
             "citation_labels": cand["citation_labels"],
             "normalized_statement_hash": _statement_hash(cand["statement"]),
+            # Baseline confidence: candidates with inline [S#] citations are
+            # treated as stronger (evidence passage can refine later); this keeps
+            # promotion's gate_10_quality meaningful for ingested candidates.
+            "confidence": len(cand.get("citation_labels") or []) >= 1 and 0.65 or 0.5,
             "status": "candidate",
         }
         candidate_count += 1
@@ -178,17 +192,19 @@ def run(db: DB, args) -> dict[str, Any]:
             db.execute(
                 "INSERT INTO report_candidate (report_id, section_id, section_code, "
                 "report_span, statement, candidate_type, citation_labels, "
-                "normalized_statement_hash, status) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                "confidence, normalized_statement_hash, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
                 "ON CONFLICT (report_id, normalized_statement_hash) "
                 "WHERE normalized_statement_hash IS NOT NULL DO UPDATE SET "
                 "section_id=EXCLUDED.section_id, section_code=EXCLUDED.section_code, "
                 "report_span=EXCLUDED.report_span, statement=EXCLUDED.statement, "
-                "citation_labels=EXCLUDED.citation_labels",
+                "citation_labels=EXCLUDED.citation_labels, "
+                "confidence=EXCLUDED.confidence",
                 (report_uuid, section_id, cand_row["section_code"],
                  cand_row["report_span"], cand_row["statement"],
                  cand_row["candidate_type"], db._json(cand_row["citation_labels"]),
-                 cand_row["normalized_statement_hash"], cand_row["status"]),
+                 cand_row["confidence"], cand_row["normalized_statement_hash"],
+                 cand_row["status"]),
             )
 
     if dry_run:
@@ -220,7 +236,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="L2 report ingestion pipeline")
-    parser.add_argument("--report", required=True, help="Path to markdown report")
+    parser.add_argument("--report", help="Path to markdown report")
+    parser.add_argument("--research-package", "--package", dest="research_package", help="Path to research_package directory")
     parser.add_argument("--report-id", required=True, help="research_report.report_id to attach to")
     parser.add_argument("--dry-run", action="store_true", help="Print actions without writing")
     args = parser.parse_args()

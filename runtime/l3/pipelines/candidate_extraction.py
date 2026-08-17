@@ -83,6 +83,18 @@ def _load_client() -> Any:
         return None
 
 
+def _write_assertion_embedding(db: DB, assertion_id: str | None, text: str, tenant_id) -> None:
+    """Persist an assertion's vector (optional, non-fatal) for semantic retrieval."""
+    if not assertion_id or not text:
+        return
+    try:
+        from runtime.embeddings import write_embedding
+
+        write_embedding(db, "assertion_embedding", assertion_id, text, tenant_id)
+    except Exception:  # noqa: BLE001 - optional vector layer
+        pass
+
+
 def run(db: DB, args) -> dict[str, Any]:
     """Extract entities/relations/assertions from evidence spans."""
     ctx = resolve_brand_context(db, args)
@@ -170,7 +182,7 @@ def run(db: DB, args) -> dict[str, Any]:
                 (sub_uuid, rtype, obj_uuid, tenant_id, r.get("confidence")),
             )
             stats["relations"] += 1
-            _insert_assertion(
+            aid = _insert_assertion(
                 db, ctx,
                 subject_id=sub_uuid, predicate=rtype, statement_text=stmt_text,
                 statement_class=RELATION_DEFAULT_CLASS,
@@ -178,6 +190,7 @@ def run(db: DB, args) -> dict[str, Any]:
                 confidence=r.get("confidence"),
                 evidence_span_id=span["id"], evidence_quote=span["text"],
             )
+            _write_assertion_embedding(db, aid, stmt_text, tenant_id)
             stats["assertions"] += 1
 
         # --- statements -> assertion rows (subject = brand, predicate = mentions) ---
@@ -190,13 +203,14 @@ def run(db: DB, args) -> dict[str, Any]:
                 stats["assertions"] += 1
                 print(f"[candidate_extraction][dry] assertion: ({sclass}) {stext}")
                 continue
-            _insert_assertion(
+            aid = _insert_assertion(
                 db, ctx,
                 subject_id=brand_id, predicate=MENTION_PREDICATE,
                 statement_text=stext, statement_class=sclass,
                 object_value={"text": stext},
                 evidence_span_id=span["id"], evidence_quote=span["text"],
             )
+            _write_assertion_embedding(db, aid, stext, tenant_id)
             stats["assertions"] += 1
 
     print(f"[candidate_extraction] stats={json.dumps(stats, ensure_ascii=False)}")

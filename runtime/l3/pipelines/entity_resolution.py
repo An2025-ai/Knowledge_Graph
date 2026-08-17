@@ -72,8 +72,13 @@ def _fuzzy_pre_filter(a: str, b: str) -> bool:
     return len(a) >= 4 and (a[:2] == b[:2])  # share first 2 chars
 
 
-def _compute_similarity(entity_a: dict, entity_b: dict, embed_client=None) -> float:
-    """Weighted name+embedding similarity for two same-type entities."""
+def _compute_similarity(entity_a: dict, entity_b: dict, embed_client=None, db=None) -> float:
+    """Weighted name+embedding similarity for two same-type entities.
+
+    Prefers the persisted ``entity_embedding`` table (via dot product of stored
+    normalized vectors) so we don't re-embed every pair; falls back to live
+    ``embed_client.embed_one`` when the vector table has no row for either id.
+    """
     name_a = entity_a["canonical_name"]
     name_b = entity_b["canonical_name"]
     s_name = _name_similarity(name_a, name_b)
@@ -84,16 +89,40 @@ def _compute_similarity(entity_a: dict, entity_b: dict, embed_client=None) -> fl
     s_alias = 1.0 if (aliases_a & aliases_b) or name_a in aliases_b or name_b in aliases_a else 0.0
 
     s_embed = 0.0
-    if embed_client is not None:
+    va = _vector_for_entity(db, entity_a)
+    vb = _vector_for_entity(db, entity_b)
+    if va is None and vb is None and embed_client is not None:
+        # no persisted vectors -> live embed fallback (costlier)
+        try:
+            vb = embed_client.embed_one(name_b)
+            va = embed_client.embed_one(name_a)
+        except Exception:
+            va = vb = None
+    if va is not None and vb is not None:
         try:
             import numpy as np
 
-            v1 = embed_client.embed_one(name_a)
-            v2 = embed_client.embed_one(name_b)
-            s_embed = float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+            s_embed = float(np.dot(va, vb) / (np.linalg.norm(va) * np.linalg.norm(vb)))
         except Exception:
             s_embed = 0.0
     return W_NAME * s_name + W_EMBED * s_embed + W_ALIAS * s_alias
+
+
+def _vector_for_entity(db, entity: dict) -> list[float] | None:
+    """Return the stored embedding vector for an entity from entity_embedding, or None."""
+    if db is None:
+        return None
+    eid = entity.get("id")
+    if not eid:
+        return None
+    try:
+        rows = db.query(
+            "SELECT embedding FROM entity_embedding WHERE entity_id = %s LIMIT 1",
+            (eid,),
+        )
+        return rows[0]["embedding"] if rows else None
+    except Exception:  # noqa: BLE001 - table may be empty/unavailable
+        return None
 
 
 def run(db: DB, args) -> dict[str, Any]:
@@ -155,7 +184,7 @@ def run(db: DB, args) -> dict[str, Any]:
                 continue
             if not _fuzzy_pre_filter(a["canonical_name"], b["canonical_name"]):
                 continue
-            score = _compute_similarity(a, b, embed_client)
+            score = _compute_similarity(a, b, embed_client, db=db)
             if score >= AUTO_MERGE_THRESHOLD:
                 # auto-merge b into a (deprecate b)
                 db.execute("UPDATE entity SET status = 'deprecated' WHERE id = %s", (b["id"],))

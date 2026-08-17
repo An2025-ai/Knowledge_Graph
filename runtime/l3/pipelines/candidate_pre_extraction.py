@@ -19,6 +19,7 @@ import yaml
 
 from runtime.db import DB
 from runtime.l3.pipelines._helpers import resolve_brand_context
+from runtime.ner_client import get_ner_client
 
 ROOT = Path(__file__).resolve().parents[3]  # Knowledge_Graph root
 RULES_DIR = ROOT / "brand_knowledge" / "rules"
@@ -145,8 +146,57 @@ def _capability_entities(text: str, dicts: dict) -> list[dict]:
     return candidates
 
 
-def pre_extract(text: str) -> list[dict]:
-    """Run all rule + dictionary extractors over a text chunk."""
+# NER model label -> candidate_type whitelist (mirrors runtime/ner_client._TYPE_ALIASES).
+# Anything that maps to None is dropped rather than projected as a candidate.
+_NER_TYPE_WHITELIST = {
+    "organization": "organization",
+    "org": "organization",
+    "company": "organization",
+    "product": "product",
+    "product_name": "product",
+    "capability": "capability",
+    "function": "capability",
+    "feature": "capability",
+    "certification": "certification",
+    "cert": "certification",
+}
+
+
+def _ner_type_to_candidate(label: str) -> str | None:
+    """Map a NER model label to an L3 candidate_type, or None to drop it."""
+    if not label:
+        return None
+    return _NER_TYPE_WHITELIST.get(label.lower(), _NER_TYPE_WHITELIST.get(label))
+
+
+def _ner_entities(text: str, ner_client) -> list[dict]:
+    """Run the optional PaddleNLP NER small-model layer over the text."""
+    candidates = []
+    try:
+        for ent in ner_client.named_entities(text):
+            ctype = _ner_type_to_candidate(ent.get("type", ""))
+            if not ctype or not ent.get("text"):
+                continue
+            score = float(ent.get("score", 0.7))
+            candidates.append({
+                "candidate_type": ctype,
+                "candidate_payload": {"name": ent["text"]},
+                "confidence": round(score, 3),
+                "generator": f"paddlenlp:ner:{ctype}",
+            })
+    except Exception as exc:  # noqa: BLE001 - optional layer, never break caller
+        print(f"[candidate_pre_extraction] NER unavailable, skipping: {exc}")
+    return candidates
+
+
+def pre_extract(text: str, ner_client=None) -> list[dict]:
+    """Run all rule + dictionary extractors over a text chunk.
+
+    When ``ner_client`` (an optional small-model NER provider) is supplied, its
+    organization/product/capability/certification candidates are appended after
+    the deterministic rule/dictionary layer. Defaults to ``None`` so the pure
+    function stays model-free and trivially testable.
+    """
     rules = {
         "entity_patterns": _load_yaml(RULES_DIR / "entity_patterns.yaml").get("entity_patterns", []),
         "metric_patterns": _load_yaml(RULES_DIR / "metric_patterns.yaml").get("metric_patterns", []),
@@ -165,6 +215,8 @@ def pre_extract(text: str) -> list[dict]:
     all_candidates += _organization_entities(text, dicts)
     all_candidates += _product_entities(text, dicts)
     all_candidates += _capability_entities(text, dicts)
+    if ner_client is not None:
+        all_candidates += _ner_entities(text, ner_client)
     return all_candidates
 
 
@@ -184,6 +236,16 @@ def run(db: DB, args) -> dict[str, Any]:
         raise ValueError(f"document not found: {document_id_str}. Run source_registration first.")
     document_uuid = doc_rows[0]["id"]
 
+    # Optional small-model NER layer (PaddleNLP). Model is loaded lazily on the
+    # first call; a missing/broken model degrades to "no client" without breaking.
+    ner_client = None
+    ner_enabled = not getattr(args, "skip_ner", False)
+    if ner_enabled:
+        try:
+            ner_client = get_ner_client()
+        except Exception as exc:  # noqa: BLE001 - optional layer
+            print(f"[candidate_pre_extraction] NER disabled: {exc}")
+
     chunks = db.query(
         "SELECT id, chunk_index, text FROM document_chunk "
         "WHERE document_id = %s AND chunk_type = 'evidence_span' ORDER BY chunk_index",
@@ -195,11 +257,14 @@ def run(db: DB, args) -> dict[str, Any]:
                 "candidate_count": 0}
 
     total = 0
+    ner_count = 0
     for chunk in chunks:
-        candidates = pre_extract(chunk["text"] or "")
+        candidates = pre_extract(chunk["text"] or "", ner_client=ner_client)
         if not candidates:
             continue
         for c in candidates:
+            if c.get("generator", "").startswith("paddlenlp:"):
+                ner_count += 1
             if getattr(args, "dry_run", False):
                 total += 1
                 continue
@@ -216,9 +281,11 @@ def run(db: DB, args) -> dict[str, Any]:
             )
             total += 1
 
-    print(f"[candidate_pre_extraction] {total} candidates from {len(chunks)} spans")
+    print(f"[candidate_pre_extraction] {total} candidates from {len(chunks)} spans "
+          f"(ner={ner_count})")
     return {**ctx, "pipeline": "candidate_pre_extraction", "document_id": document_id_str,
             "span_count": len(chunks), "candidate_count": total,
+            "ner_count": ner_count, "ner_enabled": ner_client is not None,
             "dry_run": bool(getattr(args, "dry_run", False))}
 
 

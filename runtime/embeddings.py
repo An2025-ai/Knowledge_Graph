@@ -116,6 +116,89 @@ def get_embedding_client() -> EmbeddingClient:
     return EmbeddingClient()
 
 
+# ---------------------------------------------------------------------------
+# Persist embeddings into the pgvector tables
+# (entity_embedding / evidence_embedding / assertion_embedding — see
+# runtime/migrations/vector_migration.sql). These are called right after a
+# source row is created so the HNSW indexes can be used for `<=>` retrieval.
+# psycopg2 renders a Python list as the textual vector literal `[0.1,...]`,
+# which pgvector accepts directly.
+# ---------------------------------------------------------------------------
+
+# Valid vector tables -> primary-key column name (both shared by all three).
+_EMBEDDING_TABLES = {
+    "entity_embedding": "entity_id",
+    "evidence_embedding": "evidence_id",
+    "assertion_embedding": "assertion_id",
+}
+
+
+def write_embedding(
+    db,
+    table: str,
+    pk_value,
+    text: str,
+    tenant_id,
+    model: str = "BAAI/bge-m3",
+) -> list[float] | None:
+    """Embed ``text`` and persist into ``table`` (idempotent ON CONFLICT DO UPDATE).
+
+    Returns the vector on success, or None on any embedding/provider failure so
+    the caller (a pipeline write) is never blocked by the optional vector layer.
+    ``db`` is a ``runtime.db.DB``; ``pk_value`` is the source row UUID.
+    """
+    pk_col = _EMBEDDING_TABLES.get(table)
+    if pk_col is None:
+        raise ValueError(f"unknown embedding table '{table}'")
+    try:
+        vec = get_embedding_client().embed_one(text)
+    except Exception:  # noqa: BLE001 - optional layer, never break caller
+        return None
+    db.execute(
+        f"INSERT INTO {table} ({pk_col}, tenant_id, embedding_model, embedding, embedded_text) "
+        "VALUES (%s, %s, %s, %s, %s) "
+        f"ON CONFLICT ({pk_col}) DO UPDATE SET "
+        "embedding=EXCLUDED.embedding, embedded_text=EXCLUDED.embedded_text, "
+        "embedding_model=EXCLUDED.embedding_model, tenant_id=EXCLUDED.tenant_id, "
+        "updated_at=NOW()",
+        (pk_value, tenant_id, model, vec, text),
+    )
+    return vec
+
+
+def write_embeddings_batch(
+    db,
+    table: str,
+    rows: list[dict],
+    model: str = "BAAI/bge-m3",
+) -> int:
+    """Batch variant: ``rows`` is a list of {"id": uuid, "text": str, "tenant_id": ?}.
+    Embeds all texts in one call, then persists each with one upsert. Returns the
+    number written on success (0 if the embedding layer is unavailable)."""
+    pk_col = _EMBEDDING_TABLES.get(table)
+    if pk_col is None:
+        raise ValueError(f"unknown embedding table '{table}'")
+    valid = [r for r in rows if r.get("id") and (r.get("text") or "").strip()]
+    if not valid:
+        return 0
+    texts = [(r["text"] or "").strip() for r in valid]
+    try:
+        vecs = get_embedding_client().embed(texts)
+    except Exception:  # noqa: BLE001 - optional layer
+        return 0
+    for r, vec in zip(valid, vecs):
+        db.execute(
+            f"INSERT INTO {table} ({pk_col}, tenant_id, embedding_model, embedding, embedded_text) "
+            "VALUES (%s, %s, %s, %s, %s) "
+            f"ON CONFLICT ({pk_col}) DO UPDATE SET "
+            "embedding=EXCLUDED.embedding, embedded_text=EXCLUDED.embedded_text, "
+            "embedding_model=EXCLUDED.embedding_model, tenant_id=EXCLUDED.tenant_id, "
+            "updated_at=NOW()",
+            (r["id"], r.get("tenant_id"), model, vec, r["text"]),
+        )
+    return len(valid)
+
+
 if __name__ == "__main__":
     c = get_embedding_client()
     print("embedding provider:", c.config.provider, "model:", c.config.model)

@@ -56,7 +56,7 @@ def _ensure_evidence(db: DB, ctx: dict, *, chunk_id, chunk_text, document_id) ->
     rows = db.query("SELECT id FROM evidence WHERE evidence_id = %s", (ev_id,))
     if rows:
         return rows[0]["id"]
-    return db.insert_returning_id(
+    evidence_uuid = db.insert_returning_id(
         "INSERT INTO evidence "
         "(id, evidence_id, tenant_id, source_id, document_id, chunk_id, quote, "
         " content_hash, access_level, support_status) "
@@ -65,6 +65,15 @@ def _ensure_evidence(db: DB, ctx: dict, *, chunk_id, chunk_text, document_id) ->
         (ev_id, ctx["tenant_id"], document_id, chunk_id, chunk_text,
          _hash(chunk_text), ctx.get("access_level", "internal")),
     )
+    # Persist the evidence vector (optional, non-fatal) for semantic verification.
+    try:
+        from runtime.embeddings import write_embedding
+
+        write_embedding(db, "evidence_embedding", evidence_uuid, chunk_text,
+                        ctx["tenant_id"])
+    except Exception:  # noqa: BLE001 - optional vector layer
+        pass
+    return evidence_uuid
 
 
 def _is_high_risk(stmt: str) -> bool:
@@ -235,7 +244,7 @@ def _ensure_evidence(db: DB, ctx: dict, *, chunk_id, chunk_text, document_id) ->
     rows = db.query("SELECT id FROM evidence WHERE evidence_id = %s", (ev_id,))
     if rows:
         return rows[0]["id"]
-    return db.insert_returning_id(
+    evidence_uuid = db.insert_returning_id(
         "INSERT INTO evidence "
         "(id, evidence_id, tenant_id, source_id, document_id, chunk_id, quote, "
         " content_hash, access_level, support_status) "
@@ -244,6 +253,15 @@ def _ensure_evidence(db: DB, ctx: dict, *, chunk_id, chunk_text, document_id) ->
         (ev_id, ctx["tenant_id"], document_id, chunk_id, chunk_text,
          _hash(chunk_text), ctx.get("access_level", "internal")),
     )
+    # Persist the evidence vector (optional, non-fatal) for semantic verification.
+    try:
+        from runtime.embeddings import write_embedding
+
+        write_embedding(db, "evidence_embedding", evidence_uuid, chunk_text,
+                        ctx["tenant_id"])
+    except Exception:  # noqa: BLE001 - optional vector layer
+        pass
+    return evidence_uuid
 
 
 def _hash(text: str) -> str:

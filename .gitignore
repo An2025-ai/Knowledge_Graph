@@ -46,6 +46,14 @@ tmp/
 temp/
 *.tmp
 
+# Generated runtime outputs
+runtime/l2/output/
+runtime/visualize/output/
+
+# Generated reports / research packages
+source_candidates_*.json
+research_package_*/
+
 # Node (if used for tooling)
 node_modules/
 

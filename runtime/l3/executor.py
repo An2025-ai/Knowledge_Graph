@@ -22,8 +22,10 @@ from typing import Any
 
 from runtime.db import DB
 
-# pipeline name -> (CLI flag it needs from --file, whether it requires --document-id)
-PIPELINES = [
+# Default pipeline chain. The L2 mapping step remains available as an explicit
+# single pipeline, but is not part of --all because layered graph output should
+# not require cross-layer links.
+DEFAULT_PIPELINES = [
     "source_registration",
     "original_file_gate",
     "layout_aware_parsing",
@@ -31,11 +33,13 @@ PIPELINES = [
     "candidate_pre_extraction",
     "candidate_extraction",
     "entity_resolution",
-    "l2_mapping",
     "assertion_classification",
     "evidence_verification",
     "review_promotion",
 ]
+
+OPTIONAL_PIPELINES = ["l2_mapping"]
+PIPELINES = DEFAULT_PIPELINES + OPTIONAL_PIPELINES
 
 # Pipelines that need a --document-id (produced by source_registration).
 REQUIRE_DOCUMENT_ID = {
@@ -90,7 +94,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Brand Atlas L3 brand-cognition pipeline executor",
     )
     p.add_argument("--pipeline", choices=PIPELINES, help="Name of a single L3 pipeline to run")
-    p.add_argument("--all", action="store_true", help="Run all 10 L3 pipelines in sequence")
+    p.add_argument("--all", action="store_true", help="Run the default L3 pipelines in sequence")
+    p.add_argument(
+        "--include-l2-mapping",
+        action="store_true",
+        help="Include the optional L3-to-L2 mapping step in --all runs",
+    )
     p.add_argument("--file", help="Path to the brand source document (md/txt/html)")
     p.add_argument("--brand", required=True, help="Brand key / id")
     p.add_argument("--tenant", help="Tenant key (default: 'default')")
@@ -104,6 +113,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--access-level", choices=["public", "internal", "confidential", "restricted"])
     p.add_argument("--language", help="Document language")
     p.add_argument("--content-hash", help="Source content hash (for snapshot)")
+    p.add_argument("--skip-ner", action="store_true",
+                   help="Disable the optional PaddleNLP NER candidate layer")
     return p
 
 
@@ -127,7 +138,9 @@ def main(argv: list[str] | None = None) -> int:
         args.source_id = f"src_{fname}"
 
     if args.all:
-        names = PIPELINES
+        names = list(DEFAULT_PIPELINES)
+        if args.include_l2_mapping:
+            names.insert(names.index("assertion_classification"), "l2_mapping")
     else:
         names = [args.pipeline]
 

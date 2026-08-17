@@ -124,16 +124,48 @@ class ProjectionService:
     # ------------------------------------------------------------------
     # Entity projection
     # ------------------------------------------------------------------
-    def merge_entity(self, entity_id, entity_type, canonical_name, tenant_id=None, scope=None, status=None):
+    def merge_entity(self, entity_id, entity_type, canonical_name, tenant_id=None,
+                     scope=None, status=None, brand_id=None, industry_id=None,
+                     market=None, owner_brand=None):
         labels = "Entity"
         if entity_type in ENTITY_LABEL_MAP:
             labels += ":" + ENTITY_LABEL_MAP[entity_type]
+        # layer tag: L3 = brand-owned (owner_brand NOT NULL); L2 = industry-tagged;
+        # L1 = otherwise shared (owner_brand IS NULL, no industry tag).
+        if owner_brand:
+            layer = "L3"
+        elif industry_id:
+            layer = "L2"
+        else:
+            layer = "L1"
         self.run(
             f"MERGE (n:{labels} {{id: $id}}) "
             f"SET n.entity_type = $type, n.canonical_name = $name, "
-            f"n.tenant_id = $tenant, n.scope = $scope, n.status = $status",
+            f"n.tenant_id = $tenant, n.scope = $scope, n.status = $status, "
+            f"n.layer = $layer, n.brand_id = $brand, n.industry_id = $industry, "
+            f"n.market = $market, n.owner_brand = $owner",
             {"id": str(entity_id), "type": entity_type, "name": canonical_name,
-             "tenant": tenant_id and str(tenant_id), "scope": scope, "status": status},
+             "tenant": tenant_id and str(tenant_id), "scope": scope, "status": status,
+             "layer": layer, "brand": brand_id and str(brand_id),
+             "industry": industry_id, "market": market,
+             "owner": owner_brand and str(owner_brand)},
+        )
+
+    def merge_brand_mapping(self, local_entity_id, l2_entity_id, tenant_id, mapping_type,
+                            confidence=None, review_status=None):
+        """Project a brand_mapping (L3↔L2 cross-layer) row as a typed edge."""
+        rel = RELATION_LABEL_MAP.get(mapping_type, mapping_type.upper())
+        self.run(
+            f"MATCH (a:Entity {{id: $sid}}), (b:Entity {{id: $oid}}) "
+            f"MERGE (a)-[r:{rel} {{id: $rid}}]->(b) "
+            f"SET r.relation_type = $rtype, r.tenant_id = $tenant, "
+            f"r.mapping_type = $mtype, r.confidence = $confidence, "
+            f"r.review_status = $review",
+            {"rid": f"bm_{local_entity_id}_{l2_entity_id}", "sid": str(local_entity_id),
+             "oid": str(l2_entity_id), "rtype": mapping_type,
+             "tenant": tenant_id and str(tenant_id), "mtype": mapping_type,
+             "confidence": float(confidence) if confidence is not None else None,
+             "review": review_status},
         )
 
     def merge_relation(self, relation_id, subject_id, relation_type, object_id,
@@ -220,7 +252,7 @@ class ProjectionService:
             )
 
 
-def full_resync(pg_db, proj: ProjectionService):
+def full_resync(pg_db, proj: ProjectionService, include_mappings: bool = False):
     """Full rebuild from PostgreSQL (entity + relation + statement/assertion)."""
     proj.run(
         "MATCH (n) WHERE any(label IN labels(n) WHERE label IN "
@@ -229,11 +261,14 @@ def full_resync(pg_db, proj: ProjectionService):
     )
     print("[projection] cleared previous projection")
     entities = pg_db.query(
-        "SELECT id, entity_type, canonical_name, tenant_id, scope, status FROM entity WHERE status='active'"
+        "SELECT id, entity_type, canonical_name, tenant_id, scope, status, "
+        "owner_brand, industry_id, market FROM entity WHERE status='active'"
     )
     for e in entities:
         proj.merge_entity(e["id"], e["entity_type"], e["canonical_name"],
-                          e.get("tenant_id"), e.get("scope"), e.get("status"))
+                          e.get("tenant_id"), e.get("scope"), e.get("status"),
+                          e.get("brand_id"), e.get("industry_id"), e.get("market"),
+                          e.get("owner_brand"))
     print(f"[projection] merged {len(entities)} entities")
 
     relations = pg_db.query(
@@ -244,6 +279,20 @@ def full_resync(pg_db, proj: ProjectionService):
         proj.merge_relation(r["id"], r["subject_id"], r["relation_type"], r["object_id"],
                             r.get("tenant_id"), r.get("confidence"), r.get("verification_status"))
     print(f"[projection] merged {len(relations)} relations")
+
+    if include_mappings:
+        mappings = pg_db.query(
+            "SELECT local_entity_id, l2_entity_id, tenant_id, mapping_type, confidence, review_status "
+            "FROM brand_mapping"
+        )
+        for m in mappings:
+            try:
+                proj.merge_brand_mapping(m["local_entity_id"], m["l2_entity_id"],
+                                         m.get("tenant_id"), m["mapping_type"],
+                                         m.get("confidence"), m.get("review_status"))
+            except Exception as exc:  # noqa: BLE001 - skip dangling mapping
+                print(f"[projection] skipped brand_mapping {m.get('mapping_type')}: {exc}")
+        print(f"[projection] merged {len(mappings)} brand_mapping cross-layer edges")
 
     statements = pg_db.query(
         "SELECT id, subject_entity_id, object_entity_id, predicate, statement_text, "
@@ -321,6 +370,7 @@ def main() -> int:
     parser.add_argument("--full", action="store_true", help="full resync from PG")
     parser.add_argument("--process-outbox", action="store_true", help="incremental outbox sync")
     parser.add_argument("--check", action="store_true", help="connectivity check")
+    parser.add_argument("--include-mappings", action="store_true", help="include optional L3-to-L2 mapping edges")
     args = parser.parse_args()
 
     if not HAS_NEO4J:
@@ -340,7 +390,7 @@ def main() -> int:
 
             with DB() as pg_db:
                 if args.full:
-                    full_resync(pg_db, proj)
+                    full_resync(pg_db, proj, include_mappings=args.include_mappings)
                 if args.process_outbox:
                     process_outbox(pg_db, proj)
         print("[projection] done")
