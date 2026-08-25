@@ -59,6 +59,11 @@ source_lifecycle:
 # ============================================================
 
 source_classes:
+  description: >
+    来源类别作为单一事实源，供来源分类、权威评分与 scope/requirement 元数据使用。
+    注意：进入本项目的文本内容已在入口处预筛选，故来源类别/域名不再作为晋升门禁的
+    硬性拒绝条件（promotion gate_4 已不再按 allowed/forbidden 拒答）；此处仅用于
+    来源打标与权威性评分等辅助用途。
 
   allowed:
     description: 允许进入知识图谱的来源类别，可直接引用为证据

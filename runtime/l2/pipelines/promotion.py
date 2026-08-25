@@ -141,13 +141,6 @@ def _as_list(value: Any) -> list:
     return value if isinstance(value, list) else []
 
 
-def _allowed_source_classes(candidate: dict) -> set[str]:
-    requirements = candidate.get("source_requirements") or {}
-    if isinstance(requirements, str):
-        requirements = json.loads(requirements)
-    return set(requirements.get("allowed_source_classes") or [])
-
-
 def _exact_duplicate(db: DB, candidate: dict) -> dict | None:
     rows = db.query(
         "SELECT other.id FROM report_candidate other "
@@ -305,7 +298,10 @@ def _evaluate_gates(
         "registered relation constraints" if not invalid_relations else f"invalid={invalid_relations}",
     ))
 
-    allowed_classes = _allowed_source_classes(cand)
+    # Inputs entering this project are pre-filtered for extraction, so the
+    # source-CLASS whitelist (allowed/forbidden/domain) no longer gates promotion.
+    # gate_4 only verifies evidence exists and resolves to a known source (and,
+    # for non-enrichment candidates, an approved/active source instance).
     if cand.get("knowledge_candidate_type") == "source_enrichment":
         # First-pass enrichment is constrained to sources already cited by the
         # report. It uses a light source gate here: the source must be resolved
@@ -314,7 +310,6 @@ def _evaluate_gates(
             row for row in evidence
             if row.get("source_uuid")
             and row.get("source_type")
-            and (not allowed_classes or row.get("source_class") in allowed_classes)
         ]
         source_ok = bool(evidence) and len(recognizable_sources) == len(evidence)
         results.append(_result(
@@ -329,7 +324,6 @@ def _evaluate_gates(
             and row.get("l2_enabled") is True
             and row.get("policy_status") == "active"
             and policy.source_authority_ok(row.get("authority_level"))
-            and (not allowed_classes or row.get("source_class") in allowed_classes)
         ]
         source_ok = bool(evidence) and len(valid_sources) == len(evidence)
         results.append(_result(
