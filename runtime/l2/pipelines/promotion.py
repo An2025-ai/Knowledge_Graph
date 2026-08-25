@@ -6,14 +6,27 @@ from difflib import SequenceMatcher
 from typing import Any
 
 from runtime.db import DB
+from runtime.l1.policy_engine import PromotionPolicy, load_promotion_policy
+from runtime.l1.registry import get_l1_registry
 
 
-VALID_STATEMENT_CLASSES = ("fact", "claim", "observation", "inference")
-REVIEW_GATES = {"gate_7_duplicate", "gate_8_conflict", "gate_10_quality"}
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
+DEFAULT_PROFILE_ID = "l2_industry"
+
+# Default dedup thresholds, used only when a profile's promotion_policy does
+# not define them. The authoritative values come from PromotionPolicy (L1 policy_engine).
 NEAR_DUPLICATE_THRESHOLD = 0.85
 # Semantic (embedding) near-duplicate threshold for gate_7 semantic dedup stage.
 SEMANTIC_NEAR_DUPLICATE_THRESHOLD = 0.92
+
+
+def _valid_statement_classes(profile_id: str = DEFAULT_PROFILE_ID) -> tuple[str, ...]:
+    """Authoritative statement classes from L1 ontology (profile.statement_classes).
+
+    Falls back to the four classic kinds when a profile does not constrain them.
+    """
+    classes = get_l1_registry().statement_classes(profile_id)
+    return tuple(classes) if classes else ("fact", "claim", "observation", "inference")
 
 
 def _candidates(db: DB, report_id: str | None) -> list[dict]:
@@ -113,7 +126,12 @@ def _exact_duplicate(db: DB, candidate: dict) -> dict | None:
     return rows[0] if rows else None
 
 
-def _near_duplicate(db: DB, candidate: dict) -> dict | None:
+def _near_duplicate(
+    db: DB,
+    candidate: dict,
+    near_threshold: float = NEAR_DUPLICATE_THRESHOLD,
+    semantic_threshold: float = SEMANTIC_NEAR_DUPLICATE_THRESHOLD,
+) -> dict | None:
     rows = db.query(
         "SELECT other.id, other.statement FROM report_candidate other "
         "JOIN research_report rr ON rr.id=other.report_id "
@@ -126,7 +144,7 @@ def _near_duplicate(db: DB, candidate: dict) -> dict | None:
     # Character-level near-duplicate check (existing).
     for row in rows:
         other = " ".join((row.get("statement") or "").casefold().split())
-        if normalized and other and SequenceMatcher(None, normalized, other).ratio() >= NEAR_DUPLICATE_THRESHOLD:
+        if normalized and other and SequenceMatcher(None, normalized, other).ratio() >= near_threshold:
             return row
     # Semantic near-duplicate check (pgvector/embedding): catches same-meaning
     # statements phrased differently that character similarity misses.
@@ -140,7 +158,7 @@ def _near_duplicate(db: DB, candidate: dict) -> dict | None:
         other_vec = _embed_statement(other_text)
         if other_vec is None:
             continue
-        if _cosine(cand_vec, other_vec) >= SEMANTIC_NEAR_DUPLICATE_THRESHOLD:
+        if _cosine(cand_vec, other_vec) >= semantic_threshold:
             return row
     return None
 
@@ -192,8 +210,11 @@ def _result(gate_id: str, passed: bool, detail: str, action: str = "pass") -> di
     return {"gate_id": gate_id, "passed": passed, "detail": detail, "action": action}
 
 
-def _evaluate_gates(db: DB, cand: dict, threshold: float) -> tuple[list[dict], str | None]:
+def _evaluate_gates(
+    db: DB, cand: dict, threshold: float, profile_id: str = DEFAULT_PROFILE_ID
+) -> tuple[list[dict], str | None]:
     """Evaluate all gates in order and return results plus first failed gate."""
+    policy: PromotionPolicy = load_promotion_policy(profile_id, threshold)
     entities = _candidate_entities(db, cand["candidate_uuid"])
     relations = _candidate_relations(db, cand["candidate_uuid"])
     statements = _candidate_statements(db, cand["candidate_uuid"])
@@ -255,7 +276,7 @@ def _evaluate_gates(db: DB, cand: dict, threshold: float) -> tuple[list[dict], s
             and row.get("approval_status") == "approved"
             and row.get("l2_enabled") is True
             and row.get("policy_status") == "active"
-            and row.get("authority_level") in ("high", "medium")
+            and policy.source_authority_ok(row.get("authority_level"))
             and (not allowed_classes or row.get("source_class") in allowed_classes)
         ]
         source_ok = bool(evidence) and len(valid_sources) == len(evidence)
@@ -267,8 +288,7 @@ def _evaluate_gates(db: DB, cand: dict, threshold: float) -> tuple[list[dict], s
     supported = [
         row for row in evidence
         if row.get("evidence_id")
-        and row.get("access_status") in ("verified", "crawled", "ok")
-        and row.get("support_status") in ("directly_supports", "partially_supports")
+        and policy.evidence_ok(row.get("access_status"), row.get("support_status"))
     ]
     evidence_ok = bool(evidence) and len(supported) == len(evidence)
     results.append(_result("gate_5_evidence", evidence_ok,
@@ -281,7 +301,11 @@ def _evaluate_gates(db: DB, cand: dict, threshold: float) -> tuple[list[dict], s
                            f"entities={len(entities)} relations={len(relations)} statements={len(statements)}"))
 
     exact = _exact_duplicate(db, cand)
-    near = None if exact else _near_duplicate(db, cand)
+    near = None if exact else _near_duplicate(
+        db, cand,
+        near_threshold=policy.near_duplicate_threshold,
+        semantic_threshold=policy.semantic_near_duplicate_threshold,
+    )
     duplicate_ok = exact is None and near is None
     duplicate_action = "reject" if exact else ("review" if near else "pass")
     duplicate_detail = (
@@ -298,9 +322,10 @@ def _evaluate_gates(db: DB, cand: dict, threshold: float) -> tuple[list[dict], s
         "pass" if not conflict else "review",
     ))
 
+    valid_statement_classes = _valid_statement_classes(profile_id)
     statement_classes = {s.get("statement_class") for s in statements}
-    type_ok = cand.get("candidate_type") in VALID_STATEMENT_CLASSES and all(
-        value in VALID_STATEMENT_CLASSES for value in statement_classes
+    type_ok = cand.get("candidate_type") in valid_statement_classes and all(
+        value in valid_statement_classes for value in statement_classes
     )
     results.append(_result("gate_9_statement_type", type_ok,
                            f"candidate_type={cand.get('candidate_type')}, statements={sorted(statement_classes)}"))
@@ -331,13 +356,17 @@ def _disposition(results: list[dict]) -> tuple[str, dict | None]:
 def run(db: DB, args) -> dict[str, Any]:
     report_id = getattr(args, "report_id", None)
     dry_run = bool(getattr(args, "dry_run", False))
+    profile_id = getattr(args, "profile_id", None) or DEFAULT_PROFILE_ID
     threshold = float(getattr(args, "confidence_threshold", DEFAULT_CONFIDENCE_THRESHOLD))
+    # Fail fast on a typo'd/unknown profile: a misspelled --profile-id must not
+    # silently make the strict layered whitelist behave like all-types-open.
+    get_l1_registry().require_profile(profile_id)
     candidates = _candidates(db, report_id)
     stats = {"promoted": 0, "rejected": 0, "queued": 0}
     gate_failures: dict[str, int] = {}
 
     for cand in candidates:
-        gate_results, _ = _evaluate_gates(db, cand, threshold)
+        gate_results, _ = _evaluate_gates(db, cand, threshold, profile_id=profile_id)
         disposition, decisive = _disposition(gate_results)
         if decisive:
             gate_failures[decisive["gate_id"]] = gate_failures.get(decisive["gate_id"], 0) + 1
@@ -415,6 +444,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="L2 knowledge promotion pipeline")
     parser.add_argument("--report-id")
+    parser.add_argument("--profile-id", default=DEFAULT_PROFILE_ID)
     parser.add_argument("--confidence-threshold", type=float, default=DEFAULT_CONFIDENCE_THRESHOLD)
     parser.add_argument("--dry-run", action="store_true")
     namespace = parser.parse_args()

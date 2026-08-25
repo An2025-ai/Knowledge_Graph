@@ -23,23 +23,33 @@ from typing import Any
 
 from runtime.db import DB
 from runtime.extract import extract_entities_relations, load_llm, normalize_entity_id
+from runtime.l1.registry import get_l1_registry
 
 
-# Only the L1-constrained entity types the extraction prompt may emit are
-# persisted. Anything outside this set is dropped (type_constraint blocking).
-VALID_ENTITY_TYPES = {
-    "brand", "product", "industry", "category", "audience", "use_case",
-    "problem", "topic", "competitor", "capability", "decision_factor",
-    "job_to_be_done", "outcome", "organization", "product_version",
-}
+DEFAULT_PROFILE_ID = "l2_industry"
 
-VALID_RELATION_TYPES = {
-    "belongs_to", "operates_in", "serves", "supports_use_case", "solves",
-    "has_capability", "competes_with", "alternative_to", "has_topic",
-    "covers", "targets", "mentions", "has_problem", "has_decision_factor",
-    "capability_supports_use_case", "requires_capability", "produces_outcome",
-    "achieves_outcome", "owns_brand", "offers", "version_of", "supersedes",
-}
+
+def _profile_id(args: Any | None = None) -> str:
+    return getattr(args, "profile_id", None) or getattr(args, "schema_profile", None) or DEFAULT_PROFILE_ID
+
+
+def _valid_entity_types(profile_id: str = DEFAULT_PROFILE_ID) -> set[str]:
+    return get_l1_registry().entity_types(profile_id, extractable_only=True)
+
+
+def _valid_relation_types(profile_id: str = DEFAULT_PROFILE_ID) -> set[str]:
+    return get_l1_registry().relation_types(profile_id, extractable_only=True)
+
+
+def _valid_statement_classes(profile_id: str = DEFAULT_PROFILE_ID) -> set[str]:
+    """Authoritative statement classes from L1 ontology (profile.statement_classes)."""
+    classes = get_l1_registry().statement_classes(profile_id)
+    return classes or {"fact", "claim", "observation", "inference"}
+
+
+# Backward-compatible module constants for callers that import the old names.
+VALID_ENTITY_TYPES = _valid_entity_types()
+VALID_RELATION_TYPES = _valid_relation_types()
 
 
 def _chunk_texts(report_text: str, size: int = 2000) -> list[str]:
@@ -66,10 +76,11 @@ def _upsert_entity(
     candidate_uuid: str | None,
     industry_id: str | None,
     dry_run: bool,
+    profile_id: str = DEFAULT_PROFILE_ID,
 ) -> str | None:
     """Upsert one entity; return its entity_id. Returns None if type invalid."""
     etype = ent.get("type") or ent.get("entity_type") or "topic"
-    if etype not in VALID_ENTITY_TYPES:
+    if etype not in _valid_entity_types(profile_id):
         return None
     canonical = ent.get("canonical_name") or ent.get("name")
     if not canonical:
@@ -140,6 +151,10 @@ def run(db: DB, args) -> dict[str, Any]:
     report_id = getattr(args, "report_id", None)
     report_path = getattr(args, "report", None)
     dry_run = getattr(args, "dry_run", False)
+    profile_id = _profile_id(args)
+    # Fail fast on a typo'd/unknown profile instead of silently degrading the
+    # strict profile whitelist into the global (all-types-open) set.
+    get_l1_registry().require_profile(profile_id)
 
     # Prefer report candidates when a report_id exists so every extracted item
     # can retain the candidate lineage needed by promotion.
@@ -179,14 +194,15 @@ def run(db: DB, args) -> dict[str, Any]:
     for chunk, candidate_uuid in chunk_items:
         if not chunk.strip():
             continue
-        result = extract_entities_relations(client, chunk)
+        result = extract_entities_relations(client, chunk, profile_id=profile_id)
         industry_id = _candidate_industry(db, candidate_uuid) if candidate_uuid else None
 
         # --- entities ---
         entity_map = external_entity_ids
         for ent in result.get("entities", []):
             entity_id = _upsert_entity(
-                db, ent, existing_ids, entity_registry, candidate_uuid, industry_id, dry_run
+                db, ent, existing_ids, entity_registry, candidate_uuid, industry_id, dry_run,
+                profile_id=profile_id,
             )
             if entity_id:
                 external_id = ent.get("id") or entity_id
@@ -214,7 +230,7 @@ def run(db: DB, args) -> dict[str, Any]:
                 "statement_id": stmt_id,
                 "statement_text": text,
                 "statement_class": stmt_class
-                if stmt_class in ("fact", "claim", "observation", "inference")
+                if stmt_class in _valid_statement_classes(profile_id)
                 else "observation",
                 # The statement CHECK requires object_entity_id OR object_value;
                 # free-text statements carry their text as a JSON object_value.
@@ -250,7 +266,7 @@ def run(db: DB, args) -> dict[str, Any]:
         # --- relations ---
         for rel in result.get("relations", []):
             rel_type = rel.get("relation")
-            if rel_type not in VALID_RELATION_TYPES:
+            if rel_type not in _valid_relation_types(profile_id):
                 continue
             subj_id = entity_map.get(rel.get("subject"))
             obj_id = entity_map.get(rel.get("object"))
@@ -301,7 +317,7 @@ def run(db: DB, args) -> dict[str, Any]:
             ]
             statement_class = next(
                 (value for value in statement_classes
-                 if value in ("fact", "claim", "observation", "inference")),
+                 if value in _valid_statement_classes(profile_id)),
                 "observation",
             )
             confidence = (
@@ -323,7 +339,7 @@ def run(db: DB, args) -> dict[str, Any]:
                 "extraction_profile": getattr(args, "profile", None) or "l2_llm_extraction",
                 "model": model,
                 "prompt_version": "l2-extraction-v1.2.0",
-                "inputs": {"report_id": report_id, "chunks": len(chunk_items)},
+                "inputs": {"report_id": report_id, "chunks": len(chunk_items), "profile_id": profile_id},
                 "outputs_summary": stats,
                 "status": "completed",
                 "completed_at": datetime.now(timezone.utc),
@@ -442,6 +458,8 @@ if __name__ == "__main__":
     parser.add_argument("--report-id", help="research_report.report_id to pull candidates from")
     parser.add_argument("--text", help="Raw text to extract from")
     parser.add_argument("--run-id", help="Optional explicit extraction run id")
+    parser.add_argument("--profile-id", default=DEFAULT_PROFILE_ID,
+                        help="L1 schema profile controlling extraction")
     parser.add_argument("--dry-run", action="store_true",
                         help="Call LLM but print instead of writing to DB")
     args = parser.parse_args()
