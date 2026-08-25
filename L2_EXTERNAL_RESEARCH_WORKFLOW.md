@@ -23,13 +23,13 @@ industry scope / industry name
 离线模式，不调用搜索服务，只生成 query plan 和 fallback 候选：
 
 ```powershell
-python -m runtime.l2.executor --pipeline source_discovery `
+python -m runtime.industry.executor --pipeline source_discovery `
   --industry "CRM软件" `
   --market CN `
   --dimensions "capabilities,market_participants,decision_factors" `
   --seed-sources "中国信通院,艾瑞咨询,IDC" `
   --offline `
-  --source-list runtime/l2/output/crm_sources.json `
+  --source-list runtime/industry/output/crm_sources.json `
   --dry-run --no-db-check
 ```
 
@@ -69,9 +69,9 @@ discovery_status = pending_review
 从信源清单生成研究包：
 
 ```powershell
-python -m runtime.l2.executor --pipeline geo_research_report_job `
-  --source-list runtime/l2/output/crm_sources.json `
-  --package-out runtime/l2/output/crm_research_package `
+python -m runtime.industry.executor --pipeline geo_research_report_job `
+  --source-list runtime/industry/output/crm_sources.json `
+  --package-out runtime/industry/output/crm_research_package `
   --report-id grep_crm_cn_001 `
   --dry-run --no-db-check
 ```
@@ -79,9 +79,9 @@ python -m runtime.l2.executor --pipeline geo_research_report_job `
 如果要实际抓取 URL，去掉 `--dry-run`。如果只想先生成包结构，不抓网页：
 
 ```powershell
-python -m runtime.l2.executor --pipeline geo_research_report_job `
-  --source-list runtime/l2/output/crm_sources.json `
-  --package-out runtime/l2/output/crm_research_package `
+python -m runtime.industry.executor --pipeline geo_research_report_job `
+  --source-list runtime/industry/output/crm_sources.json `
+  --package-out runtime/industry/output/crm_research_package `
   --no-fetch `
   --report-id grep_crm_cn_001
 ```
@@ -114,23 +114,23 @@ research_package/
 可以直接用 research package：
 
 ```powershell
-python -m runtime.l2.executor --pipeline geo_research_report_job `
-  --research-package runtime/l2/output/crm_research_package `
+python -m runtime.industry.executor --pipeline geo_research_report_job `
+  --research-package runtime/industry/output/crm_research_package `
   --report-id grep_crm_cn_001
 
-python -m runtime.l2.executor --pipeline report_ingestion `
-  --research-package runtime/l2/output/crm_research_package `
+python -m runtime.industry.executor --pipeline report_ingestion `
+  --research-package runtime/industry/output/crm_research_package `
   --report-id grep_crm_cn_001
 
-python -m runtime.l2.executor --pipeline evidence_resolution `
-  --evidence runtime/l2/output/crm_research_package/evidence_index.json `
+python -m runtime.industry.executor --pipeline evidence_resolution `
+  --evidence runtime/industry/output/crm_research_package/evidence_index.json `
   --report-id grep_crm_cn_001
 ```
 
 也可以一条命令从行业名开始：
 
 ```powershell
-python -m runtime.l2.executor --all `
+python -m runtime.industry.executor --all `
   --industry "CRM软件" `
   --market CN `
   --seed-sources "中国信通院,艾瑞咨询,IDC" `
@@ -153,7 +153,7 @@ python -m runtime.l2.executor --all `
 当某个维度覆盖不足时，补跑单个维度即可：
 
 ```powershell
-python -m runtime.l2.executor --pipeline source_discovery `
+python -m runtime.industry.executor --pipeline source_discovery `
   --industry "CRM软件" `
   --market CN `
   --dimensions "regulation_and_risks" `

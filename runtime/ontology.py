@@ -1,12 +1,12 @@
 """Profile-scoped access to the independent L2 and L3 ontologies."""
 from __future__ import annotations
 
-from runtime.l1.registry import get_l1_registry
+from runtime.common.registry import get_common_registry
 
 
 class Ontology:
     def __init__(self) -> None:
-        self.registry = get_l1_registry()
+        self.registry = get_common_registry()
 
     def is_valid_entity_type_for_profile(self, t: str, profile_id: str) -> bool:
         return t in self.registry.entity_types(profile_id)
@@ -34,7 +34,7 @@ def get_ontology() -> Ontology:
 
 
 if __name__ == "__main__":
-    registry = get_l1_registry()
+    registry = get_common_registry()
     for profile_id in sorted(registry.profiles):
         print(
             profile_id,

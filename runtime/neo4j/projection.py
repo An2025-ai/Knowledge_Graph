@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover
     GraphDatabase = None
     HAS_NEO4J = False
 
-from runtime.l1.registry import get_l1_registry
+from runtime.common.registry import get_common_registry
 
 
 NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
@@ -82,13 +82,13 @@ RELATION_LABEL_MAP = {
 def _entity_label(entity_type: str | None) -> str | None:
     if not entity_type:
         return None
-    return get_l1_registry().neo4j_entity_label(entity_type) or ENTITY_LABEL_MAP.get(entity_type)
+    return get_common_registry().neo4j_entity_label(entity_type) or ENTITY_LABEL_MAP.get(entity_type)
 
 
 def _relation_label(relation_type: str | None) -> str:
     if not relation_type:
         return "RELATED_TO"
-    return get_l1_registry().neo4j_relation_label(relation_type) or RELATION_LABEL_MAP.get(
+    return get_common_registry().neo4j_relation_label(relation_type) or RELATION_LABEL_MAP.get(
         relation_type, relation_type.upper()
     )
 

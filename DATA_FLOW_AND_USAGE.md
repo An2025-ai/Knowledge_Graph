@@ -171,7 +171,7 @@ WHERE source_id='<source_id>';
 已有报告模式：
 
 ```powershell
-python -m runtime.l2.executor --all `
+python -m runtime.industry.executor --all `
   --scope "scopes/industry_crm软件_cn_001.yaml" `
   --report "D:\reports\crm.md" `
   --evidence "D:\reports\crm.evidence.json"
@@ -180,7 +180,7 @@ python -m runtime.l2.executor --all `
 自动爬取模式：
 
 ```powershell
-python -m runtime.l2.executor --all `
+python -m runtime.industry.executor --all `
   --industry "CRM软件" --market CN `
   --crawl --request "研究中国 CRM 软件行业" `
   --evidence "D:\reports\crm.evidence.json"
@@ -199,7 +199,7 @@ python -m runtime.l2.executor --all `
 
 每个非 dry-run Pipeline 由 `DB.transaction()` 包裹，任一步抛异常会回滚本步骤全部数据库写入。步骤间通过 `report_id/run_id` checkpoint 衔接，不使用跨六步流程的总事务。section、candidate、citation、statement、relation 和 review queue 已增加幂等唯一键，失败后可以安全重跑同一步。
 
-事务边界由统一 executor 提供。生产和批处理必须通过 `python -m runtime.l2.executor` / `python -m runtime.l3.executor` 调用；直接执行 `runtime.l2.pipelines.*` 或 `runtime.l3.pipelines.*` 模块只用于调试，不具备 executor 的统一失败处理与事务包装。
+事务边界由统一 executor 提供。生产和批处理必须通过 `python -m runtime.industry.executor` / `python -m runtime.brand.executor` 调用；直接执行 `runtime.industry.pipelines.*` 或 `runtime.brand.pipelines.*` 模块只用于调试，不具备 executor 的统一失败处理与事务包装。
 
 仍需注意：
 
@@ -239,7 +239,7 @@ python -m runtime.l2.executor --all `
 ### 7.3 L3 使用方式
 
 ```powershell
-python -m runtime.l3.executor --all `
+python -m runtime.brand.executor --all `
   --file "D:\brand_docs\product.md" `
   --tenant "customer_a" `
   --brand "示例品牌" `
@@ -250,7 +250,7 @@ python -m runtime.l3.executor --all `
 单步重跑示例：
 
 ```powershell
-python -m runtime.l3.executor `
+python -m runtime.brand.executor `
   --pipeline evidence_verification `
   --brand "示例品牌" --tenant "customer_a"
 ```
@@ -357,8 +357,8 @@ python database\publish.py --validate
 python -m unittest discover -s tests -v
 python -m compileall -q runtime database
 python -m runtime.migrations migrate --check
-python -m runtime.l2.executor --help
-python -m runtime.l3.executor --help
+python -m runtime.industry.executor --help
+python -m runtime.brand.executor --help
 ```
 
 依赖真实服务的集成验收：

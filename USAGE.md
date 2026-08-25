@@ -112,10 +112,10 @@ L1 分别保存两套完整定义，通过 Profile 调用：
 `metrics.yaml`，证据属于运行时记录。
 
 ```powershell
-python -m runtime.l1.entity_types --profile l2_industry
-python -m runtime.l1.relation_types --profile l2_industry
-python -m runtime.l1.entity_types --profile l3_brand
-python -m runtime.l1.relation_types --profile l3_brand
+python -m runtime.common.entity_types --profile l2_industry
+python -m runtime.common.relation_types --profile l2_industry
+python -m runtime.common.entity_types --profile l3_brand
+python -m runtime.common.relation_types --profile l3_brand
 ```
 
 ### 3.2 如何新增一个实体类型

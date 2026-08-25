@@ -12,7 +12,7 @@ from typing import Any
 
 from runtime.llm_client import LLMClient, LLMConfig, extract_json_object
 from runtime.extraction_schema import validate_extraction
-from runtime.l1.prompt_builder import build_extraction_prompt
+from runtime.common.prompt_builder import build_extraction_prompt
 from runtime.ontology_validator import validate_ontology
 
 

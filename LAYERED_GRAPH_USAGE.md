@@ -117,7 +117,7 @@ L3 全流程不读取 L2，也不创建 L3 到 L2 的映射。
 
 ```powershell
 # 默认：独立 L3 图谱
-python -m runtime.l3.executor --all --file "D:\brand_docs\product.md" --tenant customer_a --brand "示例品牌"
+python -m runtime.brand.executor --all --file "D:\brand_docs\product.md" --tenant customer_a --brand "示例品牌"
 
 ```
 

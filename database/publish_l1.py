@@ -10,12 +10,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from runtime.l1.registry import get_l1_registry
-from runtime.l1.validate import validate_l1
+from runtime.common.registry import get_common_registry
+from runtime.common.validate import validate_common
 
 
 def build_snapshot() -> dict:
-    registry = get_l1_registry()
+    registry = get_common_registry()
     return {
         "ontologies": {
             profile_id: {
@@ -49,7 +49,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Validate and export the L1 registry")
     parser.add_argument("--out", type=Path, help="Write a JSON registry snapshot")
     args = parser.parse_args()
-    errors = validate_l1()
+    errors = validate_common()
     if errors:
         print(json.dumps({"ok": False, "errors": errors}, ensure_ascii=False, indent=2))
         return 1

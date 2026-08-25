@@ -1,0 +1,292 @@
+"""Brand Atlas L2 Industry Knowledge Layer — executor orchestrator.
+
+Runs one or more of the six L2 pipeline executors, passing a shared argparse
+namespace to each pipeline's `run(db, args)` function.
+
+Usage:
+    python -m runtime.industry.executor --pipeline requirement_compilation --scope <scope.yaml>
+    python -m runtime.industry.executor --pipeline geo_research_report_job --report <file.md>
+    python -m runtime.industry.executor --pipeline geo_research_report_job --crawl --request "研究需求"
+    python -m runtime.industry.executor --pipeline report_ingestion --report <file.md>
+    python -m runtime.industry.executor --pipeline evidence_resolution --evidence <evidence.json>
+    python -m runtime.industry.executor --pipeline extraction --report <file.md> [--dry-run]
+    python -m runtime.industry.executor --pipeline promotion --report-id <id> [--dry-run]
+    python -m runtime.industry.executor --all --scope <scope.yaml> --report <file.md> [--dry-run]
+    python -m runtime.industry.executor --all --scope <scope.yaml> --crawl --request "研究需求" [--dry-run]
+
+`--dry-run` is honored by pipelines that can skip DB writes (extraction still
+calls the LLM but prints instead of upserting).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+
+from runtime.db import check_connection, DB
+
+
+# Map of pipeline name -> (module import path, run function).
+PIPELINES = {
+    "requirement_compilation": "runtime.industry.pipelines.requirement_compilation",
+    "source_discovery": "runtime.industry.pipelines.source_discovery",
+    "geo_research_report_job": "runtime.industry.pipelines.geo_research_report_job",
+    "report_ingestion": "runtime.industry.pipelines.report_ingestion",
+    "evidence_resolution": "runtime.industry.pipelines.evidence_resolution",
+    "extraction": "runtime.industry.pipelines.extraction",
+    "source_enrichment": "runtime.industry.pipelines.source_enrichment",
+    "promotion": "runtime.industry.pipelines.promotion",
+}
+
+# Order used by --all. Geo-research is a file-ingestion step, so its report
+# path must already exist (GEO_RESEARCH_REPORT_PATH or --report).
+ALL_ORDER = [
+    "requirement_compilation",
+    "source_discovery",
+    "geo_research_report_job",
+    "report_ingestion",
+    "evidence_resolution",
+    "extraction",
+    "source_enrichment",
+    "promotion",
+]
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="runtime.industry.executor",
+        description="Run L2 industry knowledge layer pipelines.",
+    )
+    parser.add_argument(
+        "--pipeline",
+        choices=list(PIPELINES.keys()),
+        help="Run a single L2 pipeline.",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Run all L2 pipelines in order (scope + report required).",
+    )
+    parser.add_argument("--scope", help="Path to industry scope manifest YAML.")
+    parser.add_argument(
+        "--industry",
+        help="Target industry (e.g. 'CRM软件'); builds a scope manifest automatically instead of --scope.",
+    )
+    parser.add_argument("--market", default="CN", help="Market region (default CN).")
+    parser.add_argument("--category", help="Optional category id (scope builder).")
+    parser.add_argument("--audience", help="Comma-separated target audiences (scope builder).")
+    parser.add_argument("--competitors", help="Comma-separated seed competitors (scope builder).")
+    parser.add_argument("--priority-dim", help="Comma-separated priority dimension codes (scope builder).")
+    parser.add_argument("--questions", help="Extra research questions (semicolon-separated) (scope builder).")
+    parser.add_argument("--seed-sources", help="Comma-separated seed authoritative sources (scope builder).")
+    parser.add_argument("--trusted-domains", help="Comma-separated trusted domains for L2 source discovery.")
+    parser.add_argument("--report", help="Path to markdown report (or geo-research report).")
+    parser.add_argument("--source-list", help="Source candidate JSON from source_discovery.")
+    parser.add_argument("--sources-out", help="Output path for source_discovery candidate JSON.")
+    parser.add_argument("--research-package", "--package", dest="research_package", help="Research package directory.")
+    parser.add_argument("--package-out", help="Output directory for a generated research_package.")
+    parser.add_argument("--dimensions", help="Comma-separated L2 dimension codes for source discovery.")
+    parser.add_argument("--max-results-per-query", type=int, default=3, help="Source discovery results per query.")
+    parser.add_argument("--max-sources-per-dimension", type=int, default=5, help="Accepted source cap per L2 dimension.")
+    parser.add_argument("--min-authority-score", type=float, default=0.4, help="Minimum authority score for accepted sources.")
+    parser.add_argument("--strict-authority", action="store_true", help="Only accept sources with strong authority signals.")
+    parser.add_argument("--include-exploratory", action="store_true", help="Allow lower-authority but relevant sources into discovery output.")
+    parser.add_argument("--offline", action="store_true", help="Skip search provider calls and emit fallback source candidates.")
+    parser.add_argument("--no-fetch", action="store_true", help="Build research_package without fetching candidate URLs.")
+    parser.add_argument(
+        "--crawl",
+        action="store_true",
+        help="Trigger geo-research web crawl to generate the report (uses SearXNG + Playwright + LLM).",
+    )
+    parser.add_argument(
+        "--request",
+        help="Research demand text passed to geo-research in crawl mode (default built from scope/requirement).",
+    )
+    parser.add_argument(
+        "--requirement-id",
+        help="industry_requirement.requirement_id — crawl uses its 14 dimensions as the request.",
+    )
+    parser.add_argument("--report-id", help="research_report.report_id to attach/scope to.")
+    parser.add_argument("--evidence", help="Path to evidence index JSON.")
+    parser.add_argument("--text", help="Raw text input for extraction.")
+    parser.add_argument("--run-id", help="Explicit extraction run id.")
+    parser.add_argument("--geo-research-run-id", help="Geo-research run id for lineage.")
+    parser.add_argument("--searxng-url", help="SearXNG URL passed to geo-research.")
+    parser.add_argument("--results-per-query", "--authority-results-per-query",
+                        dest="results_per_query", type=int,
+                        help="geo-research search results per query.")
+    parser.add_argument("--max-pages", type=int, help="geo-research maximum crawled pages.")
+    parser.add_argument("--max-sources", type=int, help="geo-research maximum model sources.")
+    parser.add_argument("--max-report-sources", type=int, help="geo-research final cited/model source cap.")
+    parser.add_argument("--max-industry-authorities", type=int, help="Maximum deduped authority/domain pool size.")
+    parser.add_argument("--max-pages-per-authority", type=int, help="Maximum crawled pages from one authority/domain.")
+    parser.add_argument("--max-pages-per-authority-per-dim", type=int, help="Maximum crawled pages from one authority/domain for one dimension.")
+    parser.add_argument("--min-sources-per-dimension", "--min-per-dim",
+                        dest="min_sources_per_dimension", type=int,
+                        help="Minimum acceptable cited sources per dimension.")
+    parser.add_argument("--target-sources-per-dimension", "--target-per-dim",
+                        dest="target_sources_per_dimension", type=int,
+                        help="Target cited sources per dimension.")
+    parser.add_argument(
+        "--skip-source-enrichment",
+        action="store_true",
+        help="Skip first-pass L2 enrichment from report-cited source full text.",
+    )
+    parser.add_argument(
+        "--enrichment-max-candidates",
+        type=int,
+        default=40,
+        help="Maximum report skeleton candidates considered by source_enrichment.",
+    )
+    parser.add_argument(
+        "--enrichment-max-spans-per-source",
+        type=int,
+        default=3,
+        help="Maximum accepted supplemental spans per cited source.",
+    )
+    parser.add_argument(
+        "--confidence-threshold",
+        type=float,
+        default=0.5,
+        help="Promotion gate_10 confidence threshold.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Skip DB writes where feasible; print what would be done.",
+    )
+    parser.add_argument(
+        "--no-db-check",
+        action="store_true",
+        help="Skip the preliminary PostgreSQL connection check.",
+    )
+    return parser
+
+
+def _load_run(module_path: str):
+    """Import a pipeline module and return its run function."""
+    import importlib
+
+    module = importlib.import_module(module_path)
+    return module.run
+
+
+def _run_pipeline(name: str, args: argparse.Namespace, db: DB) -> dict:
+    run = _load_run(PIPELINES[name])
+    print(f"\n=== L2 pipeline: {name} ===")
+    if getattr(args, "dry_run", False):
+        return run(db, args)
+    with db.transaction():
+        return run(db, args)
+
+
+def _propagate_result(name: str, result: dict, args: argparse.Namespace) -> None:
+    """Carry identifiers produced by one --all step into the next step."""
+    for key in ("requirement_id", "report_id"):
+        if result.get(key):
+            setattr(args, key, result[key])
+    if result.get("report_path"):
+        args.report = result["report_path"]
+    if result.get("source_list"):
+        args.source_list = result["source_list"]
+    if result.get("research_package"):
+        args.research_package = result["research_package"]
+    if result.get("evidence_path"):
+        args.evidence = result["evidence_path"]
+
+
+def _build_scope_from_industry(args: argparse.Namespace) -> str:
+    """Use scope_builder to turn --industry/--market/... into a scope manifest path.
+
+    Returns the path to the generated scope manifest (written to scopes/).
+    """
+    from runtime.industry import scope_builder
+
+    def _csv(v):
+        return [s.strip() for s in v.split(",")] if v else None
+
+    scope = scope_builder.build_scope(
+        industry=args.industry,
+        market=args.market,
+        category=getattr(args, "category", None),
+        audiences=_csv(getattr(args, "audience", None)),
+        competitors=_csv(getattr(args, "competitors", None)),
+        priority_dims=_csv(getattr(args, "priority_dim", None)),
+        extra_questions=_csv(getattr(args, "questions", None)),
+        seed_sources=_csv(getattr(args, "seed_sources", None)),
+    )
+    request_id = scope["scope"]["request_id"]
+    out_path = f"scopes/{request_id}.yaml"
+    import os
+
+    os.makedirs("scopes", exist_ok=True)
+    import yaml
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(scope, f, allow_unicode=True, sort_keys=False)
+    print(f"[executor] built scope manifest from --industry: {out_path}")
+    return out_path
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if not args.pipeline and not args.all:
+        parser.error("specify --pipeline <name> or --all")
+
+    if not args.no_db_check and not check_connection() and not args.dry_run:
+        print("[executor] aborting: PostgreSQL unreachable (pass --no-db-check to skip)",
+              file=sys.stderr)
+        return 1
+
+    names = [args.pipeline] if args.pipeline else ALL_ORDER
+    if args.all and getattr(args, "skip_source_enrichment", False):
+        names = [name for name in names if name != "source_enrichment"]
+
+    # If --industry is given (but no --scope), build a scope manifest first.
+    if args.industry and not args.scope:
+        args.scope = _build_scope_from_industry(args)
+
+    # --all needs a scope for requirement_compilation and either a report,
+    # --crawl, or a --requirement-id (crawl).
+    if args.all:
+        if not args.scope:
+            parser.error("--all requires --scope <scope.yaml> or --industry <名称>")
+        if (not args.report and not args.crawl and not args.requirement_id
+                and not args.source_list and not args.research_package and not args.industry):
+            parser.error(
+                "--all requires --report, --source-list, --research-package, --industry, "
+                "or --crawl / --requirement-id"
+            )
+        if (not args.evidence and not args.source_list and not args.research_package
+                and not args.industry and not os.environ.get("GEO_RESEARCH_EVIDENCE_PATH")):
+            parser.error(
+                "--all requires --evidence, or a source-list/research-package/industry "
+                "that can produce evidence_index.json"
+            )
+
+    results = {}
+    failed = False
+    with DB.from_env() as db:
+        for name in names:
+            try:
+                result = _run_pipeline(name, args, db)
+                if result.get("error"):
+                    raise RuntimeError(str(result["error"]))
+                results[name] = result
+                _propagate_result(name, result, args)
+            except Exception as exc:  # noqa: BLE001 - summarize the failed step
+                print(f"[executor] pipeline '{name}' FAILED: {exc}", file=sys.stderr)
+                results[name] = {"pipeline": name, "error": str(exc)}
+                failed = True
+                break
+
+    print("\n=== L2 executor summary ===")
+    print(json.dumps(results, ensure_ascii=False, indent=2, default=str))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

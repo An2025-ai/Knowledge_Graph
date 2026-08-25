@@ -47,8 +47,8 @@ temp/
 *.tmp
 
 # Generated runtime outputs
-runtime/l1/output/
-runtime/l2/output/
+runtime/common/output/
+runtime/industry/output/
 runtime/visualize/output/
 
 # Generated reports / research packages

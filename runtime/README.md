@@ -74,16 +74,16 @@ python -m runtime.db --check
 
 ```bash
 # 需求编译：行业范围 → 需求契约
-python -m runtime.l2.executor --pipeline requirement_compilation --scope <scope.yaml>
+python -m runtime.industry.executor --pipeline requirement_compilation --scope <scope.yaml>
 
 # 报告摄入：把 geo-research 生成的 Markdown 报告解析成候选
-python -m runtime.l2.executor --pipeline report_ingestion --report <report.md> --report-id <report_id>
+python -m runtime.industry.executor --pipeline report_ingestion --report <report.md> --report-id <report_id>
 
 # 引用证据解析：引用标签 → source/evidence
-python -m runtime.l2.executor --pipeline evidence_resolution --evidence <evidence.json> --report-id <report_id>
+python -m runtime.industry.executor --pipeline evidence_resolution --evidence <evidence.json> --report-id <report_id>
 
 # 【爬取】直接调用 geo-research 爬虫生成行业报告（SearXNG 搜索 + Playwright 抓取 + LLM 生成）
-python -m runtime.l2.executor --pipeline geo_research_report_job --crawl --request "研究中国CRM行业"
+python -m runtime.industry.executor --pipeline geo_research_report_job --crawl --request "研究中国CRM行业"
 #   可配置（环境变量）：
 #   GEO_RESEARCH_ROOT      = geo-research 根目录（默认 d:/Brand Atlas/geo-research）
 #   GEO_RESEARCH_PYTHON    = 其 python（默认 .venv-browser/Scripts/python.exe）
@@ -91,14 +91,14 @@ python -m runtime.l2.executor --pipeline geo_research_report_job --crawl --reque
 #   GEO_RESEARCH_TIMEOUT   = 爬取超时秒数（默认 900）
 
 # 知识抽取：LLM 从报告候选抽出 实体/关系/事实（--dry-run 先试跑不写库）
-python -m runtime.l2.executor --pipeline extraction --report <report.md> --dry-run
+python -m runtime.industry.executor --pipeline extraction --report <report.md> --dry-run
 
 # 晋升：10 道门禁，通过即稳定
-python -m runtime.l2.executor --pipeline promotion
+python -m runtime.industry.executor --pipeline promotion
 
 # 一键全流程（--report 用已有报告，或 --crawl 自动爬取）
-python -m runtime.l2.executor --all --scope <scope.yaml> --report <report.md> --evidence <evidence.json>
-python -m runtime.l2.executor --all --scope <scope.yaml> --crawl --request "研究需求" --evidence <evidence.json>
+python -m runtime.industry.executor --all --scope <scope.yaml> --report <report.md> --evidence <evidence.json>
+python -m runtime.industry.executor --all --scope <scope.yaml> --crawl --request "研究需求" --evidence <evidence.json>
 
 # 【推荐】从"大致信息"一键到"按需求爬取报告"：
 #   你只需给目标行业 + 市场区域，系统自动：
@@ -106,15 +106,15 @@ python -m runtime.l2.executor --all --scope <scope.yaml> --crawl --request "研�
 #   ② requirement_compilation 编译成 requirement（含各维度研究问题）
 #   ③ 用完整需求触发 geo-research 爬取 + 生成行业报告
 #   ④ report_ingestion → extraction → promotion 入库
-python -m runtime.l2.executor --all --industry "CRM软件" --market CN --crawl \
+python -m runtime.industry.executor --all --industry "CRM软件" --market CN --crawl \
     --evidence <evidence.json> \
     [--audience "中小企业销售负责人"] [--competitors "销售易,纷享销客,用友"] \
     [--priority-dim "audience_and_decision_chain,problems_and_jobs"] \
     [--seed-sources "中国信通院,艾瑞咨询"]
 
 # 也可单独生成 scope / request（不爬取）
-python -m runtime.l2.scope_builder --industry "CRM软件" --market CN [--out scopes/crm.yaml]
-python -m runtime.l2.requirement_to_request --requirement-id <ikr_xxx> [--out request.txt]
+python -m runtime.industry.scope_builder --industry "CRM软件" --market CN [--out scopes/crm.yaml]
+python -m runtime.industry.requirement_to_request --requirement-id <ikr_xxx> [--out request.txt]
 ```
 
 > **爬取说明**：`--crawl` 会真正调用 geo-research 爬网并生成报告，耗时较长（搜索+抓取+LLM 写报告，可能几分钟）。geo-research 的报告生成模型用它所处目录的 `llm-config.local.json`（已同步为 DeepSeek）。若抓取某站点卡住，可调大 `GEO_RESEARCH_TIMEOUT` 或先排查该站点网络。
@@ -140,11 +140,11 @@ source_registration
 
 ```bash
 # 完整跑一条品牌文档
-python -m runtime.l3.executor --all --file <brand_doc.md> --brand <brand_id>
+python -m runtime.brand.executor --all --file <brand_doc.md> --brand <brand_id>
 
 # 单步
-python -m runtime.l3.executor --pipeline candidate_pre_extraction --file <doc.md> --brand <brand_id>
-python -m runtime.l3.executor --pipeline candidate_extraction --file <doc.md> --brand <brand_id>
+python -m runtime.brand.executor --pipeline candidate_pre_extraction --file <doc.md> --brand <brand_id>
+python -m runtime.brand.executor --pipeline candidate_extraction --file <doc.md> --brand <brand_id>
 ```
 
 > `--all --dry-run` 不会落库，因此从空库运行时后续步骤无法读取前序 document/chunk；完整预演请使用隔离测试库。
@@ -154,7 +154,7 @@ python -m runtime.l3.executor --pipeline candidate_extraction --file <doc.md> --
 | 能力 | 模块 | 说明 |
 |------|------|------|
 | 严格抽取校验 | `runtime/extraction_schema.py` (Pydantic) + `ontology_validator.py` | LLM 输出先 shape→本体校验，非法自动重试修复 |
-| 候选预抽取 | `runtime/l3/pipelines/candidate_pre_extraction.py` + `brand_knowledge/rules+dictionaries` | 正则+词典抽 URL/版本/认证/组织/能力/产品候选，LLM 只处理难例 |
+| 候选预抽取 | `runtime/brand/pipelines/candidate_pre_extraction.py` + `brand_knowledge/rules+dictionaries` | 正则+词典抽 URL/版本/认证/组织/能力/产品候选，LLM 只处理难例 |
 | NER 小模型 | `runtime/ner_client.py`（PaddleNLP）+ `candidate_pre_extraction._ner_entities` | 可选第三层：UIE/ERNIE 通用 NER 抽组织/产品/能力/认证，`generator="paddlenlp:ner:<type>"`；未装 paddlenlp 时降级为空，不影响主链路（配置 `"ner"` 段，`--skip-ner` 可关）。模型 `uie-base`，需 **paddlepaddle 2.6.x**（3.x 下静态导出失败），schema 需中文（客户端自动中英互译） |
 | 向量存储 | `vector_migration.sql` (pgvector) + `embeddings.py` | entity/evidence/assertion embedding + HNSW |
 | 语义消歧 | `entity_resolution.py` | 精确匹配 + 别名/embedding 打分（0.35名+0.30嵌+0.20别名），≥.90 自动合并 / .75-.90 人工 |

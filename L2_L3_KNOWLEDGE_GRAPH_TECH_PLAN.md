@@ -1442,24 +1442,24 @@ L3 晋级同样读取 L1 promotion policy，额外记录：
 
 当前 L2 入口：
 
-- `runtime/l2/executor.py`
-- `runtime/l2/pipelines/report_ingestion.py`
-- `runtime/l2/pipelines/evidence_resolution.py`
-- `runtime/l2/pipelines/extraction.py`
-- `runtime/l2/pipelines/source_enrichment.py`
-- `runtime/l2/pipelines/promotion.py`
+- `runtime/industry/executor.py`
+- `runtime/industry/pipelines/report_ingestion.py`
+- `runtime/industry/pipelines/evidence_resolution.py`
+- `runtime/industry/pipelines/extraction.py`
+- `runtime/industry/pipelines/source_enrichment.py`
+- `runtime/industry/pipelines/promotion.py`
 
 建议新增或重命名为：
 
 ```text
-runtime/l2/pipelines/article_registration.py
-runtime/l2/pipelines/content_parsing.py
-runtime/l2/pipelines/evidence_unit_merge.py
-runtime/l2/pipelines/candidate_extraction.py
-runtime/l2/pipelines/candidate_normalization.py
-runtime/l2/pipelines/candidate_vectorization.py
-runtime/l2/pipelines/knowledge_fusion.py
-runtime/l2/pipelines/promotion.py
+runtime/industry/pipelines/article_registration.py
+runtime/industry/pipelines/content_parsing.py
+runtime/industry/pipelines/evidence_unit_merge.py
+runtime/industry/pipelines/candidate_extraction.py
+runtime/industry/pipelines/candidate_normalization.py
+runtime/industry/pipelines/candidate_vectorization.py
+runtime/industry/pipelines/knowledge_fusion.py
+runtime/industry/pipelines/promotion.py
 ```
 
 旧的 `report_ingestion` 后续明确废弃。
@@ -1483,30 +1483,30 @@ ALL_ORDER = [
 
 当前 L3 入口：
 
-- `runtime/l3/executor.py`
-- `runtime/l3/pipelines/source_registration.py`
-- `runtime/l3/pipelines/original_file_gate.py`
-- `runtime/l3/pipelines/layout_aware_parsing.py`
-- `runtime/l3/pipelines/semantic_chunking.py`
-- `runtime/l3/pipelines/candidate_pre_extraction.py`
-- `runtime/l3/pipelines/candidate_extraction.py`
-- `runtime/l3/pipelines/entity_resolution.py`
-- `runtime/l3/pipelines/assertion_classification.py`
-- `runtime/l3/pipelines/evidence_verification.py`
-- `runtime/l3/pipelines/review_promotion.py`
+- `runtime/brand/executor.py`
+- `runtime/brand/pipelines/source_registration.py`
+- `runtime/brand/pipelines/original_file_gate.py`
+- `runtime/brand/pipelines/layout_aware_parsing.py`
+- `runtime/brand/pipelines/semantic_chunking.py`
+- `runtime/brand/pipelines/candidate_pre_extraction.py`
+- `runtime/brand/pipelines/candidate_extraction.py`
+- `runtime/brand/pipelines/entity_resolution.py`
+- `runtime/brand/pipelines/assertion_classification.py`
+- `runtime/brand/pipelines/evidence_verification.py`
+- `runtime/brand/pipelines/review_promotion.py`
 
 建议调整为：
 
 ```text
-runtime/l3/pipelines/document_registration.py
-runtime/l3/pipelines/sensitive_content_warning.py
-runtime/l3/pipelines/content_parsing.py
-runtime/l3/pipelines/evidence_unit_merge.py
-runtime/l3/pipelines/candidate_extraction.py
-runtime/l3/pipelines/candidate_normalization.py
-runtime/l3/pipelines/candidate_vectorization.py
-runtime/l3/pipelines/knowledge_fusion.py
-runtime/l3/pipelines/promotion.py
+runtime/brand/pipelines/document_registration.py
+runtime/brand/pipelines/sensitive_content_warning.py
+runtime/brand/pipelines/content_parsing.py
+runtime/brand/pipelines/evidence_unit_merge.py
+runtime/brand/pipelines/candidate_extraction.py
+runtime/brand/pipelines/candidate_normalization.py
+runtime/brand/pipelines/candidate_vectorization.py
+runtime/brand/pipelines/knowledge_fusion.py
+runtime/brand/pipelines/promotion.py
 ```
 
 其中：
@@ -1581,8 +1581,8 @@ LLM 只做结构化抽取和疑难判断
 
 优先改造：
 
-- `runtime/l1/registry.py`
-- `runtime/l1/policy_engine.py`
+- `runtime/common/registry.py`
+- `runtime/common/policy_engine.py`
 - L2/L3 candidate extraction prompt
 - schema validate
 

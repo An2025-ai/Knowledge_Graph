@@ -9,27 +9,27 @@ from unittest.mock import patch
 from datetime import date
 
 from runtime.db import DB, json_dumps
-from runtime.l2.executor import _propagate_result
-from runtime.l2.pipelines.geo_research_report_job import _build_research_package
-from runtime.l2.pipelines.source_discovery import discover_sources
-from runtime.l2.search.providers import SearchResult
-from runtime.l2.pipelines.extraction import _upsert_entity
-from runtime.l2.pipelines.promotion import _disposition, _evaluate_gates
-from runtime.l3.pipelines.candidate_pre_extraction import (
+from runtime.industry.executor import _propagate_result
+from runtime.industry.pipelines.geo_research_report_job import _build_research_package
+from runtime.industry.pipelines.source_discovery import discover_sources
+from runtime.industry.search.providers import SearchResult
+from runtime.industry.pipelines.extraction import _upsert_entity
+from runtime.industry.pipelines.promotion import _disposition, _evaluate_gates
+from runtime.brand.pipelines.candidate_pre_extraction import (
     _ner_type_to_candidate,
     _ner_entities,
     pre_extract,
 )
-from runtime.l3.pipelines._helpers import resolve_brand_context, update_assertion
+from runtime.brand.pipelines._helpers import resolve_brand_context, update_assertion
 from runtime.ner_client import _clean_span, _map_ner_type, _SCHEMA_ZH
 from runtime.migrations.__main__ import main as migration_main
 from runtime.neo4j.consistency import count_assertions_pg, count_entity_edges
 from runtime.neo4j.projection import ProjectionService
-from runtime.l1.prompt_builder import build_extraction_prompt
-from runtime.l1.policy_engine import load_promotion_policy
-from runtime.l1.registry import get_l1_registry
+from runtime.common.prompt_builder import build_extraction_prompt
+from runtime.common.policy_engine import load_promotion_policy
+from runtime.common.registry import get_common_registry
 from runtime.ontology_validator import validate_ontology
-from runtime.l3.executor import DEFAULT_PIPELINES
+from runtime.brand.executor import DEFAULT_PIPELINES
 from runtime.visualize.export import _relations_for_entity_ids, export_all, export_layer
 
 
@@ -116,8 +116,8 @@ class RuntimeRegressionTests(unittest.TestCase):
                 rank=2,
             ),
         ]
-        with patch("runtime.l2.pipelines.source_discovery.provider_status", return_value={"provider": "searxng", "searxng_available": True}), \
-                patch("runtime.l2.pipelines.source_discovery.search", return_value=results):
+        with patch("runtime.industry.pipelines.source_discovery.provider_status", return_value={"provider": "searxng", "searxng_available": True}), \
+                patch("runtime.industry.pipelines.source_discovery.search", return_value=results):
             payload = discover_sources(
                 "CRM",
                 "CN",
@@ -363,7 +363,7 @@ class RuntimeRegressionTests(unittest.TestCase):
 
     def test_l1_unknown_profile_fails_fast_not_global_fallback(self):
         """A typo'd/unknown profile must raise instead of silently opening all types."""
-        registry = get_l1_registry()
+        registry = get_common_registry()
         # Unknown non-empty id -> raise on profile() and on query helpers.
         with self.assertRaises(ValueError):
             registry.profile("l2_industryy")
@@ -381,7 +381,7 @@ class RuntimeRegressionTests(unittest.TestCase):
 
     def test_l1_none_profile_is_rejected(self):
         """Business types cannot be resolved without an explicit layer Profile."""
-        registry = get_l1_registry()
+        registry = get_common_registry()
         for value in (None, ""):
             with self.assertRaises(ValueError):
                 registry.profile(value)
@@ -392,7 +392,7 @@ class RuntimeRegressionTests(unittest.TestCase):
 
     def test_l1_known_profiles_resolve_to_their_whitelist(self):
         """Registered profiles still resolve to their restricted layer whitelist."""
-        registry = get_l1_registry()
+        registry = get_common_registry()
         self.assertEqual(registry.profile("l2_industry").profile_id, "l2_industry")
         self.assertIn("industry", registry.entity_types("l2_industry"))
         self.assertIn("brand", registry.entity_types("l3_brand"))
@@ -401,11 +401,11 @@ class RuntimeRegressionTests(unittest.TestCase):
     def test_l1_validate_profile_reports_unknown_not_raises(self):
         """The validator reports an unknown profile as an error string; it must
         not raise (unlike the runtime query helpers, which fail fast)."""
-        registry = get_l1_registry()
+        registry = get_common_registry()
         self.assertEqual(registry.validate_profile("nope"), ["unknown profile 'nope'"])
 
     def test_l1_registry_loads_layer_profiles(self):
-        registry = get_l1_registry()
+        registry = get_common_registry()
         self.assertIn("l2_industry", registry.profiles)
         self.assertIn("l3_brand", registry.profiles)
         self.assertEqual(set(registry.profiles), {"l2_industry", "l3_brand"})
@@ -414,14 +414,14 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertNotIn("observation", registry.entity_types("l3_brand"))
 
     def test_l1_profiles_are_self_consistent(self):
-        registry = get_l1_registry()
+        registry = get_common_registry()
         self.assertEqual(registry.validate_profiles(), [])
 
     def test_l1_all_allowed_types_have_owner_metadata(self):
         """Guard against orphaned schema members: every entity/relation a profile
         allows should carry owner/scope metadata, so the layer contract (who owns,
         stability, promotion target) is explicit rather than silently unmanaged."""
-        registry = get_l1_registry()
+        registry = get_common_registry()
         for profile_id, profile in registry.profiles.items():
             miss_e = (profile.allowed_entity_types - set(profile.entity_type_metadata))
             miss_r = (profile.allowed_relation_types - set(profile.relation_type_metadata))
@@ -435,7 +435,7 @@ class RuntimeRegressionTests(unittest.TestCase):
             )
 
     def test_l1_profile_metadata_keeps_relations_inside_profile(self):
-        registry = get_l1_registry()
+        registry = get_common_registry()
         meta = registry.relation_metadata("offers", "l3_brand")
         self.assertEqual(meta["owner_layer"], "l3")
         self.assertNotIn("from_layer", meta)
@@ -572,7 +572,7 @@ class RuntimeRegressionTests(unittest.TestCase):
 
         args = argparse.Namespace(brand="Acme", tenant="demo", document_id="doc_x",
                                   dry_run=True, skip_ner=False)
-        import runtime.l3.pipelines.candidate_pre_extraction as cpe
+        import runtime.brand.pipelines.candidate_pre_extraction as cpe
         with patch.object(cpe, "get_ner_client", lambda: FakeNER()):
             result = cpe.run(db, args)
         # dry-run: counts candidates but writes nothing to extraction_candidate.

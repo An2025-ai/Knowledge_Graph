@@ -1,20 +1,20 @@
 import unittest
 
-from runtime.l1.change_proposals import validate_change_proposal
-from runtime.l1.registry import get_l1_registry
-from runtime.l1.operations import list_operation_roles, get_role, write_mode_for
-from runtime.l1.retrieval import build_context_package, validate_context_package
-from runtime.l1.validate import validate_l1
-from runtime.l1.profiles import list_profiles
-from runtime.l1.policies import list_policies
+from runtime.common.change_proposals import validate_change_proposal
+from runtime.common.registry import get_common_registry
+from runtime.common.operations import list_operation_roles, get_role, write_mode_for
+from runtime.common.retrieval import build_context_package, validate_context_package
+from runtime.common.validate import validate_common
+from runtime.common.profiles import list_profiles
+from runtime.common.policies import list_policies
 
 
 class L1ContractTests(unittest.TestCase):
     def test_l1_contracts_are_valid(self):
-        self.assertEqual(validate_l1(), [])
+        self.assertEqual(validate_common(), [])
 
     def test_registry_exposes_independent_contracts(self):
-        registry = get_l1_registry()
+        registry = get_common_registry()
         l2 = registry.profile("l2_industry")
         l3 = registry.profile("l3_brand")
         self.assertEqual(len(l2.entity_specs), 15)
@@ -52,14 +52,14 @@ class L1ContractTests(unittest.TestCase):
         self.assertEqual(registry.retrieval_contract["meta"]["version"], "1.0.0")
 
     def test_business_ontology_requires_a_profile(self):
-        registry = get_l1_registry()
+        registry = get_common_registry()
         with self.assertRaises(ValueError):
             registry.entity_types()
         with self.assertRaises(ValueError):
             registry.relation_types()
 
     def test_l3_metrics_have_no_l2_dependency(self):
-        metrics = get_l1_registry().profile("l3_brand").metric_specs
+        metrics = get_common_registry().profile("l3_brand").metric_specs
         self.assertNotIn("technical_barrier", metrics)
         self.assertNotIn("differentiation_degree", metrics)
         self.assertTrue(all(not spec.get("external_layer_dependencies") for spec in metrics.values()))
@@ -72,7 +72,7 @@ class L1ContractTests(unittest.TestCase):
     def test_layer_dimensions_fully_cover_the_ontology(self):
         # layer_dimensions is now derived from each profile ontology's ontology_group,
         # so it must partition every entity/relation/metric with no gaps.
-        registry = get_l1_registry()
+        registry = get_common_registry()
         for profile_id in ("l2_industry", "l3_brand"):
             profile = registry.profile(profile_id)
             dimensions = registry.layer_dimensions(profile_id)
@@ -85,7 +85,7 @@ class L1ContractTests(unittest.TestCase):
             self.assertEqual(metrics, set(profile.metric_specs), profile_id)
 
     def test_narrative_chain_paths_only_reference_valid_entities(self):
-        registry = get_l1_registry()
+        registry = get_common_registry()
         for chain in registry.narrative_chains():
             profile_id = chain.get("layer")
             entities = registry.entity_types(profile_id)

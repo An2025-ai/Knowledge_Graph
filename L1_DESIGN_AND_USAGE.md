@@ -37,8 +37,8 @@ L1 不保存行业事实、品牌事实、AI 回答分析结果或文章优化�
 API：
 
 ```powershell
-python -m runtime.l1.entity_types --profile l2_industry
-python -m runtime.l1.entity_types --profile l3_brand
+python -m runtime.common.entity_types --profile l2_industry
+python -m runtime.common.entity_types --profile l3_brand
 ```
 
 ### 3.2 关系类型
@@ -49,15 +49,15 @@ python -m runtime.l1.entity_types --profile l3_brand
 API：
 
 ```powershell
-python -m runtime.l1.relation_types --profile l2_industry
-python -m runtime.l1.relation_types --profile l3_brand
+python -m runtime.common.relation_types --profile l2_industry
+python -m runtime.common.relation_types --profile l3_brand
 ```
 
 Profile 和治理策略也分别提供 API，避免调用方直接读取 YAML：
 
 ```powershell
-python -m runtime.l1.profiles
-python -m runtime.l1.policies
+python -m runtime.common.profiles
+python -m runtime.common.policies
 ```
 
 ### 3.3 陈述类型
@@ -72,7 +72,7 @@ python -m runtime.l1.policies
 API：
 
 ```powershell
-python -m runtime.l1.assertion_types
+python -m runtime.common.assertion_types
 ```
 
 ### 3.4 上下文
@@ -83,7 +83,7 @@ python -m runtime.l1.assertion_types
 API：
 
 ```powershell
-python -m runtime.l1.contexts
+python -m runtime.common.contexts
 ```
 
 ### 3.5 LLM 操作
@@ -103,12 +103,12 @@ LLM 不直接写 active 知识。操作协议将能力拆开，每个操作单�
 API：
 
 ```powershell
-python -m runtime.l1.operations
+python -m runtime.common.operations
 ```
 
 ### 3.6 检索上下文
 
-使用 `runtime.l1.retrieval.build_context_package()` 生成统一上下文，包含：查询、范围、实体、
+使用 `runtime.common.retrieval.build_context_package()` 生成统一上下文，包含：查询、范围、实体、
 关系、陈述、证据、冲突、缺失信息和检索轨迹。LLM 应消费这个结构，而不是直接读取数据库表。
 
 ### 3.7 更新提案
@@ -126,8 +126,8 @@ LLM 和未来 L4 只能创建 `candidate_assertion` 或 `change_proposal`。已�
 API：
 
 ```powershell
-python -m runtime.l1.change_proposals proposal.json
-python -m runtime.l1.validate
+python -m runtime.common.change_proposals proposal.json
+python -m runtime.common.validate
 ```
 
 ## 4. 构图质量指标
@@ -148,14 +148,14 @@ python -m runtime.l1.validate
 API：
 
 ```powershell
-python -m runtime.l1.quality_metrics
+python -m runtime.common.quality_metrics
 ```
 
 ## 5. 校验和发布顺序
 
 ```text
 1. 修改单个 L1 定义文件
-2. python -m runtime.l1.validate
+2. python -m runtime.common.validate
 3. python database/publish.py --validate
 4. python -m pytest -q
 5. 运行样本回放和兼容性检查
@@ -165,5 +165,5 @@ python -m runtime.l1.quality_metrics
 L1 注册表数据库结构位于 `database/l1_registry.sql`，与 L2/L3 事实表独立。生成确定性注册快照：
 
 ```powershell
-python database/publish_l1.py --out runtime/l1/output/registry.json
+python database/publish_l1.py --out runtime/common/output/registry.json
 ```

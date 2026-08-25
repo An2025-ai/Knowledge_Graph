@@ -18,7 +18,7 @@ The intended flow is:
 tools/geo-research
 -> reports/generated/search-report-*.md
 -> data/runs/<run_id>/evidence.json and coverage artifacts
--> runtime.l2 report_ingestion
+-> runtime.industry report_ingestion
 -> evidence_resolution
 -> extraction
 -> source_enrichment

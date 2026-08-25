@@ -111,8 +111,8 @@ This is not a replacement of the current design. It is an enhancement of the exi
 
 Current location:
 
-- `runtime/l3/pipelines/layout_aware_parsing.py`
-- `runtime/l3/pipelines/semantic_chunking.py`
+- `runtime/brand/pipelines/layout_aware_parsing.py`
+- `runtime/brand/pipelines/semantic_chunking.py`
 
 Recommended enhancement:
 
@@ -131,7 +131,7 @@ Recommended tools:
 Recommended new module:
 
 ```text
-runtime/l3/parsers/
+runtime/brand/parsers/
   __init__.py
   document_parser.py
   markdown_parser.py
@@ -168,7 +168,7 @@ Expected benefit:
 Current location:
 
 - Currently absent.
-- Candidate extraction starts directly in `runtime/l3/pipelines/candidate_extraction.py`.
+- Candidate extraction starts directly in `runtime/brand/pipelines/candidate_extraction.py`.
 
 Recommended insertion point:
 
@@ -181,7 +181,7 @@ semantic_chunking
 Recommended new pipeline:
 
 ```text
-runtime/l3/pipelines/candidate_pre_extraction.py
+runtime/brand/pipelines/candidate_pre_extraction.py
 ```
 
 Recommended supporting files:
@@ -247,7 +247,7 @@ Expected benefit:
 Current location:
 
 - `runtime/extract.py`
-- `runtime/l3/pipelines/candidate_extraction.py`
+- `runtime/brand/pipelines/candidate_extraction.py`
 
 Current behavior:
 
@@ -316,7 +316,7 @@ Expected benefit:
 
 Current location:
 
-- `runtime/l3/pipelines/entity_resolution.py`
+- `runtime/brand/pipelines/entity_resolution.py`
 
 Current behavior:
 
@@ -402,7 +402,7 @@ Expected benefit:
 
 Current location:
 
-- `runtime/l3/pipelines/evidence_verification.py`
+- `runtime/brand/pipelines/evidence_verification.py`
 
 Current behavior:
 
@@ -627,7 +627,7 @@ Phase 1: Strict extraction contracts
 
 Phase 2: Candidate pre-extraction
 
-- Add `runtime/l3/pipelines/candidate_pre_extraction.py`.
+- Add `runtime/brand/pipelines/candidate_pre_extraction.py`.
 - Add rule and dictionary YAML files.
 - Add `extraction_candidate` table.
 - Modify `candidate_extraction.py` to read pre-extracted candidates.
@@ -815,7 +815,7 @@ Recommendation:
 **Implementation note (NER small-model layer):** PaddleNLP is now wired in as the
 optional small-model NER layer in the L3 candidate chain. See
 `runtime/ner_client.py` (provider abstraction mirroring `embeddings.py`) and its
-integration in `runtime/l3/pipelines/candidate_pre_extraction.py` (a
+integration in `runtime/brand/pipelines/candidate_pre_extraction.py` (a
 `_ner_entities` layer injected via `pre_extract(text, ner_client)` after the
 rule/dictionary extractors). It emits `extraction_candidate` rows tagged
 `generator="paddlenlp:ner:<type>"`. The dependency (`paddlenlp` + `paddlepaddle`,
