@@ -13,7 +13,7 @@ meta:
   description: >
     定义 L3 品牌认知层的多租户隔离规则。所有 L3 业务记录必须具备
     tenant_id 和 brand_id：tenant_id 是客户数据安全边界，brand_id 是目标品牌
-    （一个租户可管理多个品牌或子品牌）。L2 实体为共享只读对象；跨品牌比较
+    （一个租户可管理多个品牌或子品牌）。L3 不读取 L2 实体；跨品牌比较
     必须显式声明目标品牌。PostgreSQL 使用 RLS 强制租户过滤，Neo4j 查询模板
     必须以租户过滤开头。
 
@@ -42,15 +42,6 @@ tenancy_model:
         - brand_id 必须归属当前 tenant_id，禁止跨租户引用品牌
         - 品牌、产品、版本、内容、Assertion 等业务对象按品牌隔离
         - 品牌切换不改变租户边界，仅改变品牌作用域
-
-    - layer: shared
-      field: l2_entity
-      role: L2 共享行业实体
-      cardinality: 全局共享，只读
-      rules:
-        - L2 实体为跨租户共享只读对象，不携带客户内部信息
-        - L3 不得原地修改 L2 实体；需要新概念时发起 L2 候选扩展
-        - L2 实体的引用以稳定 ID 形式保存，不复制字段到 L3
 
 # ============================================================
 # 跨品牌与跨租户访问
@@ -107,7 +98,6 @@ postgresql_rls:
     - brand_workspace
     - brand_source_policy
     - product_record
-    - brand_mapping
     - assertion
     - assertion_evidence
     - knowledge_conflict

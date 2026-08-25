@@ -43,7 +43,7 @@ L2 的目标不是积累尽可能多的网页，而是建立可复用的行业�
 |---|---|---|
 | L1 通用知识层 | 定义对象、关系、意图、任务和证据规则 | 什么是 topic、fact、comparison |
 | L2 行业市场层 | 实例化共享行业坐标系 | CRM 品类、销售负责人、线索管理 |
-| L3 品牌认知层 | 将具体品牌映射到 L2 | 品牌 A 服务销售负责人并支持线索管理 |
+| L3 品牌认知层 | 独立构建具体品牌知识 | 品牌 A 服务销售负责人并支持线索管理 |
 | L4 动态观测层 | 保存搜索和 AI 回答的时序结果 | 某日 ChatGPT 在某问题中推荐品牌 B |
 
 ### 2.2 L2 应保存
@@ -1086,7 +1086,7 @@ priority_dimensions:
   - use_cases
   - capabilities
   - decision_factors
-  - competition
+  - competition_structure
 research_questions:
   - 中小企业选择CRM最关注什么？
   - CRM产品需要哪些标准能力？

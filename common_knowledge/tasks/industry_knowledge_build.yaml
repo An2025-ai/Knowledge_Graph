@@ -1,9 +1,9 @@
-# GEO 第一层通用知识层 — 任务模板：行业知识构建
+# L1 通用知识层 — 任务模板：行业知识构建
 # 版本: 1.1.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.1.0
+  version: 2.0.0
   created_at: 2026-08-11
   updated_at: 2026-08-11
   status: active
@@ -13,7 +13,7 @@ task:
   id: task_industry_knowledge_build
   name: 行业知识构建
   name_en: Industry Knowledge Build
-  version: 1.1.0
+  version: 2.0.0
   purpose: >
     为新行业或品类进行一次性基线知识构建。
     读取来自地理研究模块的行业报告，提取实体、关系和事实，
@@ -24,6 +24,16 @@ task:
     技术、标准等）、关系（竞争、供应、合规等）和事实/主张，
     经过验证和冲突检测后，写入 L2 稳定知识层。构建完成后，
     该行业知识即可供品牌分析、主题规划和搜索诊断等下游任务使用。
+    本模板为任务蓝图，不内联具体实体/关系/类型枚举——它们以
+    profile_id 引用的 Schema Profile 本体（ontology/）为唯一事实源。
+
+  profile:
+    profile_id: l2_industry
+    resolution: >
+      实体/关系/指标类型引用 common_knowledge/ontology/<profile_id>/
+      entities.yaml / relations.yaml / metrics.yaml（经 schema_profiles/
+      <profile_id>_profile.yaml 解析）。当前指向 l2_industry（15 实体 /
+      17 关系 / 17 指标），不在此内联复制。
 
   required_context:
     - industry_scope:
@@ -65,7 +75,7 @@ task:
         item_fields:
           - entity_id: 实体 ID
           - canonical_name: 实体规范名称
-          - entity_type: 实体类型（company / product / technology / standard / regulation / organization）
+          - entity_type: 实体类型（引用 profile 本体的 entity_types，如 l2_industry 的 industry / category / market_segment / brand 等，不在此内联）
           - description: 实体描述
           - properties: 实体属性
           - source_refs: 引用来源
@@ -75,7 +85,7 @@ task:
         description: 提取的关系列表
         item_fields:
           - relation_id: 关系 ID
-          - relation_type: 关系类型
+          - relation_type: 关系类型（引用 profile 本体的 relation_types，主体/客体实体类型须符合定义）
           - subject_id: 主体实体 ID
           - object_id: 客体实体 ID
           - description: 关系描述
@@ -97,7 +107,7 @@ task:
         item_fields:
           - claim_id: 主张 ID
           - statement: 主张陈述
-          - claim_type: 主张类型
+          - claim_type: 主张类型（引用 profile 本体的 statement_classes，如 fact / claim / observation / inference，不在此内联）
           - source_refs: 引用来源
           - verification_status: 验证状态（unverified / partially_verified）
           - review_required: 是否需要人工审核
@@ -110,16 +120,6 @@ task:
           - topic_type: 主题类型
           - parent_topic_id: 父主题 ID
           - relevance: 行业相关度
-    - content_gaps:
-        type: array
-        description: 识别出的报告内容缺口
-        item_fields:
-          - gap_id: 缺口 ID
-          - gap_description: 缺口描述
-          - gap_type: 缺口类型
-          - severity: 严重程度
-          - recommended_sources: 推荐补充来源
-
   rules:
     - rule: must_validate_report_contract
       description: 必须验证研究报告的合同/协议是否满足最低质量标准
@@ -184,6 +184,11 @@ task:
   # 预留：entity_extraction_recall, fact_accuracy_rate, conflict_resolution_rate, report_quality_score
 
 changelog:
+  - version: 2.0.0
+    date: 2026-08-24
+    changes:
+      - Option A 整改：移除实体/关系/陈述类型内联枚举，改为引用 profile 本体（ontology/）与 statement_classes；模板对齐 l2_industry 新本体
+    author: Brand Atlas Team
   - version: 1.1.0
     date: 2026-08-11
     changes:

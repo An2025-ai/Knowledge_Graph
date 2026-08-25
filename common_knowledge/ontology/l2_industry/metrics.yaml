@@ -1,0 +1,259 @@
+meta:
+  version: 3.0.0
+  updated_at: '2026-08-24'
+  status: active
+  layer: l2
+  profile_id: l2_industry
+  description: 由 L1 管理的 L2 行业本体指标集；按市场结构、用户与需求、竞品格局、机会与风险四维度组织。
+  cross_layer_relations: false
+metrics:
+
+# ============================== 市场结构 ==============================
+- metric: market_size
+  metric_id: l2_industry.market_size
+  canonical_name: 市场规模
+  layer: l2
+  ontology_group: market_structure
+  definition: 在给定区域市场与时间维度下，某行业、品类或细分赛道的总体市场价值的量化度量（通常以市值或收入计），是描述「这个市场有多大」的基础指标。
+  required_context:
+  - valid_time
+  - scope
+  - regional_market
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: growth_rate
+  metric_id: l2_industry.growth_rate
+  canonical_name: 增长率
+  layer: l2
+  ontology_group: market_structure
+  definition: 市场规模在相邻两个时间段之间的变化比率，用于判断市场是扩张还是收缩，是机会判断的关键输入。通常与 market_size 成对出现。
+  required_context:
+  - valid_time
+  - scope
+  - regional_market
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: penetration_rate
+  metric_id: l2_industry.penetration_rate
+  canonical_name: 渗透率
+  layer: l2
+  ontology_group: market_structure
+  definition: 目标人群或企业中已采用某品类产品或服务的比例，反映市场的覆盖成熟度。渗透率低意味着更大的存量扩展空间，是机会判断的关键输入。
+  required_context:
+  - valid_time
+  - scope
+  - regional_market
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: market_share
+  metric_id: l2_industry.market_share
+  canonical_name: 市场份额
+  layer: l2
+  ontology_group: market_structure
+  definition: 单个品牌（或其产品）在给定品类/区域/时间范围内的销量或收入占比，用于横向比较并列品牌的市场地位；在无核心品牌的 L2 中为纯并列测量，不预设参照品牌。
+  required_context:
+  - valid_time
+  - scope
+  - regional_market
+  - category
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: concentration
+  metric_id: l2_industry.concentration
+  canonical_name: 市场集中度
+  layer: l2
+  ontology_group: market_structure
+  definition: 行业或品类市场由少数头部品牌占据的程度（如 CR4 或 HHI），反映竞争格局是分散还是寡头，是判断竞争强度与进入难度的输入。
+  required_context:
+  - valid_time
+  - scope
+  - regional_market
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: maturity
+  metric_id: l2_industry.maturity
+  canonical_name: 市场成熟度
+  layer: l2
+  ontology_group: market_structure
+  definition: 行业或品类所处生命周期阶段的定性度量（萌芽 / 成长 / 成熟 / 衰退），反映增长空间与饱和程度，是机会与风险判断的重要输入。
+  required_context:
+  - valid_time
+  - scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+# ============================== 用户与需求 ==============================
+- metric: audience_share
+  metric_id: l2_industry.audience_share
+  canonical_name: 客群占比
+  layer: l2
+  ontology_group: user_demand
+  definition: 某用户角色在总体目标人群中的占比，用于量化「谁」是主要的决策或使用群体，帮助判断组织应优先服务与内容定位的受众。
+  required_context:
+  - valid_time
+  - scope
+  - regional_market
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: satisfaction
+  metric_id: l2_industry.satisfaction
+  canonical_name: 满意度
+  layer: l2
+  ontology_group: user_demand
+  definition: 用户角色对现有解决方案的整体满意程度，反映当前供给对需求的满足水平；整体满意度偏低往往意味着存在改善或替代机会。
+  required_context:
+  - valid_time
+  - scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: demand_heat
+  metric_id: l2_industry.demand_heat
+  canonical_name: 需求热度
+  layer: l2
+  ontology_group: user_demand
+  definition: 市场对某类功能、能力或解决方案的购买意愿强度（由搜索、询价、招标等公开信号聚合而来），用于量化「市场有多想要什么」。
+  required_context:
+  - valid_time
+  - scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: problem_intensity
+  metric_id: l2_industry.problem_intensity
+  canonical_name: 痛点强度
+  layer: l2
+  ontology_group: user_demand
+  definition: 某个用户问题在不同受众中的普遍程度与严重程度（严重度 × 频次聚合），用于判断哪个痛点最值得优先解决，是需求判断的定性输入。
+  required_context:
+  - valid_time
+  - scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+# ============================== 竞品格局 ==============================
+- metric: competitive_intensity
+  metric_id: l2_industry.competitive_intensity
+  canonical_name: 竞争强度
+  layer: l2
+  ontology_group: competition
+  definition: 某品类或细分赛道内竞争对抗的激烈程度（由参与品牌数量、价格压力、资源投入等综合判断），是评估进入与立足难度的核心输入。
+  required_context:
+  - valid_time
+  - scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: share_of_voice
+  metric_id: l2_industry.share_of_voice
+  canonical_name: 行业声量占比
+  layer: l2
+  ontology_group: competition
+  definition: 单个品牌在品类相关话题中的内容与讨论曝光占比，反映品牌在市场心智中的可见度与主导程度，是并列品牌间市场影响力的测量。
+  required_context:
+  - valid_time
+  - scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: price_index
+  metric_id: l2_industry.price_index
+  canonical_name: 价格指数
+  layer: l2
+  ontology_group: competition
+  definition: 某品类或价格带内产品价格水平相对基准的变化指数，反映市场定价走势、价格压力与价值商品化的趋势，是竞争与机会判断的输入。
+  required_context:
+  - valid_time
+  - scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: capability_coverage
+  metric_id: l2_industry.capability_coverage
+  canonical_name: 能力覆盖度
+  layer: l2
+  ontology_group: competition
+  definition: 某细分赛道内主要产品已覆盖的能力项占领域标准能力集的比重，缺口越多意味着差异化与补位机会越大，是能力坐标下的竞争分析输入。
+  required_context:
+  - valid_time
+  - scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+# ============================== 机会与风险 ==============================
+- metric: opportunity_size
+  metric_id: l2_industry.opportunity_size
+  canonical_name: 机会规模
+  layer: l2
+  ontology_group: opportunity_risk
+  definition: 某个机会点在给定区域与时间内的可触达市场规模（通常由 unserved/underserved 部分估算），用于量化「这个机会有多值钱」，是机会排序的首要输入。
+  required_context:
+  - valid_time
+  - scope
+  - regional_market
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: growth_potential
+  metric_id: l2_industry.growth_potential
+  canonical_name: 增长潜力
+  layer: l2
+  ontology_group: opportunity_risk
+  definition: 市场或机会在未来一段时间内达到更大规模的潜力（结合成长趋势、渗透空间与扩张阻力综合判断），是判断机会值得投入多少资源的输入。
+  required_context:
+  - valid_time
+  - scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: risk_level
+  metric_id: l2_industry.risk_level
+  canonical_name: 风险等级
+  layer: l2
+  ontology_group: opportunity_risk
+  definition: 某风险对品类、产品、能力或机会的综合影响程度（由发生可能性与影响范围聚合而得），用于量化「这个风险有多严重」，是风险治理的排序与处置输入。
+  required_context:
+  - valid_time
+  - scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0

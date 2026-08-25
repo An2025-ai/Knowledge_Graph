@@ -1,0 +1,499 @@
+meta:
+  version: 3.0.0
+  updated_at: '2026-08-24'
+  status: active
+  layer: l2
+  profile_id: l2_industry
+  description: 由 L1 管理的 L2 行业本体；只约束 L2 行业知识实例。四维度精简：市场结构、用户与需求、竞品格局、机会与风险。
+  cross_layer_relations: false
+entity_types:
+
+# ============================== 市场结构 ==============================
+- type: industry
+  canonical_name: 行业
+  canonical_name_en: Industry
+  definition: '宏观经济分类，是市场结构中粒度最粗的一层，用于将品牌和产品归类到更大的经济领域。行业是品牌 operates_in 关系的目标实体，一个行业可下分多个品类。'
+  examples:
+  - 企业软件
+  - 消费电子
+  - 金融服务
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - parent_industry_id
+  - industry_code
+  constraints:
+  - 支持层级结构（通过 parent_industry_id 自引用）
+  - canonical_name 必须唯一
+  - 行业只描述经济分组，不描述具体产品
+  version: 1.0.0
+  type_id: l2_industry.industry
+  layer: l2
+  owner_layer: l2
+  ontology_group: market_structure
+
+- type: category
+  canonical_name: 品类
+  canonical_name_en: Category
+  definition: '市场中的解决方案类别，粒度介于行业与产品之间，将解决同类需求的产品归为一个可比较的横向市场。产品通过 belongs_to 归属到品类，品类通过 has_category 归属到行业。'
+  examples:
+  - CRM
+  - 企业沟通
+  - 文档协同
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - parent_category_id
+  - industry_id
+  constraints:
+  - 必须归属到至少一个 industry（通过 has_category 反向）
+  - 支持层级结构（通过 parent_category_id）
+  - canonical_name 在同一行业下必须唯一
+  - 与 industry 的区别：industry 是经济分组，category 是解决方案市场
+  version: 1.0.0
+  type_id: l2_industry.category
+  layer: l2
+  owner_layer: l2
+  ontology_group: market_structure
+
+- type: market_segment
+  canonical_name: 细分赛道
+  canonical_name_en: Market Segment
+  definition: '在品类内按照客户类型、价值主张或需求偏好切分出的更细竞争单元，是品牌可以专门进攻的差异化战场。一个品类可包含多个细分赛道，各赛道之间竞争强度和被满足程度不同。'
+  examples:
+  - 面向中小企业的轻量 CRM
+  - 面向大型制造的供应链管理
+  examples_note: 细分赛道 = 客户切分 + 价值主张，而非产品形态
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - parent_segment_id
+  - category_id
+  - primary_audience
+  constraints:
+  - 必须归属到某个 category（提供 category_id 或通过 belongs_to 反向）
+  - 细分赛道可按客户类型、价值主张、价格带等维度切分，但一次只描述一个切分维度
+  - 与 category 的区别：category 是产品解决方案的横向市场，market_segment 是品类内的客户/价值主张切分
+  version: 2.0.0
+  type_id: l2_industry.market_segment
+  layer: l2
+  owner_layer: l2
+  ontology_group: market_structure
+
+- type: regional_market
+  canonical_name: 区域市场
+  canonical_name_en: Regional Market
+  definition: '受地理/行政/语言边界约束的市场范围，是市场指标（规模、份额、渗透率）计算必须限定的地理上下文。同一行业或品类在不同区域可能呈现不同的规模、竞争格局和需求成熟度。'
+  examples:
+  - 中国市场
+  - 北美市场
+  - 东南亚市场
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - parent_region_id
+  - region_type
+  - currency
+  constraints:
+  - 支持层级结构（通过 parent_region_id，如 亚太 → 中国）
+  - 市场指标必须携带 regional_market 维度，否则视为全球/未限定
+  - region_type 建议取值 country / region / province_city / global
+  - 与 market_segment 的区别：regional_market 按地理切分，market_segment 按客户切分
+  version: 2.0.0
+  type_id: l2_industry.regional_market
+  layer: l2
+  owner_layer: l2
+  ontology_group: market_structure
+
+# ============================== 用户与需求 ==============================
+- type: audience
+  canonical_name: 用户角色
+  canonical_name_en: Audience
+  definition: '具有相似任务、痛点和决策权的用户群体，是"谁"的维度。产品和内容面向特定用户角色，一个角色可在不同行业出现。'
+  examples:
+  - 销售负责人
+  - CTO/技术决策者
+  - 中小企业主
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - persona_attributes
+  - decision_authority
+  constraints:
+  - canonical_name 必须唯一
+  - persona_attributes 为可选的结构化画像字段
+  - 与 problem 的区别：audience 描述"谁"，problem 描述"这个人的痛点"
+  version: 1.0.0
+  type_id: l2_industry.audience
+  layer: l2
+  owner_layer: l2
+  ontology_group: user_demand
+
+- type: problem
+  canonical_name: 用户问题
+  canonical_name_en: Problem
+  definition: '用户希望消除的痛点或必须完成的任务，从用户视角而非产品视角描述。问题是内容策略和产品定位的出发点，产品通过 solves 关联到问题。'
+  examples:
+  - 销售线索分散难以跟踪
+  - 团队沟通效率低
+  - 数据报表制作耗时
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - severity
+  - frequency
+  - related_audience_ids
+  constraints:
+  - 问题必须从用户视角描述，不得写成产品功能清单
+  - severity 取值为 critical / high / medium / low
+  - 应与至少一个 audience 关联
+  - 与 use_case 的区别：problem 是"要消除的痛点"，use_case 是"要完成的正面任务情境"
+  version: 1.0.0
+  type_id: l2_industry.problem
+  layer: l2
+  owner_layer: l2
+  ontology_group: user_demand
+
+- type: use_case
+  canonical_name: 使用场景
+  canonical_name_en: Use Case
+  definition: '用户为达成某个正面目标而在特定情境下使用产品完成任务的过程。描述"谁在什么情境下做什么"，是连接用户角色与产品功能的正面桥梁，与 problem 的痛点视角互补。'
+  examples:
+  - 销售负责人一键生成线索周报
+  - 远程团队发起并跟踪视频会议
+  - 财务按月自动生成合并报表
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - related_audience_ids
+  - workflow_steps
+  constraints:
+  - 应描述具体情境而非泛化功能列表
+  - 通常关联到至少一个 audience
+  - 与 problem 的区别：problem 描述要消除的痛点，use_case 描述要达成的正面任务
+  version: 1.0.0
+  type_id: l2_industry.use_case
+  layer: l2
+  owner_layer: l2
+  ontology_group: user_demand
+
+- type: demand
+  canonical_name: 需求
+  canonical_name_en: Demand
+  definition: '市场对某类功能、能力或解决方案的购买意愿强度与规模。需求是比单条问题更高层级的聚合概念，表达"多大比例的受众在多大程度上需要什么"，支撑市场机会判断。'
+  examples:
+  - 中小企业对自动化销售流程的旺盛需求
+  - 对生成式 AI 客服的早期需求
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - demand_level
+  - related_audience_ids
+  - related_problem_ids
+  constraints:
+  - demand_level 取值为 nascent / growing / mature / declining
+  - 需求应能追溯到具体的 problem 或 audience，避免空泛标语
+  - 与 problem 的区别：problem 是单个痛点，demand 是该痛点催生的市场购买意愿聚合
+  version: 2.0.0
+  type_id: l2_industry.demand
+  layer: l2
+  owner_layer: l2
+  ontology_group: user_demand
+
+# ============================== 竞品格局 ==============================
+- type: brand
+  canonical_name: 品牌
+  canonical_name_en: Brand
+  definition: '对外提供产品或服务的品牌身份。L2 中所有品牌为并列的产品品牌，无核心/参照品牌之分；竞争关系通过 competes_with 双向关系表达，不依赖相对参照。'
+  examples:
+  - Salesforce
+  - 华为
+  - HubSpot
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - industry
+  - headquarters
+  - website
+  constraints:
+  - canonical_name 必须唯一
+  - L2 品牌一律并列，不得引入"目标品牌/核心品牌"参照
+  - 品牌是品牌身份，产品是具体可售物，二者通过 offers 关系区分
+  - 一个品牌可被一个 organization 拥有（通过 owned_by）
+  version: 1.0.0
+  type_id: l2_industry.brand
+  layer: l2
+  owner_layer: l2
+  ontology_group: competition
+
+- type: product
+  canonical_name: 产品
+  canonical_name_en: Product
+  definition: '由品牌提供、可独立描述和定价的具体产品或服务。产品归属品类、解决用户问题、支持使用场景、面向用户角色、具备某些能力。'
+  examples:
+  - Salesforce Sales Cloud
+  - 华为 Mate 60 Pro
+  - HubSpot Sales Hub
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - brand_id
+  - category_id
+  - pricing_model
+  - deployment_type
+  constraints:
+  - 必须通过 belongs_to 关联到至少一个 category
+  - 通过 offers 与至少一个 brand 关联
+  - 与 brand 的区别：brand 是品牌身份，product 是可售的具体物
+  version: 1.0.0
+  type_id: l2_industry.product
+  layer: l2
+  owner_layer: l2
+  ontology_group: market_structure
+
+- type: capability
+  canonical_name: 能力
+  canonical_name_en: Capability
+  definition: '产品具备的独立功能或技术能力，回答"产品能做什么"。能力是行业共享坐标系的核心，使不同品牌的产品能在同一能力维度下客观比较，不涉及任何品牌好坏判断。'
+  examples:
+  - 销售预测
+  - 自然语言处理
+  - 多渠道数据接入
+  - 自动化工作流
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - parent_capability_id
+  - related_problem_ids
+  - evaluation_dimensions
+  constraints:
+  - 只描述能力本身，不描述具体品牌是否具备
+  - 支持层级结构（通过 parent_capability_id）
+  - evaluation_dimensions 为评价该能力的客观维度列表
+  - 与 product 的区别：capability 是可复用的能力词典，product 是拥有这些能力的具体产品
+  version: 1.1.0
+  type_id: l2_industry.capability
+  layer: l2
+  owner_layer: l2
+  ontology_group: competition
+
+- type: organization
+  canonical_name: 组织
+  canonical_name_en: Organization
+  definition: '拥有并运营一个或多个品牌的法律或运营主体。一个组织可拥有多个品牌，与品牌身份严格区分，用于解决"一个法律实体 = 多个品牌"的归属问题。'
+  examples:
+  - 上海智算云图科技有限公司
+  - 阿里巴巴集团
+  - 华为技术有限公司
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - legal_name
+  - registration_number
+  - headquarters
+  - official_domains
+  constraints:
+  - 通过 owned_by 关系拥有 brand，一个组织可拥有多个品牌
+  - 品牌不是法律实体，organization 才是
+  - 与 brand 的区别：organization 是法律主体，brand 是市场品牌身份
+  version: 1.2.0
+  type_id: l2_industry.organization
+  layer: l2
+  owner_layer: l2
+  ontology_group: competition
+
+# ============================== 机会与风险 ==============================
+- type: opportunity
+  canonical_name: 机会点
+  canonical_name_en: Opportunity
+  definition: '市场中存在但尚未被充分满足的有利条件或空白，是品牌可以投入资源的增长方向。机会通常由未满足需求、竞争薄弱或趋势推动产生。'
+  examples:
+  - 中小企业的轻量 CRM 空白
+  - 生成式 AI 在客户服务中的早期机会
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - opportunity_type
+  - related_segment_id
+  - related_problem_ids
+  constraints:
+  - 机会必须能追溯到具体的 market_segment、problem 或 trend 来源
+  - opportunity_type 取值为 unmet_demand / underserved_segment / emerging_trend
+  - 与 trend 的区别：trend 是客观演化方向，opportunity 是针对该趋势的品牌投入建议
+  version: 2.0.0
+  type_id: l2_industry.opportunity
+  layer: l2
+  owner_layer: l2
+  ontology_group: opportunity_risk
+
+- type: trend
+  canonical_name: 趋势
+  canonical_name_en: Trend
+  definition: '市场在时间维度上的客观演化方向，描述规模、需求、技术或用户行为正在如何变化。趋势本身不复刻价值判断，只记录变化方向，是判断机会与风险的输入。'
+  examples:
+  - 企业软件向订阅制迁移
+  - 生成式 AI 融入客服
+  - 数据合规要求趋严
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - direction
+  - velocity
+  - valid_from
+  - report_date
+  constraints:
+  - direction 取值为 rising / stable / declining
+  - velocity 描述变化速度，应具备时间维度与数据依据
+  - 趋势只描述变化方向，不做"应该怎么办"的价值判断
+  - 与 opportunity 的区别：trend 是客观方向，opportunity 是结合该方向的投入建议
+  version: 2.0.0
+  type_id: l2_industry.trend
+  layer: l2
+  owner_layer: l2
+  ontology_group: opportunity_risk
+
+- type: risk
+  canonical_name: 风险
+  canonical_name_en: Risk
+  definition: '行业、品类、能力或产品中需要识别和治理的不确定性或负面影响，覆盖合规、安全、实施、声誉和采用阻力等类别。风险判断必须带来源和适用范围。'
+  examples:
+  - 数据合规风险
+  - 实施失败风险
+  - 供应商锁定风险
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - risk_category
+  - severity
+  - likelihood
+  - mitigation
+  - related_scope_types
+  constraints:
+  - risk_category 取值为 compliance / security / implementation / supply_chain / reputation / adoption / other
+  - 风险判断必须带来源、范围、severity 与 likelihood，不能作为无证据标签
+  - 与 opportunity 的区别：opportunity 是向上机会，risk 是向下不确定性
+  version: 1.3.0
+  type_id: l2_industry.risk
+  layer: l2
+  owner_layer: l2
+  ontology_group: opportunity_risk

@@ -1,9 +1,9 @@
-# GEO 第一层通用知识层 — 任务模板：行业知识刷新
+# L1 通用知识层 — 任务模板：行业知识刷新
 # 版本: 1.1.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.1.0
+  version: 2.0.0
   created_at: 2026-08-11
   updated_at: 2026-08-11
   status: active
@@ -13,7 +13,7 @@ task:
   id: task_industry_knowledge_refresh
   name: 行业知识刷新
   name_en: Industry Knowledge Refresh
-  version: 1.1.0
+  version: 2.0.0
   purpose: >
     对已有行业知识进行定期增量更新。
     检测变化、刷新过期事实、添加新实体，并标记已过时的知识，
@@ -24,6 +24,16 @@ task:
     生成增量变更报告，并保留完整的历史版本记录。刷新过程不直接
     覆盖已有知识，而是通过版本化方式记录变更，确保知识演化的
     可追溯性和可审计性。
+    本模板为任务蓝图，不内联具体实体/关系/类型枚举；实体/关系/
+    陈述类型以 profile_id 引用的 Schema Profile 本体为唯一事实源。
+
+  profile:
+    profile_id: l2_industry
+    resolution: >
+      实体/关系/指标类型引用 common_knowledge/ontology/<profile_id>/
+      entities.yaml / relations.yaml / metrics.yaml（经 schema_profiles/
+      <profile_id>_profile.yaml 解析）。当前指向 l2_industry（15 实体 /
+      17 关系 / 17 指标），不在此内联复制。
 
   required_context:
     - industry_id:
@@ -81,7 +91,7 @@ task:
         description: 标记为过时的知识条目
         item_fields:
           - item_id: 条目 ID
-          - item_type: 条目类型（entity / relation / fact / claim）
+          - item_type: 条目类型（entity / relation / statement，对应 profile 本体三类图元；具体类型以本体为唯一事实源）
           - deprecation_reason: 过时原因
           - deprecated_at: 过时时间
           - superseded_by: 替代条目 ID（如有）
@@ -165,6 +175,11 @@ task:
   # 预留：refresh_frequency, staleness_ratio, conflict_rate, coverage_trend
 
 changelog:
+  - version: 2.0.0
+    date: 2026-08-24
+    changes:
+      - Option A 整改：移除条目类型内联枚举，改为引用 profile 本体；模板对齐 l2_industry 新本体
+    author: Brand Atlas Team
   - version: 1.1.0
     date: 2026-08-11
     changes:

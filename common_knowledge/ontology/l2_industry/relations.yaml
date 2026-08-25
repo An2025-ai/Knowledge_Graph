@@ -1,0 +1,382 @@
+meta:
+  version: 3.0.0
+  updated_at: '2026-08-24'
+  status: active
+  layer: l2
+  profile_id: l2_industry
+  description: 由 L1 管理的 L2 行业本体；只约束 L2 行业知识实例。四维度精简后的关系集，全部只引用保留的 15 个实体类型，无隐含"参照品牌"依赖。
+  cross_layer_relations: false
+relation_types:
+
+# ============================== 市场结构 ==============================
+- relation: belongs_to
+  description: 产品归属某个品类
+  description_en: Product belongs to a category
+  subject_types:
+  - product
+  object_types:
+  - category
+  cardinality: many-to-one
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce Sales Cloud
+    relation: belongs_to
+    object: CRM
+  relation_id: l2_industry.belongs_to
+  layer: l2
+  owner_layer: l2
+  ontology_group: market_structure
+
+- relation: has_category
+  description: 行业包含某个品类
+  description_en: Industry has a category
+  subject_types:
+  - industry
+  object_types:
+  - category
+  cardinality: one-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 企业软件
+    relation: has_category
+    object: CRM
+  relation_id: l2_industry.has_category
+  layer: l2
+  owner_layer: l2
+  ontology_group: market_structure
+
+- relation: operates_in
+  description: 品牌在某个行业中运营
+  description_en: Brand operates in an industry
+  subject_types:
+  - brand
+  object_types:
+  - industry
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce
+    relation: operates_in
+    object: 企业软件
+  relation_id: l2_industry.operates_in
+  layer: l2
+  owner_layer: l2
+  ontology_group: market_structure
+
+- relation: active_in
+  description: 品牌或产品活跃于某个区域市场
+  description_en: Brand or product is active in a regional market
+  subject_types:
+  - brand
+  - product
+  object_types:
+  - regional_market
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce
+    relation: active_in
+    object: 中国市场
+  relation_id: l2_industry.active_in
+  layer: l2
+  owner_layer: l2
+  ontology_group: market_structure
+
+- relation: serves
+  description: 产品或品牌服务某类用户角色
+  description_en: Product or brand serves an audience
+  subject_types:
+  - product
+  - brand
+  object_types:
+  - audience
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: false
+  version: 1.0.0
+  examples:
+  - subject: Salesforce Sales Cloud
+    relation: serves
+    object: 销售负责人
+  relation_id: l2_industry.serves
+  layer: l2
+  owner_layer: l2
+  ontology_group: user_demand
+
+# ============================== 用户与需求 ==============================
+- relation: solves
+  description: 产品解决某个用户问题
+  description_en: Product solves a problem
+  subject_types:
+  - product
+  object_types:
+  - problem
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: false
+  version: 1.0.0
+  examples:
+  - subject: CRM 系统
+    relation: solves
+    object: 销售线索分散难以跟踪
+  relation_id: l2_industry.solves
+  layer: l2
+  owner_layer: l2
+  ontology_group: user_demand
+
+- relation: supports_use_case
+  description: 产品支持某个使用场景
+  description_en: Product supports a use case
+  subject_types:
+  - product
+  object_types:
+  - use_case
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce Sales Cloud
+    relation: supports_use_case
+    object: 一键生成线索周报
+  relation_id: l2_industry.supports_use_case
+  layer: l2
+  owner_layer: l2
+  ontology_group: user_demand
+
+- relation: has_capability
+  description: 产品具备某项能力
+  description_en: Product has a capability
+  subject_types:
+  - product
+  object_types:
+  - capability
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 2.0.0
+  examples:
+  - subject: Salesforce Sales Cloud
+    relation: has_capability
+    object: AI 驱动的销售预测
+  relation_id: l2_industry.has_capability
+  layer: l2
+  owner_layer: l2
+  ontology_group: market_structure
+
+- relation: drives
+  description: 问题或需求驱动机会产生
+  description_en: Problem or demand drives an opportunity
+  subject_types:
+  - problem
+  - demand
+  object_types:
+  - opportunity
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 中小企业的销售流程痛点
+    relation: drives
+    object: 轻量 CRM 空白
+  relation_id: l2_industry.drives
+  layer: l2
+  owner_layer: l2
+  ontology_group: opportunity_risk
+
+# ============================== 竞品格局 ==============================
+- relation: competes_with
+  description: 并列产品品牌之间存在双向竞争关系，不区分配置参照
+  description_en: Peer brands or products compete (symmetric, no reference brand)
+  subject_types:
+  - brand
+  - product
+  object_types:
+  - brand
+  - product
+  cardinality: many-to-many
+  bidirectional: true
+  inverse_relation: competes_with
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce
+    relation: competes_with
+    object: HubSpot
+  relation_id: l2_industry.competes_with
+  layer: l2
+  owner_layer: l2
+  ontology_group: competition
+
+- relation: alternative_to
+  description: 一个产品可作为另一个产品的替代方案（双向对称）
+  description_en: Product is an alternative to another product (symmetric)
+  subject_types:
+  - product
+  object_types:
+  - product
+  cardinality: many-to-many
+  bidirectional: true
+  inverse_relation: alternative_to
+  confidence_required: true
+  source_refs_required: false
+  version: 1.0.0
+  examples:
+  - subject: Notion
+    relation: alternative_to
+    object: Confluence
+  relation_id: l2_industry.alternative_to
+  layer: l2
+  owner_layer: l2
+  ontology_group: competition
+
+- relation: offers
+  description: 品牌提供某个产品
+  description_en: Brand offers a product
+  subject_types:
+  - brand
+  object_types:
+  - product
+  cardinality: one-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce
+    relation: offers
+    object: Salesforce Sales Cloud
+  relation_id: l2_industry.offers
+  layer: l2
+  owner_layer: l2
+  ontology_group: competition
+
+- relation: owned_by
+  description: 品牌归属某个组织运营
+  description_en: Brand is owned by an organization
+  subject_types:
+  - brand
+  object_types:
+  - organization
+  cardinality: many-to-one
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 华为
+    relation: owned_by
+    object: 华为技术有限公司
+  relation_id: l2_industry.owned_by
+  layer: l2
+  owner_layer: l2
+  ontology_group: competition
+
+- relation: operated_in
+  description: 品牌在某细分赛道内经营
+  description_en: Brand operates within a market segment
+  subject_types:
+  - brand
+  - product
+  object_types:
+  - market_segment
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 2.0.0
+  examples:
+  - subject: 某轻量 CRM
+    relation: operated_in
+    object: 面向中小企业的轻量 CRM 赛道
+  relation_id: l2_industry.operated_in
+  layer: l2
+  owner_layer: l2
+  ontology_group: competition
+
+# ============================== 机会与风险 ==============================
+- relation: creates_opportunity
+  description: 趋势创造了机会
+  description_en: Trend creates an opportunity
+  subject_types:
+  - trend
+  object_types:
+  - opportunity
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 2.0.0
+  examples:
+  - subject: 企业软件向订阅制迁移
+    relation: creates_opportunity
+    object: 订阅模式新机会
+  relation_id: l2_industry.creates_opportunity
+  layer: l2
+  owner_layer: l2
+  ontology_group: opportunity_risk
+
+- relation: has_risk
+  description: 品类、产品或能力存在某类风险
+  description_en: Category, product, or capability has a risk
+  subject_types:
+  - category
+  - product
+  - capability
+  object_types:
+  - risk
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 企业软件
+    relation: has_risk
+    object: 数据合规风险
+  relation_id: l2_industry.has_risk
+  layer: l2
+  owner_layer: l2
+  ontology_group: opportunity_risk
+
+- relation: threatens
+  description: 风险威胁机会或某个品牌/产品
+  description_en: Risk threatens an opportunity, brand, or product
+  subject_types:
+  - risk
+  object_types:
+  - opportunity
+  - brand
+  - product
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 数据合规风险
+    relation: threatens
+    object: 中国 CRM 市场机会
+  relation_id: l2_industry.threatens
+  layer: l2
+  owner_layer: l2
+  ontology_group: opportunity_risk

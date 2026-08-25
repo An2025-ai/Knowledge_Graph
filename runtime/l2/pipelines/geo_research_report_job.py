@@ -164,6 +164,22 @@ def trigger_geo_research(args, db=None) -> str:
         cmd += ["--source-config", source_config]
     if getattr(args, "query_profile", None):
         cmd += ["--query-profile", args.query_profile]
+    passthrough_options = {
+        "searxng_url": "--searxng-url",
+        "results_per_query": "--results-per-query",
+        "max_pages": "--max-pages",
+        "max_sources": "--max-sources",
+        "max_report_sources": "--max-report-sources",
+        "max_industry_authorities": "--max-industry-authorities",
+        "max_pages_per_authority": "--max-pages-per-authority",
+        "max_pages_per_authority_per_dim": "--max-pages-per-authority-per-dim",
+        "min_sources_per_dimension": "--min-sources-per-dimension",
+        "target_sources_per_dimension": "--target-sources-per-dimension",
+    }
+    for attr, flag in passthrough_options.items():
+        value = getattr(args, attr, None)
+        if value is not None:
+            cmd += [flag, str(value)]
 
     print(f"[geo_research_report_job] CRAWL trigger")
     print(f"  root:     {root}")

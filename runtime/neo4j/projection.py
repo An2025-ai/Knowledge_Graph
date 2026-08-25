@@ -25,13 +25,16 @@ except ImportError:  # pragma: no cover
     GraphDatabase = None
     HAS_NEO4J = False
 
+from runtime.l1.registry import get_l1_registry
+
 
 NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "neo4j_admin_password")
 CYPHER_INIT = Path(__file__).resolve().parent / "cypher_init.cypher"
 
-# L1 白名单：实体类型 → Neo4j label 后缀
+# Backward-compatible fallback examples. Runtime projection resolves labels
+# through the L1 registry first, then derives a deterministic fallback.
 ENTITY_LABEL_MAP = {
     "industry": "Industry",
     "category": "Category",
@@ -39,49 +42,55 @@ ENTITY_LABEL_MAP = {
     "problem": "Problem",
     "use_case": "UseCase",
     "capability": "Capability",
-    "decision_factor": "DecisionFactor",
-    "topic": "Topic",
+    "market_segment": "MarketSegment",
+    "opportunity": "Opportunity",
+    "risk": "Risk",
+    "metric": "Metric",
+    "evidence": "Evidence",
     "brand": "Brand",
+    "brand_claim": "BrandClaim",
     "product": "Product",
+    "solution": "Solution",
+    "technology": "Technology",
     "organization": "Organization",
     "product_version": "ProductVersion",
 }
 
-# L1 白名单：关系类型 → Neo4j 关系类型
+# Backward-compatible fallback examples. Runtime projection resolves relation
+# labels through the L1 registry first, then derives an upper-snake fallback.
 RELATION_LABEL_MAP = {
     "belongs_to": "BELONGS_TO",
     "operates_in": "OPERATES_IN",
     "serves": "SERVES",
-    "has_problem": "HAS_PROBLEM",
     "solves": "SOLVES",
     "has_capability": "HAS_CAPABILITY",
     "supports_use_case": "SUPPORTS_USE_CASE",
-    "has_decision_factor": "HAS_DECISION_FACTOR",
     "competes_with": "COMPETES_WITH",
     "covers": "COVERS",
     "offers": "OFFERS",
     "owns_brand": "OWNS_BRAND",
     "version_of": "VERSION_OF",
     "supersedes": "SUPERSEDES",
-    "targets": "TARGETS",
-    "has_topic": "HAS_TOPIC",
-    "mentions": "MENTIONS",
-    "expresses_intent": "EXPRESSES_INTENT",
-    "cites": "CITES",
-    "supports": "SUPPORTS",
-    "contradicts": "CONTRADICTS",
-    "derived_from": "DERIVED_FROM",
-    "recommended_for": "RECOMMENDED_FOR",
-    "has_content_gap": "HAS_CONTENT_GAP",
+    "claims": "CLAIMS",
+    "proves": "PROVES",
+    "responds_to": "RESPONDS_TO",
+    "based_on": "BASED_ON",
     "alternative_to": "ALTERNATIVE_TO",
-    "partner_of": "PARTNER_OF",
-    "has_decision_factor": "HAS_DECISION_FACTOR",
-    "capability_supports_use_case": "CAPABILITY_SUPPORTS_USE_CASE",
-    "requires_capability": "REQUIRES_CAPABILITY",
-    "performs": "PERFORMS",
-    "produces_outcome": "PRODUCES_OUTCOME",
-    "achieves_outcome": "ACHIEVES_OUTCOME",
 }
+
+
+def _entity_label(entity_type: str | None) -> str | None:
+    if not entity_type:
+        return None
+    return get_l1_registry().neo4j_entity_label(entity_type) or ENTITY_LABEL_MAP.get(entity_type)
+
+
+def _relation_label(relation_type: str | None) -> str:
+    if not relation_type:
+        return "RELATED_TO"
+    return get_l1_registry().neo4j_relation_label(relation_type) or RELATION_LABEL_MAP.get(
+        relation_type, relation_type.upper()
+    )
 
 
 class ProjectionService:
@@ -128,8 +137,9 @@ class ProjectionService:
                      scope=None, status=None, brand_id=None, industry_id=None,
                      market=None, owner_brand=None):
         labels = "Entity"
-        if entity_type in ENTITY_LABEL_MAP:
-            labels += ":" + ENTITY_LABEL_MAP[entity_type]
+        label = _entity_label(entity_type)
+        if label:
+            labels += ":" + label
         # layer tag: L3 = brand-owned (owner_brand NOT NULL); L2 = industry-tagged;
         # L1 = otherwise shared (owner_brand IS NULL, no industry tag).
         if owner_brand:
@@ -151,26 +161,9 @@ class ProjectionService:
              "owner": owner_brand and str(owner_brand)},
         )
 
-    def merge_brand_mapping(self, local_entity_id, l2_entity_id, tenant_id, mapping_type,
-                            confidence=None, review_status=None):
-        """Project a brand_mapping (L3↔L2 cross-layer) row as a typed edge."""
-        rel = RELATION_LABEL_MAP.get(mapping_type, mapping_type.upper())
-        self.run(
-            f"MATCH (a:Entity {{id: $sid}}), (b:Entity {{id: $oid}}) "
-            f"MERGE (a)-[r:{rel} {{id: $rid}}]->(b) "
-            f"SET r.relation_type = $rtype, r.tenant_id = $tenant, "
-            f"r.mapping_type = $mtype, r.confidence = $confidence, "
-            f"r.review_status = $review",
-            {"rid": f"bm_{local_entity_id}_{l2_entity_id}", "sid": str(local_entity_id),
-             "oid": str(l2_entity_id), "rtype": mapping_type,
-             "tenant": tenant_id and str(tenant_id), "mtype": mapping_type,
-             "confidence": float(confidence) if confidence is not None else None,
-             "review": review_status},
-        )
-
     def merge_relation(self, relation_id, subject_id, relation_type, object_id,
                        tenant_id=None, confidence=None, verification_status=None):
-        rel = RELATION_LABEL_MAP.get(relation_type, relation_type.upper())
+        rel = _relation_label(relation_type)
         self.run(
             f"MATCH (a:Entity {{id: $sid}}), (b:Entity {{id: $oid}}) "
             f"MERGE (a)-[r:{rel} {{id: $rid}}]->(b) "
@@ -252,7 +245,7 @@ class ProjectionService:
             )
 
 
-def full_resync(pg_db, proj: ProjectionService, include_mappings: bool = False):
+def full_resync(pg_db, proj: ProjectionService):
     """Full rebuild from PostgreSQL (entity + relation + statement/assertion)."""
     proj.run(
         "MATCH (n) WHERE any(label IN labels(n) WHERE label IN "
@@ -279,20 +272,6 @@ def full_resync(pg_db, proj: ProjectionService, include_mappings: bool = False):
         proj.merge_relation(r["id"], r["subject_id"], r["relation_type"], r["object_id"],
                             r.get("tenant_id"), r.get("confidence"), r.get("verification_status"))
     print(f"[projection] merged {len(relations)} relations")
-
-    if include_mappings:
-        mappings = pg_db.query(
-            "SELECT local_entity_id, l2_entity_id, tenant_id, mapping_type, confidence, review_status "
-            "FROM brand_mapping"
-        )
-        for m in mappings:
-            try:
-                proj.merge_brand_mapping(m["local_entity_id"], m["l2_entity_id"],
-                                         m.get("tenant_id"), m["mapping_type"],
-                                         m.get("confidence"), m.get("review_status"))
-            except Exception as exc:  # noqa: BLE001 - skip dangling mapping
-                print(f"[projection] skipped brand_mapping {m.get('mapping_type')}: {exc}")
-        print(f"[projection] merged {len(mappings)} brand_mapping cross-layer edges")
 
     statements = pg_db.query(
         "SELECT id, subject_entity_id, object_entity_id, predicate, statement_text, "
@@ -370,7 +349,6 @@ def main() -> int:
     parser.add_argument("--full", action="store_true", help="full resync from PG")
     parser.add_argument("--process-outbox", action="store_true", help="incremental outbox sync")
     parser.add_argument("--check", action="store_true", help="connectivity check")
-    parser.add_argument("--include-mappings", action="store_true", help="include optional L3-to-L2 mapping edges")
     args = parser.parse_args()
 
     if not HAS_NEO4J:
@@ -390,7 +368,7 @@ def main() -> int:
 
             with DB() as pg_db:
                 if args.full:
-                    full_resync(pg_db, proj, include_mappings=args.include_mappings)
+                    full_resync(pg_db, proj)
                 if args.process_outbox:
                     process_outbox(pg_db, proj)
         print("[projection] done")

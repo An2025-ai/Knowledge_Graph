@@ -1,0 +1,387 @@
+meta:
+  version: 3.0.0
+  updated_at: '2026-08-24'
+  status: active
+  layer: l3
+  profile_id: l3_brand
+  description: 由 L1 管理的 L3 品牌本体；只约束 L3 品牌知识实例。四维度精简后的关系集，全部只引用保留的 15 个实体类型，每个关系都有明确的 subject/object 类型约束。
+  cross_layer_relations: false
+relation_types:
+
+# ============================== 品牌身份 ==============================
+- relation: owns_brand
+  description: 组织拥有并运营某个品牌
+  description_en: Organization owns and operates a brand
+  subject_types:
+  - organization
+  object_types:
+  - brand
+  cardinality: one-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 华为技术有限公司
+    relation: owns_brand
+    object: 华为
+  relation_id: l3_brand.owns_brand
+  layer: l3
+  owner_layer: l3
+  ontology_group: brand_identity
+
+- relation: has_business_line
+  description: 品牌下设立某个业务线
+  description_en: Brand has a business line
+  subject_types:
+  - brand
+  object_types:
+  - business_line
+  cardinality: one-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 华为
+    relation: has_business_line
+    object: 消费者业务
+  relation_id: l3_brand.has_business_line
+  layer: l3
+  owner_layer: l3
+  ontology_group: brand_identity
+
+- relation: claims
+  description: 品牌对外作出某个主张
+  description_en: Brand makes a claim
+  subject_types:
+  - brand
+  object_types:
+  - brand_claim
+  cardinality: one-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce
+    relation: claims
+    object: 全球最值得信赖的企业云平台
+  relation_id: l3_brand.claims
+  layer: l3
+  owner_layer: l3
+  ontology_group: brand_identity
+
+# ============================== 产品服务 ==============================
+- relation: offers
+  description: 品牌提供某个产品、解决方案或服务
+  description_en: Brand offers a product, solution, or service
+  subject_types:
+  - brand
+  object_types:
+  - product
+  - solution
+  - service
+  cardinality: one-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce
+    relation: offers
+    object: Salesforce Sales Cloud
+  relation_id: l3_brand.offers
+  layer: l3
+  owner_layer: l3
+  ontology_group: product_solution
+
+- relation: version_of
+  description: 某产品版本属于某个产品
+  description_en: Product version belongs to a product
+  subject_types:
+  - product_version
+  object_types:
+  - product
+  cardinality: many-to-one
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce Winter '26
+    relation: version_of
+    object: Salesforce Sales Cloud
+  relation_id: l3_brand.version_of
+  layer: l3
+  owner_layer: l3
+  ontology_group: product_solution
+
+- relation: supersedes
+  description: 新版本取代旧版本
+  description_en: A version supersedes an older one
+  subject_types:
+  - product_version
+  object_types:
+  - product_version
+  cardinality: many-to-one
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce Winter '26
+    relation: supersedes
+    object: Salesforce Fall '25
+  relation_id: l3_brand.supersedes
+  layer: l3
+  owner_layer: l3
+  ontology_group: product_solution
+
+- relation: composed_of
+  description: 解决方案由若干产品或服务组合而成
+  description_en: Solution is composed of products or services
+  subject_types:
+  - solution
+  object_types:
+  - product
+  - service
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 制造业数字化转型方案
+    relation: composed_of
+    object: 工业互联网平台
+  relation_id: l3_brand.composed_of
+  layer: l3
+  owner_layer: l3
+  ontology_group: product_solution
+
+- relation: serves
+  description: 品牌、产品或解决方案面向某类用户角色
+  description_en: Brand, product, or solution serves an audience
+  subject_types:
+  - brand
+  - product
+  - solution
+  object_types:
+  - audience
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: false
+  version: 1.0.0
+  examples:
+  - subject: Salesforce Sales Cloud
+    relation: serves
+    object: 销售负责人
+  relation_id: l3_brand.serves
+  layer: l3
+  owner_layer: l3
+  ontology_group: product_solution
+
+# ============================== 技术能力 ==============================
+- relation: has_capability
+  description: 产品或版本具备某项能力
+  description_en: Product or version has a capability
+  subject_types:
+  - product
+  - product_version
+  object_types:
+  - capability
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce Sales Cloud
+    relation: has_capability
+    object: AI 驱动的销售预测
+  relation_id: l3_brand.has_capability
+  layer: l3
+  owner_layer: l3
+  ontology_group: technical_capability
+
+- relation: based_on
+  description: 能力基于某项底层技术实现
+  description_en: Capability is based on technology
+  subject_types:
+  - capability
+  object_types:
+  - technology
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 实时翻译能力
+    relation: based_on
+    object: 端侧神经网络加速方案
+  relation_id: l3_brand.based_on
+  layer: l3
+  owner_layer: l3
+  ontology_group: technical_capability
+
+- relation: certifies
+  description: 认证背书某个产品、技术或服务
+  description_en: Certification certifies a product, technology, or service
+  subject_types:
+  - certification
+  object_types:
+  - product
+  - technology
+  - service
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: ISO 27001 认证
+    relation: certifies
+    object: 企业版 CRM
+  relation_id: l3_brand.certifies
+  layer: l3
+  owner_layer: l3
+  ontology_group: technical_capability
+
+- relation: responds_to
+  description: 品牌、产品或能力回应某类用户角色的诉求或场景
+  description_en: Brand, product, or capability responds to an audience need
+  subject_types:
+  - brand
+  - product
+  - capability
+  - solution
+  object_types:
+  - audience
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: false
+  version: 1.0.0
+  examples:
+  - subject: 轻量 CRM 产品
+    relation: responds_to
+    object: 中小企业主
+  relation_id: l3_brand.responds_to
+  layer: l3
+  owner_layer: l3
+  ontology_group: customer_case
+
+# ============================== 客户案例 ==============================
+- relation: adopts
+  description: 客户采用某个产品、解决方案或服务
+  description_en: Customer adopts a product, solution, or service
+  subject_types:
+  - customer
+  object_types:
+  - product
+  - solution
+  - service
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 某商业银行
+    relation: adopts
+    object: 金融行业联络中心方案
+  relation_id: l3_brand.adopts
+  layer: l3
+  owner_layer: l3
+  ontology_group: customer_case
+
+- relation: documents
+  description: 案例记录并佐证某个客户的采用情况
+  description_en: Case documents a customer
+  subject_types:
+  - case
+  object_types:
+  - customer
+  cardinality: many-to-one
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 某制造业客户数字化转型案例
+    relation: documents
+    object: 某大型制造集团
+  relation_id: l3_brand.documents
+  layer: l3
+  owner_layer: l3
+  ontology_group: customer_case
+
+- relation: delivers
+  description: 案例产生并印证某项交付成果
+  description_en: Case delivers a result
+  subject_types:
+  - case
+  object_types:
+  - delivery_result
+  cardinality: one-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 某银行渠道整合案例
+    relation: delivers
+    object: 人工客服成本下降 35%
+  relation_id: l3_brand.delivers
+  layer: l3
+  owner_layer: l3
+  ontology_group: customer_case
+
+- relation: proves
+  description: 案例实证品牌主张
+  description_en: Case proves a brand claim
+  subject_types:
+  - case
+  object_types:
+  - brand_claim
+  cardinality: many-to-many
+  bidirectional: false
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: 某零售企业数字化转型案例
+    relation: proves
+    object: 让企业数据资产不再沉睡
+  relation_id: l3_brand.proves
+  layer: l3
+  owner_layer: l3
+  ontology_group: customer_case
+
+# ============================== 竞争格局 ==============================
+- relation: competes_with
+  description: 并列品牌或产品之间存在双向竞争关系，不区分参照
+  description_en: Peer brands or products compete (symmetric)
+  subject_types:
+  - brand
+  - product
+  object_types:
+  - brand
+  - product
+  cardinality: many-to-many
+  bidirectional: true
+  inverse_relation: competes_with
+  confidence_required: true
+  source_refs_required: true
+  version: 1.0.0
+  examples:
+  - subject: Salesforce Sales Cloud
+    relation: competes_with
+    object: HubSpot Sales Hub
+  relation_id: l3_brand.competes_with
+  layer: l3
+  owner_layer: l3
+  ontology_group: competitive

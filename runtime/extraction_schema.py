@@ -30,12 +30,27 @@ class RelationInput(BaseModel):
     subject: str
     relation: str
     object: str
+    level: str | None = None
+    entity_type_subject: str | None = None
+    entity_type_object: str | None = None
+    metric_name: str | None = None
+    metric_value: str | float | int | None = None
+    scope: str | dict[str, Any] | None = None
+    evidence_text: str | None = None
+    source_doc: str | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class StatementInput(BaseModel):
     text: str = Field(min_length=1)
     statement_class: str = Field(default="claim")
+    level: str | None = None
+    metric_name: str | None = None
+    metric_value: str | float | int | None = None
+    scope: str | dict[str, Any] | None = None
+    evidence_text: str | None = None
+    source_doc: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
     @field_validator("statement_class")
     @classmethod

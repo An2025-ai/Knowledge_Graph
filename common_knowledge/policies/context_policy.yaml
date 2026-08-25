@@ -1,4 +1,4 @@
-# GEO 第一层通用知识层 — 上下文检索策略
+# L1 通用知识层 — 上下文检索策略
 # 版本: 1.1.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
@@ -52,8 +52,8 @@ filtering_rules:
     description: >
       按主题过滤信息，仅加载与当前任务主题相关的内容。
     filter_dimensions:
-      - topic_id: 目标主题 ID
-      - has_topic / covers 关系
+      - category_id 或 market_segment_id: 目标品类或赛道 ID
+      - covers / corresponds_to / responds_to 关系
     logic: >
       1. 加载目标主题及其子主题
       2. 加载主题关联的内容和实体

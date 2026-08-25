@@ -591,7 +591,7 @@ source_registration
 -> semantic_chunking
 -> candidate_extraction
 -> entity_resolution
--> l2_mapping
+-> entity_resolution
 -> assertion_classification
 -> evidence_verification
 -> review_promotion
@@ -608,7 +608,7 @@ source_registration
 -> candidate_extraction_with_schema_validation
 -> ontology_validation
 -> entity_resolution_with_embedding
--> l2_mapping
+-> entity_resolution_with_embedding
 -> assertion_classification
 -> semantic_evidence_verification
 -> review_promotion

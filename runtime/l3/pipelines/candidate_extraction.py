@@ -128,7 +128,7 @@ def run(db: DB, args) -> dict[str, Any]:
 
     for span in spans:
         try:
-            result = extract_entities_relations(client, span["text"])
+            result = extract_entities_relations(client, span["text"], profile_id="l3_brand")
         except Exception as exc:  # pragma: no cover
             print(f"[candidate_extraction] LLM failed on chunk {span['chunk_index']}: {exc}")
             continue

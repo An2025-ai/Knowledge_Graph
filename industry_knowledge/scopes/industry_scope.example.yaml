@@ -84,7 +84,7 @@ priority_dimensions:
   - use_cases
   - capabilities
   - decision_factors
-  - competition
+  - competition_structure
 
 # --- Research Questions ---
 # Specific questions that this scope seeks to answer.

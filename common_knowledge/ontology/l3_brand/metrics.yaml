@@ -1,0 +1,255 @@
+meta:
+  version: 3.0.0
+  updated_at: '2026-08-24'
+  status: active
+  layer: l3
+  profile_id: l3_brand
+  description: 由 L1 管理的 L3 品牌本体指标集；按品牌身份、产品服务、技术能力、客户案例四维度组织。全部指标以核心品牌视角衡量，required_context 使用治理层定义的合法上下文类型。
+  cross_layer_relations: false
+metrics:
+
+# ============================== 品牌身份 ==============================
+- metric: brand_tone
+  metric_id: l3_brand.brand_tone
+  canonical_name: 品牌语调
+  layer: l3
+  ontology_group: brand_identity
+  definition: 核心品牌对外沟通中呈现的稳定语气与表达风格（如专业克制、亲民、进取），用于刻画品牌在自有资料中的一致形象，是品牌身份表达的定性度量。
+  required_context:
+  - valid_time
+  - brand_scope
+  - source_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: positioning_clarity
+  metric_id: l3_brand.positioning_clarity
+  canonical_name: 定位清晰度
+  layer: l3
+  ontology_group: brand_identity
+  definition: 核心品牌在其主张与资料中呈现的定位是否清晰、稳定、可区分，反映品牌在受众心智中占据的位置是否明确，是评估品牌主张有效性的定性输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: claim_strength
+  metric_id: l3_brand.claim_strength
+  canonical_name: 主张强度
+  layer: l3
+  ontology_group: brand_identity
+  definition: 核心品牌对外主张（brand_claim）在证据中的支持强度与措辞力度，量化"品牌宣称了多大程度的优势"，与案例/交付成果的实证相照应。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: brand_credibility
+  metric_id: l3_brand.brand_credibility
+  canonical_name: 品牌可信度
+  layer: l3
+  ontology_group: brand_identity
+  definition: 核心品牌主张与其可核实证据（案例、交付成果、认证）之间的一致程度，反映品牌对外承诺的可兑现性，是评估品牌可信度与对外传播风险的核心输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+# ============================== 产品服务 ==============================
+- metric: product_maturity
+  metric_id: l3_brand.product_maturity
+  canonical_name: 产品成熟度
+  layer: l3
+  ontology_group: product_solution
+  definition: 核心品牌产品所处生命周期阶段的定性度量（孵化 / 成长 / 成熟 / 衰退），反映产品完备程度、用户规模与后续投入意愿，是产品组合决策的输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - product_version
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: product_coverage
+  metric_id: l3_brand.product_coverage
+  canonical_name: 产品覆盖度
+  layer: l3
+  ontology_group: product_solution
+  definition: 核心品牌产品体系在目标能力或用户角色维度上的覆盖范围，缺口越多意味着存在补位与扩展机会，是评估产品组合完备性的输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - audience
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: service_level
+  metric_id: l3_brand.service_level
+  canonical_name: 服务水平
+  layer: l3
+  ontology_group: product_solution
+  definition: 核心品牌围绕产品交付的配套服务（实施、支持、运维）所能承诺并兑现的水准，量化服务供给对客户获得价值的支撑程度。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: deployment_difficulty
+  metric_id: l3_brand.deployment_difficulty
+  canonical_name: 部署难度
+  layer: l3
+  ontology_group: product_solution
+  definition: 核心品牌产品或解决方案在实际客户环境中实施上线的复杂程度，由集成要求、改造量、周期性综合判断，是客户采纳意愿与销售推进的关键输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: value_effectiveness
+  metric_id: l3_brand.value_effectiveness
+  canonical_name: 价值有效性
+  layer: l3
+  ontology_group: product_solution
+  definition: 核心品牌产品或解决方案对客户产生可衡量价值的程度，通常由案例交付成果（效率提升、成本下降等）聚合而得的成效指标，是价值主张实证的核心输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+# ============================== 技术能力 ==============================
+- metric: technical_lead
+  metric_id: l3_brand.technical_lead
+  canonical_name: 技术领先度
+  layer: l3
+  ontology_group: technical_capability
+  definition: 核心品牌底层技术（technology）相对行业/竞品主流的先进程度，由技术成熟度与创新度综合判断，反映技术底座为产品带来的差异化优势。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: capability_completeness
+  metric_id: l3_brand.capability_completeness
+  canonical_name: 能力完备度
+  layer: l3
+  ontology_group: technical_capability
+  definition: 核心品牌产品或版本已覆盖的能力项占目标能力集的比重，缺口越多意味着存在能力短板或扩展机会，是能力坐标下的技术比较输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - product_version
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: certification_level
+  metric_id: l3_brand.certification_level
+  canonical_name: 认证等级
+  layer: l3
+  ontology_group: technical_capability
+  definition: 核心品牌产品、技术或服务获得第三方认证/审计的级别与权威程度，反映其安全、合规与质量得到外部背书的水准，是评估技术可信度的输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: implementation_threshold
+  metric_id: l3_brand.implementation_threshold
+  canonical_name: 实施门槛
+  layer: l3
+  ontology_group: technical_capability
+  definition: 核心品牌产品/方案落地所需的资源与条件门槛（技术栈、团队、运维能力），反映客户采用与交付的门槛高低，是评估市场进入与交付难度的输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+# ============================== 客户案例 ==============================
+- metric: case_count
+  metric_id: l3_brand.case_count
+  canonical_name: 案例数量
+  layer: l3
+  ontology_group: customer_case
+  definition: 核心品牌在给定时间与范围内累积的可核实交付案例数量，反映品牌价值主张的实证密度与客户采用规模，是评估品牌市场验证度的基础输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: proof_strength
+  metric_id: l3_brand.proof_strength
+  canonical_name: 证明强度
+  layer: l3
+  ontology_group: customer_case
+  definition: 核心品牌各案例及交付成果对品牌主张的实证支持强度，由成果可核实性、量化程度与覆盖范围聚合，反映证据对主张的支撑力度。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: customer_success_rate
+  metric_id: l3_brand.customer_success_rate
+  canonical_name: 客户成功率
+  layer: l3
+  ontology_group: customer_case
+  definition: 核心品牌服务客户中达到预期价值/成效的比例，反映交付的兑现能力与客户成功的普遍程度，是评估品牌口碑与留存的关键输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0
+
+- metric: delivery_effectiveness
+  metric_id: l3_brand.delivery_effectiveness
+  canonical_name: 交付有效性
+  layer: l3
+  ontology_group: customer_case
+  definition: 核心品牌各交付成果对客户业务指标实际改善的程度，是案例价值的直接量化，反映交付物是否真正解决客户问题，是价值实证的核心输入。
+  required_context:
+  - valid_time
+  - brand_scope
+  - evidence_refs
+  external_layer_dependencies: []
+  status: active
+  version: 2.0.0

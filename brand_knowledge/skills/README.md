@@ -18,7 +18,7 @@
 | enterprise_document_ingestion | 导入企业 PDF、Word、PPT、Markdown 和 Excel |
 | layout_aware_parser | 保留页码、标题、表格和图示关系 |
 | brand_entity_extraction | 按 Profile 抽取品牌、产品、版本和内容实体 |
-| capability_l2_mapper | 把品牌功能映射到 L2 标准能力 |
+| entity_resolver | 在 L3 Profile 内归一品牌实体和能力 |
 | assertion_classifier | 判定 fact、claim、observation 和 inference |
 | evidence_verifier | 验证 Evidence Span 是否直接支持陈述 |
 | entity_resolution | 品牌、组织、产品、别名和版本消歧 |

@@ -25,12 +25,13 @@ from typing import Any
 from runtime.db import DB
 from runtime.extract import extract_entities_relations, extract_json, load_llm
 from runtime.l2.pipelines.extraction import (
-    VALID_RELATION_TYPES,
+    DEFAULT_PROFILE_ID,
     _add_entity_candidate,
     _entity_uuid,
     _link_relation_evidence,
     _link_statement_evidence_uuid,
     _upsert_entity,
+    _valid_relation_types,
 )
 from runtime.l2.pipelines.report_ingestion import _statement_hash
 
@@ -504,11 +505,12 @@ def _extract_candidate_knowledge(
     existing_ids: set[str] = set()
     entity_registry: dict[tuple[str, str], str] = {}
     entity_map: dict[str, str] = {}
-    result = extract_entities_relations(client, statement)
+    result = extract_entities_relations(client, statement, profile_id=DEFAULT_PROFILE_ID)
 
     for ent in result.get("entities") or []:
         entity_id = _upsert_entity(
-            db, ent, existing_ids, entity_registry, candidate_uuid, industry_id, dry_run
+            db, ent, existing_ids, entity_registry, candidate_uuid, industry_id, dry_run,
+            profile_id=DEFAULT_PROFILE_ID,
         )
         if entity_id:
             ext_id = ent.get("id") or entity_id
@@ -551,7 +553,7 @@ def _extract_candidate_knowledge(
 
     for rel in result.get("relations") or []:
         rel_type = rel.get("relation")
-        if rel_type not in VALID_RELATION_TYPES:
+        if rel_type not in _valid_relation_types(DEFAULT_PROFILE_ID):
             continue
         subj_id = entity_map.get(rel.get("subject"))
         obj_id = entity_map.get(rel.get("object"))

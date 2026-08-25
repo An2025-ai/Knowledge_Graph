@@ -133,14 +133,13 @@ source_registration
 → candidate_pre_extraction      ← 规则/词典候选（新增）
 → candidate_extraction          ← LLM + Pydantic + 本体校验
 → entity_resolution             ← blocking + embedding 语义消歧（升级）
-→ l2_mapping
 → assertion_classification
 → evidence_verification         ← 语义证据核验（升级）
 → review_promotion
 ```
 
 ```bash
-# 完整跑一条品牌文档（触发全部 11 步）
+# 完整跑一条品牌文档
 python -m runtime.l3.executor --all --file <brand_doc.md> --brand <brand_id>
 
 # 单步
@@ -230,7 +229,7 @@ python -m runtime.visualize.export
 
 ```
 L1 定义 → [L2] 行业情报(geo-research报告) → 抽实体/关系/事实 → PostgreSQL
-        → [L3] 品牌资料(官网/文档) → 抽实体/映射L2/核证据 → PostgreSQL
+        → [L3] 品牌资料(官网/文档) → 抽实体/核证据 → PostgreSQL
         → [Neo4j] 从 PostgreSQL 幂等投影（可重建）
         → [可视化] PostgreSQL → JSON → Jupyter+pyvis 交互图
 ```

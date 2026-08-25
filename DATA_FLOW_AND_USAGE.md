@@ -15,7 +15,7 @@
 | PostgreSQL 实例库 | 已实现 | 是 L2/L3 实例数据的唯一权威源 |
 | Neo4j 图谱 | 已实现投影代码 | 可以从 PostgreSQL 全量重建或消费 active 数据 outbox；尚未在本次审查中连接真实 Neo4j 验收 |
 | 图谱可视化 | 已实现 | PostgreSQL 可导出 JSON，Jupyter/pyvis 可展示 |
-| L4 动态观测 | 未实现 | 当前没有搜索/AI 回答时序观测执行器 |
+| L4 动态反馈 | 未实现 | 当前没有查询、LLM 输出和知识更新反馈事件执行器 |
 
 因此准确表述是：**已经到图谱工程阶段，但还没有达到经过真实环境、真实数据和持续集成验证的生产级图谱系统阶段。**
 
@@ -50,8 +50,8 @@ flowchart LR
 | 层 | 主要输入 | 核心处理 | 主要输出 | 下游消费者 |
 |---|---|---|---|---|
 | L1 通用层 | 本体、意图、来源、策略、任务 YAML/JSON | Schema 校验、交叉引用校验、定义发布 | L1 注册表：实体类型、关系类型、意图、策略等 | L2/L3 抽取约束、审核规则 |
-| L2 行业层 | 行业 scope、研究要求、报告、引用证据 | 需求编译、报告摄入、证据解析、实体/关系/陈述抽取、晋升 | 共享行业实体、关系、陈述、证据链 | L3 映射、Neo4j、可视化 |
-| L3 品牌层 | 租户、品牌、品牌原始文档、L2 共享实体 | 文件门禁、解析分块、抽取、归一、L2 映射、分类、核证、审核 | 租户隔离的品牌实体、Assertion、证据、映射、快照 | Neo4j、品牌问答/内容应用（后续） |
+| L2 行业层 | 行业 scope、研究要求、报告、引用证据 | 需求编译、报告摄入、证据解析、实体/关系/陈述抽取、晋升 | 行业实体、关系、陈述、证据链 | Neo4j、可视化 |
+| L3 品牌层 | 租户、品牌、品牌原始文档 | 文件门禁、解析分块、抽取、层内归一、分类、核证、审核 | 租户隔离的品牌实体、Assertion、证据、快照 | Neo4j、品牌问答/内容应用（后续） |
 | 图投影层 | PostgreSQL active 数据或 outbox 事件 | 节点/关系 MERGE，全量重建或增量同步 | Neo4j 节点、边、Assertion 链 | Cypher 查询、图分析 |
 | 展示层 | PostgreSQL 查询结果 | 过滤为子图、导出 JSON、pyvis 渲染 | 可交互 HTML 图 | 人工检查和探索 |
 
@@ -223,7 +223,6 @@ python -m runtime.l2.executor --all `
 | 4 `semantic_chunking` | document ID | layout chunks | `document_chunk`（evidence span） | span 数 |
 | 5 `candidate_extraction` | evidence spans、LLM | document/chunks | 品牌局部 `entity`、`relation`、`assertion`、`evidence` link | entity/relation/assertion 统计 |
 | 6 `entity_resolution` | 品牌局部实体 | `entity` | 合并/废弃重复实体、`review_queue` | resolved/duplicate/review 统计 |
-| 7 `l2_mapping` | 品牌 capability | L3 entity、共享 L2 entity/alias | `brand_mapping` | exact/close mapping 列表 |
 | 8 `assertion_classification` | candidate Assertion、LLM | `assertion` | 候选期补充 class/kind/scope | classified/inference/skipped |
 | 9 `evidence_verification` | candidate Assertion 和 evidence span | assertion/chunk/evidence | `evidence`、`assertion_evidence` | verified/insufficient 统计 |
 | 10 `review_promotion` | candidate Assertion、证据和审核规则 | assertion/evidence/conflict | `review_queue`、active Assertion、`brand_snapshot` | promoted/queued/rejected 和快照计数 |
@@ -232,7 +231,7 @@ python -m runtime.l2.executor --all `
 
 - `tenant_id` 是强制安全边界，L3 业务表通过 RLS 按 `app.tenant_id` 隔离。
 - `brand_id` 是目标品牌的 `entity.id`；品牌局部实体通过 `owner_brand` 关联。
-- L2 共享实体的 `owner_brand IS NULL`，L3 通过 `brand_mapping` 建立 `exactMatch` 或 `closeMatch`，不复制共享实体语义。
+- L2 与 L3 分别使用自己的 Profile、本体和实例数据，不建立跨层映射。
 - Assertion 在 `candidate` 阶段允许补分类、验证字段并执行 `candidate → active`。
 - Assertion 一旦 active，修订必须新建一行，并用 `supersedes_id` 指向旧版本；禁止原地覆盖证据历史。
 - `brand_snapshot` 是一次发布结果的计数和来源 manifest hash，不是完整数据副本。

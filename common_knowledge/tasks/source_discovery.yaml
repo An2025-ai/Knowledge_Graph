@@ -1,9 +1,9 @@
-# GEO 第一层通用知识层 — 任务模板：来源发现与验证
+# L1 通用知识层 — 任务模板：来源发现与验证
 # 版本: 1.1.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.1.0
+  version: 2.0.0
   created_at: 2026-08-11
   updated_at: 2026-08-11
   status: active
@@ -13,7 +13,7 @@ task:
   id: task_source_discovery
   name: 来源发现与验证
   name_en: Source Discovery and Verification
-  version: 1.1.0
+  version: 2.0.0
   purpose: >
     发现并验证行业研究所需的新的权威信息来源。
     维护来源白名单，验证来源身份，并对来源类型进行分类，
@@ -24,6 +24,16 @@ task:
     搜索和识别新的潜在来源，对每个来源进行身份验证、域名
     归属确认、类型分类和独立性评估。通过验证的来源被加入
     白名单，并记录其允许的用途和限制条件。
+    本模板为任务蓝图，不内联具体实体/关系/类型枚举，
+    实体与关系类型以 output_schema.profile_id 引用的 Schema Profile
+    本体为唯一事实源（见 sources/source_types.yaml 与 ontology/）。
+
+  profile:
+    profile_id: REUSABLE
+    resolution: >
+      模板不绑定单一业务层；执行时以所服务的业务层 profile_id
+      （如 l2_industry / l3_brand）解析其 ontology 实体/关系/指标集。
+      来源类型与权威等级则始终引用 sources/source_types.yaml 定义。
 
   required_context:
     - industry_scope:
@@ -57,10 +67,10 @@ task:
         item_fields:
           - source_id: 来源 ID
           - canonical_name: 来源规范名称
-          - source_type: 来源类型（government / industry_association / standards_body / research_institute / media / enterprise / academic）
+          - source_type: 来源类型（引用 sources/source_types.yaml 定义的 13 种 type，如 official / government_regulatory / industry_association / standards_body / academic / media / brokerage_research 等）
           - organization_name: 所属组织名称
           - official_domain: 官方域名
-          - authority_level: 权威等级（primary / secondary / supplementary）
+          - authority_level: 权威等级（引用 source_types.yaml 的 authority_levels high / medium / low）
           - geo_coverage: 地理覆盖范围
           - topic_coverage: 主题覆盖范围
           - description: 来源描述
@@ -93,7 +103,7 @@ task:
         description: 各来源的允许用途
         item_fields:
           - source_id: 来源 ID
-          - use_type: 用途类型（fact_citation / claim_support / trend_analysis / competitive_intelligence / market_sizing）
+          - use_type: 用途类型（引用 sources/source_types.yaml 的 suitable_for 语义维度，示例 fact_citation / claim_support / trend_analysis / competitive_intelligence / market_sizing，以 profile 与来源类型匹配为准）
           - permission_level: 权限级别（unrestricted / conditional / restricted）
           - conditions: 使用条件（如有）
     - limitations:
@@ -151,7 +161,7 @@ task:
 
     - check: source_type_accuracy
       description: 确认来源分类正确
-      method: 与 source_types.yaml 中定义的类型比对，检查分类合理性
+      method: 与 sources/source_types.yaml 中定义的类型比对，检查分类合理性
 
     - check: gap_dimension_coverage
       description: 确认发现的来源覆盖了指定的缺口维度
@@ -169,6 +179,11 @@ task:
   # 预留：source_discovery_rate, verification_pass_rate, source_gap_closure_rate, source_authority_score
 
 changelog:
+  - version: 2.0.0
+    date: 2026-08-24
+    changes:
+      - Option A 整改：移除来源类型/权威等级内联枚举，改为引用 sources/source_types.yaml；模板改为 profile 无关的通用任务蓝图
+    author: Brand Atlas Team
   - version: 1.1.0
     date: 2026-08-11
     changes:

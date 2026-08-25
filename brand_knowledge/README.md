@@ -11,9 +11,9 @@
 
 L3 品牌认知层用于把某个客户品牌的官网、企业知识库、产品资料、案例、资质和经审核的内部信息，转换为可追溯、可版本化、可授权的品牌知识子图。
 
-它不是传统客服问答知识库，也不是把文档切块后等待相似度召回。其核心产物是一个“品牌认知模型”：明确品牌是谁、提供什么产品、服务谁、解决什么问题、具备什么能力、有哪些证据、能够说什么、不能说什么，以及这些内容如何映射到 L2 行业坐标系。
+它不是传统客服问答知识库，也不是把文档切块后等待相似度召回。其核心产物是一个“品牌认知模型”：明确品牌是谁、提供什么产品、服务谁、解决什么问题、具备什么能力、有哪些证据、能够说什么和不能说什么。
 
-当前阶段只解决知识图谱搭建：资料采集、解析、结构化抽取、实体归一、L2 映射、证据核验、PostgreSQL 入库、Neo4j 投影、更新和验收。提问词、主题规划、文章优化、Context Builder、检索和 Rerank 属于后续应用阶段，不纳入本文 MVP。
+当前阶段只解决知识图谱搭建：资料采集、解析、结构化抽取、L3 层内实体归一、证据核验、PostgreSQL 入库、Neo4j 投影、更新和验收。提问词、主题规划、文章优化、Context Builder、检索和 Rerank 属于后续应用阶段，不纳入本文 MVP。
 
 ## 2. 核心结论
 
@@ -85,7 +85,7 @@ flowchart TD
     D --> E[版式感知解析和语义分块]
     E --> F[字典规则候选抽取]
     E --> G[LLM Schema 候选抽取]
-    F --> H[实体归一、产品版本与 L2 映射]
+    F --> H[L3 实体归一与产品版本处理]
     G --> H
     H --> I[事实、主张、推断与冲突判定]
     I --> J[证据支持核验和人工审核]
@@ -471,20 +471,19 @@ reject_if:
 
 品牌和产品不得仅凭向量相似度自动合并。
 
-### 8.7 L2 映射
+### 8.7 L3 层内归一
 
-先精确映射，再生成候选：
+品牌、产品、能力、客群和问题只在 L3 Profile 内完成实体消歧与归一：
 
 ```text
 品牌产品名 → L3 Product
-品牌原始能力名 → L3 Capability Mention
-L3 Capability Mention → exactMatch / closeMatch / broaderMatch → L2 Capability
-品牌目标客户描述 → L2 Audience
-品牌痛点描述 → L2 Problem / JTBD
-产品定位 → L2 Category
+品牌原始能力名 → L3 Capability
+品牌目标客户描述 → L3 Audience
+品牌痛点描述 → L3 Problem
+产品定位 → L3 Brand Positioning
 ```
 
-映射保存 `mapping_type`、`confidence`、`mapper_version`、`review_status` 和 `mapping_note`。`closeMatch` 不能被下游当作完全等价。
+归一结果只引用 L3 实体，不查询或保存 L2 实体 ID。
 
 ### 8.8 事实、主张和推断判定
 
@@ -615,10 +614,9 @@ L3 的目标实现复用 L2 规划的 `source_instance`、`document`、`document
 | 表 | 用途 |
 |---|---|
 | tenant | 客户租户 |
-| brand_workspace | 品牌接入范围、默认权限和 L2 映射 |
+| brand_workspace | 品牌接入范围和默认权限 |
 | brand_source_policy | 该品牌允许使用的来源和输出渠道 |
 | product_record | 产品、服务和版本属性 |
-| brand_mapping | L3 原始概念到 L2 规范实体的映射 |
 | assertion | 统一事实、主张和推断 |
 | assertion_evidence | Assertion 与 Evidence 多对多关系 |
 | knowledge_conflict | 版本、数值、定义和来源冲突 |
@@ -633,7 +631,6 @@ CREATE TABLE brand_workspace (
   id UUID PRIMARY KEY,
   tenant_id UUID NOT NULL,
   brand_entity_id UUID NOT NULL REFERENCES entity(id),
-  default_industry_id UUID,
   market VARCHAR(20) NOT NULL,
   language VARCHAR(20) NOT NULL,
   default_access_level VARCHAR(20) NOT NULL,
@@ -679,20 +676,6 @@ CREATE TABLE assertion_evidence (
   support_reason TEXT,
   verifier_version VARCHAR(100),
   PRIMARY KEY (assertion_id, evidence_id)
-);
-
-CREATE TABLE brand_mapping (
-  id UUID PRIMARY KEY,
-  tenant_id UUID NOT NULL,
-  brand_id UUID NOT NULL,
-  local_entity_id UUID NOT NULL REFERENCES entity(id),
-  l2_entity_id UUID NOT NULL REFERENCES entity(id),
-  mapping_type VARCHAR(20) NOT NULL,
-  confidence NUMERIC(4,3),
-  mapping_note TEXT,
-  review_status VARCHAR(20) NOT NULL,
-  mapper_version VARCHAR(100),
-  UNIQUE (tenant_id, local_entity_id, l2_entity_id, mapping_type)
 );
 
 CREATE TABLE claim_policy (
@@ -796,7 +779,7 @@ LIMIT $limit;
 - 品牌接入需求和来源清单
 - 原始资料、解析文档、语义块和 Evidence Span
 - 规范实体、别名、关系、Assertion、冲突和缺失信息
-- L3 品牌实体到 L2 行业实体的映射
+- L3 品牌实体层内归一结果
 - PostgreSQL 权威数据和品牌知识快照
 - Neo4j 节点、Assertion 证据链和高频物化关系
 - 自动质量报告、人工审核记录和 PostgreSQL/Neo4j 一致性报告
@@ -813,7 +796,7 @@ Context Builder、向量召回、混合检索、Rerank、Token 预算、任务 P
 接入需求冻结
 → 全站 URL 清单和企业文件清单
 → 文档解析和抽取
-→ L2 映射
+→ L3 层内实体归一
 → 冲突清单
 → 品牌管理员审核
 → 发布 brand_snapshot_v1
@@ -827,7 +810,6 @@ Context Builder、向量召回、混合检索、Rerank、Token 预算、任务 P
 | 产品说明书和版本说明 | 新版本上传触发 | 文档版本或 Hash 变化 |
 | 案例、新闻和资质 | 每周发现 | 新 URL、证书到期或新闻发布 |
 | 内部产品口径 | 审批流事件触发 | 产品、销售或法务批准 |
-| L2 映射 | 每月复核 | L2 本体版本变化或大量 unmapped 候选 |
 | 品牌主题和内容覆盖 | 每周或发布后 | 新内容发布、旧页面删除 |
 
 更新流程保存语义 Diff：新增、修改、删除、版本变化、权限变化和证据变化。页面消失不等于事实立即失效，应进入 `needs_review` 并保留历史证据。
@@ -956,7 +938,7 @@ Brand: DeepCleer
 | enterprise_document_ingestion | 导入企业 PDF、Word、PPT、Markdown 和 Excel |
 | layout_aware_parser | 保留页码、标题、表格和图示关系 |
 | brand_entity_extraction | 按 Profile 抽取品牌、产品、版本和内容实体 |
-| capability_l2_mapper | 把品牌功能映射到 L2 标准能力 |
+| entity_resolver | 在 L3 Profile 内归一品牌实体和能力 |
 | assertion_classifier | 判定 fact、claim、observation 和 inference |
 | evidence_verifier | 验证 Evidence Span 是否直接支持陈述 |
 | entity_resolution | 品牌、组织、产品、别名和版本消歧 |
@@ -998,7 +980,7 @@ Brand: DeepCleer
 
 ### 16.2 推荐变更
 
-- 在 `brand_onboarding.yaml` 增加 `tenant_id`、权限、产品版本、来源清单、L2 映射、冲突和缺失信息输出。
+- 在 `brand_onboarding.yaml` 增加 `tenant_id`、权限、产品版本、来源清单、层内归一、冲突和缺失信息输出。
 - 在 `context_policy.yaml` 增加 `product_id`、`product_version`、`output_channel`、`publication_status` 和 `allowed_task_types` 硬过滤。
 - 在 `claim_policy.yaml` 增加 `internal_fact`、`product_spec`、`draft_claim` 和 `approved_claim` 的处理说明。
 - 在冲突策略中新增 `naming_conflict`、`document_version_conflict`、`sla_conflict` 和 `scope_conflict`。
@@ -1038,7 +1020,7 @@ Brand: DeepCleer
 - 100% L3 记录具备 `tenant_id`、`brand_id`、来源和访问级别。
 - 100% 对外可用 Assertion 具备直接证据、有效期和发布状态。
 - 品牌、组织、产品和版本不因名称相似而误合并。
-- 产品能力映射到 L2 ID，并保存 exact/close/broader 匹配类型。
+- 产品能力归一到 L3 实体 ID，并保留消歧依据。
 - 内部机密证据不会出现在公开内容 Context Package。
 - 官网、QA、说明书冲突不会被自动覆盖或合并。
 - PostgreSQL 可完整重建 Neo4j，Neo4j 故障不影响权威写入。

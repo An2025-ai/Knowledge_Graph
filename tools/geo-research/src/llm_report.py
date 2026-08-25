@@ -40,6 +40,7 @@ from .storage import DATASETS
 # Default hard floor for sources per industry dimension (aligns with the
 # Knowledge_Graph L2 "each dimension >= 5 sources" requirement).
 DEFAULT_MIN_SOURCES_PER_DIMENSION = 5
+DEFAULT_MAX_INDUSTRY_AUTHORITIES = 24
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -300,6 +301,83 @@ def query_domain(query: str) -> str:
     return match.group(1).strip("/") if match else "全网/指定平台"
 
 
+def authority_key(record: dict) -> str:
+    """Return the authority/domain key used for authority-pool budgeting."""
+    host = (urllib.parse.urlsplit(record.get("final_url") or record.get("url") or "").hostname or "").lower()
+    return host.removeprefix("www.") or "unknown"
+
+
+def build_authority_pool(records: list[dict], limit: int,
+                         target_per_dim: int = 0) -> list[dict]:
+    """Build a capped pool of authoritative source bodies/domains.
+
+    ``max_industry_authorities`` controls this pool, not raw search results and
+    not final report citations. Search can over-recall; the pool caps the
+    deduped authority domains used by downstream crawl selection.
+    """
+    if limit <= 0:
+        return []
+    groups: dict[str, list[dict]] = {}
+    for record in records:
+        if not is_authoritative_record(record):
+            continue
+        key = authority_key(record)
+        if key == "unknown":
+            continue
+        groups.setdefault(key, []).append(record)
+
+    authorities = []
+    for key, group in groups.items():
+        dims = sorted({r.get("dimension") or "unknown" for r in group})
+        datasets = sorted({r.get("dataset") for r in group if r.get("dataset")})
+        best_rank = min((r.get("rank") or 999) for r in group)
+        site_query_hits = sum(1 for r in group if query_domain(r.get("query") or "") != "全网/指定平台")
+        score = len(dims) * 3.0 + site_query_hits * 0.5 + len(group) * 0.2 + (1.0 / max(best_rank, 1))
+        best = sorted(group, key=lambda r: (r.get("rank", 999), r.get("searched_at") or ""))[0]
+        authorities.append({
+            "authority_id": key,
+            "domain": key,
+            "title_hint": best.get("title"),
+            "url_hint": best.get("url"),
+            "dimensions": dims,
+            "datasets": datasets,
+            "record_count": len(group),
+            "best_rank": best_rank,
+            "score": round(score, 3),
+        })
+
+    authorities.sort(key=lambda a: (-a["score"], a["best_rank"], a["domain"]))
+    if not target_per_dim:
+        return authorities[:limit]
+
+    selected: list[dict] = []
+    selected_ids: set[str] = set()
+    by_dim: dict[str, list[dict]] = {}
+    for authority in authorities:
+        for dim in authority["dimensions"]:
+            by_dim.setdefault(dim, []).append(authority)
+    per_dim_authority_target = max(1, min(2, target_per_dim))
+    for dim in sorted(by_dim):
+        count = 0
+        for authority in by_dim[dim]:
+            if authority["authority_id"] in selected_ids:
+                continue
+            selected.append(authority)
+            selected_ids.add(authority["authority_id"])
+            count += 1
+            if len(selected) >= limit or count >= per_dim_authority_target:
+                break
+        if len(selected) >= limit:
+            return selected
+    for authority in authorities:
+        if len(selected) >= limit:
+            break
+        if authority["authority_id"] not in selected_ids:
+            selected.append(authority)
+            selected_ids.add(authority["authority_id"])
+    return selected
+
+
 def source_layer(query: str, dataset: str, url: str = "") -> str:
     text = f"{query} {url}".lower()
     broker_domains = ("ecitic.com", "cicc.com", "htsc.com", "gtht.com", "swsresearch.com", "eastmoney.com")
@@ -344,7 +422,11 @@ def select_balanced(records: list[dict], limit: int) -> list[dict]:
     return selected
 
 
-def select_for_crawl(records: list[dict], limit: int) -> list[dict]:
+def select_for_crawl(records: list[dict], limit: int,
+                     authority_pool: list[dict] | None = None,
+                     target_per_dim: int = 0,
+                     max_pages_per_authority: int = 0,
+                     max_pages_per_authority_per_dim: int = 0) -> list[dict]:
     """Select which search records to actually crawl.
 
     Spends the page budget FIRST on authoritative-domain records (fixed generic
@@ -360,26 +442,74 @@ def select_for_crawl(records: list[dict], limit: int) -> list[dict]:
       4. Only if authoritative supply runs out, fill remaining budget from the
          weak/irrelevant (e.g. user-voice platforms) list via balanced fill.
     """
-    authoritative, weak = prioritize_records(records)
+    allowed_authorities = {
+        authority["authority_id"] for authority in (authority_pool or [])
+    }
+    if allowed_authorities:
+        scoped_records = [
+            record for record in records
+            if authority_key(record) in allowed_authorities
+        ]
+    else:
+        scoped_records = records
+
+    authoritative, weak = prioritize_records(scoped_records)
     selected: list[dict] = []
     selected_ids: set[str] = set()
+    authority_counts: dict[str, int] = {}
+    authority_dim_counts: dict[tuple[str, str], int] = {}
+
+    def _can_take(candidate: dict) -> bool:
+        key = authority_key(candidate)
+        dim = candidate.get("dimension") or "unknown"
+        if max_pages_per_authority > 0 and authority_counts.get(key, 0) >= max_pages_per_authority:
+            return False
+        if (max_pages_per_authority_per_dim > 0
+                and authority_dim_counts.get((key, dim), 0) >= max_pages_per_authority_per_dim):
+            return False
+        return True
 
     def _take(candidate: dict) -> None:
         selected.append(candidate)
         selected_ids.add(candidate["id"])
+        key = authority_key(candidate)
+        dim = candidate.get("dimension") or "unknown"
+        authority_counts[key] = authority_counts.get(key, 0) + 1
+        authority_dim_counts[(key, dim)] = authority_dim_counts.get((key, dim), 0) + 1
 
     # Pass 1: one best-ranked record per distinct query from authoritative list.
     picked_queries: set[str] = set()
     for record in sorted(authoritative, key=lambda item: item.get("rank", 999)):
         if record["query"] in picked_queries:
             continue
+        if not _can_take(record):
+            continue
         picked_queries.add(record["query"])
         _take(record)
         if len(selected) >= limit:
             return selected
 
-    # Pass 2: one more top-ranked candidate per dimension (authoritative floor).
-    if len(selected) < limit:
+    # Pass 2: top-ranked candidates per dimension (authoritative floor).
+    if len(selected) < limit and target_per_dim > 0:
+        by_dim: dict[str, list[dict]] = {}
+        for record in authoritative:
+            if record["id"] in selected_ids:
+                continue
+            by_dim.setdefault(record.get("dimension") or "unknown", []).append(record)
+        for dim, group in sorted(by_dim.items(), key=lambda kv: kv[0]):
+            taken_for_dim = sum(
+                1 for item in selected if (item.get("dimension") or "unknown") == dim
+            )
+            for candidate in sorted(group, key=lambda item: item.get("rank", 999)):
+                if len(selected) >= limit or taken_for_dim >= target_per_dim:
+                    break
+                if not _can_take(candidate):
+                    continue
+                _take(candidate)
+                taken_for_dim += 1
+
+    # Pass 3: one more top-ranked candidate per dimension if no explicit target.
+    if len(selected) < limit and target_per_dim <= 0:
         by_dim: dict[str, list[dict]] = {}
         for record in authoritative:
             if record["id"] in selected_ids:
@@ -388,19 +518,32 @@ def select_for_crawl(records: list[dict], limit: int) -> list[dict]:
         for dim, group in sorted(by_dim.items(), key=lambda kv: -len(kv[1])):
             if len(selected) >= limit:
                 break
-            best = sorted(group, key=lambda item: item.get("rank", 999))[0]
-            _take(best)
+            for best in sorted(group, key=lambda item: item.get("rank", 999)):
+                if _can_take(best):
+                    _take(best)
+                    break
 
-    # Pass 3: fill leftover from weak (non-authoritative) via balanced fill.
+    # Pass 4: fill leftover from weak (non-authoritative) via balanced fill.
     if len(selected) < limit:
         weak_left = [r for r in weak if r["id"] not in selected_ids]
         for record in select_balanced(weak_left, limit - len(selected)):
+            if not _can_take(record):
+                continue
             _take(record)
     return selected
 
 
 def crawl_records(records: list[dict], args: argparse.Namespace) -> list[dict]:
-    selected_ids = {record["id"] for record in select_for_crawl(records, args.max_pages)}
+    selected_ids = {
+        record["id"] for record in select_for_crawl(
+            records,
+            args.max_pages,
+            authority_pool=getattr(args, "authority_pool", None),
+            target_per_dim=getattr(args, "target_sources_per_dimension", 0) or 0,
+            max_pages_per_authority=getattr(args, "max_pages_per_authority", 0) or 0,
+            max_pages_per_authority_per_dim=getattr(args, "max_pages_per_authority_per_dim", 0) or 0,
+        )
+    }
     evidence = [{**record, "access_status": "search-snippet", "text": record["snippet"]} for record in records]
     if not selected_ids:
         return evidence
@@ -466,12 +609,14 @@ def crawl_records(records: list[dict], args: argparse.Namespace) -> list[dict]:
 
 
 def evidence_for_model(records: list[dict], max_sources: int, max_input_chars: int,
-                       min_per_dim: int = 0) -> tuple[list[dict], list[dict]]:
+                       min_per_dim: int = 0, target_per_dim: int = 0,
+                       expected_dimensions: list[str] | None = None) -> tuple[list[dict], list[dict]]:
     """Pick sources to feed the model, enforcing a per-dimension floor.
 
-    Records are grouped by ``dimension``; when ``min_per_dim > 0`` we first take
-    the best ``min_per_dim`` crawled sources of each dimension (spending the
-    floor before the global budget), then fill the remainder up to ``max_sources``.
+    Records are grouped by ``dimension``; when ``target_per_dim > 0`` we first
+    try to take that many crawled sources of each dimension, then fill the
+    remainder up to ``max_sources``. ``min_per_dim`` is the acceptance floor used
+    in the returned coverage ledger.
     Returns ``(model_sources, dimension_coverage)`` where coverage reports each
     dimension's source count, flagging < floor as "below_min".
     """
@@ -480,17 +625,22 @@ def evidence_for_model(records: list[dict], max_sources: int, max_input_chars: i
     # Dimension-aware selection: enforce the floor per dimension first.
     selected_ids = set()
     selected: list[dict] = []
-    if min_per_dim > 0 and verified:
+    target = target_per_dim or min_per_dim
+    if target > 0 and verified:
         by_dim: dict[str, list[dict]] = {}
         for record in verified:
             by_dim.setdefault(record.get("dimension") or "unknown", []).append(record)
         for dim, group in by_dim.items():
             # within the floor, pick the freshest/rank-best per dimension
             group_sorted = sorted(group, key=lambda r: (r.get("rank", 999), r.get("searched_at") or ""))
-            for record in group_sorted[:min_per_dim]:
+            for record in group_sorted[:target]:
+                if len(selected) >= max_sources:
+                    break
                 if record["id"] not in selected_ids:
                     selected_ids.add(record["id"])
                     selected.append(record)
+            if len(selected) >= max_sources:
+                break
         # fill remaining budget with balanced cross-dataset selection
         pending = [r for r in verified if r["id"] not in selected_ids]
         selected.extend(select_balanced(pending, max_sources - len(selected)))
@@ -498,7 +648,9 @@ def evidence_for_model(records: list[dict], max_sources: int, max_input_chars: i
         selected = select_balanced(verified, max_sources)
 
     # Dimension coverage ledger (used to flag below_min and in the coverage table).
-    dim_counts: dict[str, int] = {}
+    dim_counts: dict[str, int] = {
+        dim: 0 for dim in (expected_dimensions or []) if dim
+    }
     for record in selected:
         dim = record.get("dimension") or "unknown"
         dim_counts[dim] = dim_counts.get(dim, 0) + 1
@@ -507,6 +659,7 @@ def evidence_for_model(records: list[dict], max_sources: int, max_input_chars: i
             "dimension": dim,
             "source_count": count,
             "min_required": min_per_dim,
+            "target": target,
             "status": "ok" if (min_per_dim == 0 or count >= min_per_dim) else "below_min",
         }
         for dim, count in sorted(dim_counts.items())
@@ -813,15 +966,33 @@ def run_pipeline(args: argparse.Namespace) -> Path:
 
     source_config = load_source_config(args)
     min_per_dim = int(getattr(args, "min_sources_per_dimension", DEFAULT_MIN_SOURCES_PER_DIMENSION) or 0)
+    target_per_dim = int(getattr(args, "target_sources_per_dimension", 0) or min_per_dim)
+    max_report_sources = int(getattr(args, "max_report_sources", 0) or args.max_sources)
     plan = plan_research(client, request_text, args.query_profile,
                          source_config=source_config, min_per_dim=min_per_dim)
     write_json(run_dir / "plan.json", plan)
     search_records, coverage = searxng_search(args.searxng_url, plan, args.results_per_query)
     write_json(run_dir / "search-results.json", search_records)
+    authority_pool = build_authority_pool(
+        search_records,
+        int(getattr(args, "max_industry_authorities", DEFAULT_MAX_INDUSTRY_AUTHORITIES) or 0),
+        target_per_dim=target_per_dim,
+    )
+    write_json(run_dir / "authority-pool.json", {
+        "max_industry_authorities": getattr(args, "max_industry_authorities", DEFAULT_MAX_INDUSTRY_AUTHORITIES),
+        "authority_count": len(authority_pool),
+        "authorities": authority_pool,
+    })
+    args.authority_pool = authority_pool
     crawled = crawl_records(search_records, args)
     write_json(run_dir / "evidence.json", crawled)
     model_sources, dim_coverage = evidence_for_model(
-        crawled, args.max_sources, args.max_input_chars, min_per_dim=min_per_dim
+        crawled,
+        max_report_sources,
+        args.max_input_chars,
+        min_per_dim=min_per_dim,
+        target_per_dim=target_per_dim,
+        expected_dimensions=plan.get("dimensions") or None,
     )
     if not model_sources:
         raise RuntimeError("Search produced no usable evidence")
@@ -829,6 +1000,7 @@ def run_pipeline(args: argparse.Namespace) -> Path:
     if dim_coverage:
         write_json(run_dir / "dimension-coverage.json", {
             "min_sources_per_dimension": min_per_dim,
+            "target_sources_per_dimension": target_per_dim,
             "dimensions": dim_coverage,
         })
     report_body = synthesize_report(client, request_text, plan, model_sources)
@@ -856,7 +1028,9 @@ def run_pipeline(args: argparse.Namespace) -> Path:
             "model": config.model,
             "queries": len(plan["queries"]),
             "search_results": len(search_records),
+            "authority_count": len(authority_pool),
             "report_sources": len(model_sources),
+            "max_report_sources": max_report_sources,
             "report_path": str(report_path.relative_to(ROOT)),
             "completed_at": utc_now(),
         },
@@ -908,11 +1082,21 @@ def build_parser() -> argparse.ArgumentParser:
     request_group.add_argument("--request")
     request_group.add_argument("--request-file", type=Path)
     run_parser.add_argument("--searxng-url", default=os.getenv("SEARXNG_URL", DEFAULT_SEARXNG))
-    run_parser.add_argument("--results-per-query", type=int, default=6)
+    run_parser.add_argument("--results-per-query", "--authority-results-per-query",
+                            dest="results_per_query", type=int, default=6)
     run_parser.add_argument("--max-pages", type=int, default=90)
     run_parser.add_argument("--max-sources", type=int, default=90)
+    run_parser.add_argument("--max-report-sources", type=int, default=None,
+                            help="Final cited/model source cap; defaults to --max-sources.")
     run_parser.add_argument("--max-input-chars", type=int, default=90000)
     run_parser.add_argument("--max-chars-per-page", type=int, default=12000)
+    run_parser.add_argument("--max-industry-authorities", type=int,
+                            default=DEFAULT_MAX_INDUSTRY_AUTHORITIES,
+                            help="Cap the deduped authority/domain pool before crawl selection.")
+    run_parser.add_argument("--max-pages-per-authority", type=int, default=3,
+                            help="Maximum crawled pages from one authority/domain; 0 disables.")
+    run_parser.add_argument("--max-pages-per-authority-per-dim", type=int, default=2,
+                            help="Maximum crawled pages from one authority/domain for one dimension; 0 disables.")
     run_parser.add_argument("--page-timeout", type=int, default=30)
     run_parser.add_argument("--delay", type=float, default=1.0)
     run_parser.add_argument("--headed", action="store_true")
@@ -923,8 +1107,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--source-config", type=Path, default=None,
                             help="Path to a Knowledge_Graph source-config JSON (allowed_source_classes + "
                                  "per-dimension required_source_classes) for the two-layer authoritative-source strategy")
-    run_parser.add_argument("--min-sources-per-dimension", type=int, default=DEFAULT_MIN_SOURCES_PER_DIMENSION,
-                            help="Hard floor of fetched/cited sources per industry dimension (default 5)")
+    run_parser.add_argument("--min-sources-per-dimension", "--min-per-dim",
+                            dest="min_sources_per_dimension", type=int,
+                            default=DEFAULT_MIN_SOURCES_PER_DIMENSION,
+                            help="Acceptance floor of fetched/cited sources per industry dimension (default 5)")
+    run_parser.add_argument("--target-sources-per-dimension", "--target-per-dim",
+                            dest="target_sources_per_dimension", type=int, default=None,
+                            help="Target cited sources per dimension; defaults to --min-sources-per-dimension.")
     return parser
 
 

@@ -12,7 +12,7 @@
 | L2 行业实例层 | 已有 Pipeline | 可从行业 scope、报告和证据生成行业实体、关系、陈述 |
 | L3 品牌实例层 | 已有 Pipeline | 可从品牌文档生成品牌实体、关系、Assertion、证据和快照 |
 | 分层 JSON 导出 | 已优化 | 新增 `--layer L1/L2/L3`，可分别导出三层 |
-| 跨层联动 | 默认关闭 | `l2_mapping` 和 `brand_mapping` 保留为可选能力，但不再默认运行或展示 |
+| 跨层联动 | 不支持 | L2 与 L3 不建立映射或关系 |
 | 三维地球仪/二维展开 | 尚未实现 | 当前只有 JSON/pyvis/Neo4j Browser，后续应新增 Three.js/Mapbox/D3 前端 |
 
 ## 2. 新的数据表达原则
@@ -38,8 +38,8 @@ L1 不是具体事实库，而是“图谱可以长什么样”的定义层。
 
 | 数据维度 | 主要表/文件 | 输出内容 |
 |---|---|---|
-| 实体类型 | `common_knowledge/ontology/entities.yaml` -> `entity_type` | brand、product、industry、category、audience、problem、topic、capability 等 21 类 |
-| 关系类型 | `common_knowledge/ontology/relations.yaml` -> `relation_type` | belongs_to、operates_in、serves、solves、offers、owns_brand 等关系定义 |
+| L2 本体 | `common_knowledge/ontology/l2_industry/` | 41 种实体、37 种关系、24 项指标 |
+| L3 本体 | `common_knowledge/ontology/l3_brand/` | 44 种实体、43 种关系、19 项指标 |
 | 意图与问题模式 | `common_knowledge/intents/*.yaml` -> `intent_definition` | 用户搜索/提问意图、决策阶段、问题模板 |
 | 来源规则 | `common_knowledge/sources/*.yaml` -> `source_policy` | 来源类型、权威等级、适用范围 |
 | 质量和治理策略 | `common_knowledge/policies/*.yaml` -> `quality_rule` 等 | 证据、冲突、晋升、上下文规则 |
@@ -113,14 +113,12 @@ L3 是某个租户、某个品牌的局部品牌图谱。它保存品牌自己�
 | 内容资产 | `content_inventory` | 页面、文章、案例、白皮书等资产 |
 | 品牌快照 | `brand_snapshot` | 一次发布后的计数和审计锚点 |
 
-L3 默认全流程现在不再运行 `l2_mapping`。如确实要恢复 L3 到 L2 的映射，需要显式加参数。
+L3 全流程不读取 L2，也不创建 L3 到 L2 的映射。
 
 ```powershell
 # 默认：独立 L3 图谱
 python -m runtime.l3.executor --all --file "D:\brand_docs\product.md" --tenant customer_a --brand "示例品牌"
 
-# 可选：恢复 L3 -> L2 映射
-python -m runtime.l3.executor --all --include-l2-mapping --file "D:\brand_docs\product.md" --tenant customer_a --brand "示例品牌"
 ```
 
 L3 导出命令：
@@ -171,8 +169,7 @@ python -m runtime.visualize.export --brand "示例品牌" --tenant <tenant-id> -
 
 | 问题 | 影响 | 已处理方式 |
 |---|---|---|
-| L3 `--all` 默认跑 `l2_mapping` | 即使不想跨层联系，也会尝试写 `brand_mapping` | 改为默认跳过，显式 `--include-l2-mapping` 才运行 |
-| 可视化全量导出默认包含 `brand_mapping` 跨层边 | 三层图谱会被连成一张图，不符合分层展示方向 | 改为默认不导出 mapping，显式 `--include-mappings` 才包含 |
+| L3 曾包含跨层映射能力 | 会破坏 L2/L3 独立语义 | 已删除映射 Pipeline、表定义和导出入口 |
 | Neo4j 全量投影默认投跨层边 | Neo4j Browser 看到的是联动图，不是独立分层图 | 改为默认不投 mapping，显式参数才投 |
 | 缺少单层导出入口 | 前端难以做 L1/L2/L3 递进展示 | 新增 `--layer L1/L2/L3` |
 
@@ -182,4 +179,4 @@ python -m runtime.visualize.export --brand "示例品牌" --tenant <tenant-id> -
 2. 给每个节点补 `display` 元数据：颜色、大小、层级、聚类、虚拟经纬度。
 3. 给导出器增加 `--view globe` 和 `--view flat` 的布局预处理。
 4. 再做单层编辑 API：L1 改定义、L2 改行业事实、L3 改品牌事实，三者互不自动级联。
-5. 最后再考虑 L4 动态知识调整层，用事件流记录搜索、AI 回答、排名和观测结果。
+5. 最后再考虑 L4 动态反馈层，用事件流记录查询、LLM 输出、人工纠错、采纳结果和知识更新反馈。

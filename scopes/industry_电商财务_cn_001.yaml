@@ -1,0 +1,283 @@
+meta:
+  version: 1.0.0
+  created_at: '2026-08-13'
+  updated_at: '2026-08-13'
+  status: active
+  scope: industry
+  description: Industry scope manifest for 电商业财一体化软件 in the CN market.
+scope:
+  request_id: industry_电商业财一体化软件_cn_001
+  mode: create
+  industry_id: ind_电商业财一体化软件
+  industry_name: 电商业财一体化软件
+  market: CN
+  languages:
+  - zh-CN
+  included_categories:
+  - cat_电商业财一体化软件
+  excluded_categories: []
+  target_audiences:
+  - CFO
+  - 财务总监
+  - 财务运营负责人
+  - 财务分析师
+  - 业财一体化项目经理
+  - 数据分析师
+  seed_competitors: []
+  seed_sources: []
+  priority_dimensions:
+  - market_participants
+  - competition_structure
+  - capabilities
+  - market_facts_and_trends
+  - problems_and_jobs
+  research_questions: []
+  required_dimensions:
+  - dimension_code: market_definition
+    required: true
+    order: 1
+    questions:
+    - 电商业财一体化软件 在 CN 市场的定义和边界是什么？
+    - 电商业财一体化软件 品类包含哪些子品类和相邻品类？
+    - 电商业财一体化软件 在 CN 的价值链位置和生态关系是什么？
+    expected_fields:
+    - industry_definition
+    - category_boundaries
+    - aliases
+    - parent_category_ids
+    - adjacent_category_ids
+    required_source_classes: &id001
+    - government
+    - regulator
+    - standards_body
+    - industry_association
+    - industry_research
+    - academic
+    - brokerage_research
+    - reliable_media
+    - competitor_official
+    - company_disclosure
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: category_structure
+    required: true
+    order: 2
+    questions:
+    - 电商业财一体化软件 品类下有哪些子品类和解决方案类别？
+    - 各子品类的定义、边界和包含关系是什么？
+    expected_fields:
+    - subcategory_name
+    - subcategory_definition
+    - parent_category_id
+    - inclusion_criteria
+    - exclusion_criteria
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: market_participants
+    required: true
+    order: 3
+    questions:
+    - 电商业财一体化软件 在 CN 市场的主要参与者有哪些？
+    - 各参与者的市场角色、定位和目标客户群是什么？
+    - 市场集中度和竞争格局如何？
+    expected_fields:
+    - brand_name
+    - product_name
+    - market_role
+    - target_audience
+    - market_position
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: audience_and_decision_chain
+    required: true
+    order: 4
+    questions:
+    - 电商业财一体化软件 品类有哪些核心用户角色？
+    - 谁是使用者、评估者、采购者和决策者？
+    - 中小企业和大型企业的决策链有何不同？
+    expected_fields:
+    - audience_name
+    - organization_type
+    - organization_size
+    - decision_role
+    - job_to_be_done
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: problems_and_jobs
+    required: true
+    order: 5
+    questions:
+    - 电商业财一体化软件 用户面临哪些核心痛点？
+    - 不同角色和规模的企业痛点有何差异？
+    - 用户使用 电商业财一体化软件 想完成哪些核心任务？
+    expected_fields:
+    - problem_name
+    - affected_audience_ids
+    - severity
+    - occurrence_conditions
+    - jtbd_description
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: use_cases
+    required: true
+    order: 6
+    questions:
+    - 电商业财一体化软件 在 CN 市场有哪些典型使用场景？
+    - 不同行业和规模的企业使用 电商业财一体化软件 的场景有何差异？
+    - 使用场景与用户痛点和期望结果如何关联？
+    expected_fields:
+    - use_case_name
+    - related_problem_ids
+    - desired_outcomes
+    - typical_user_roles
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: capabilities
+    required: true
+    order: 7
+    questions:
+    - 电商业财一体化软件 产品的标准能力图谱是什么？
+    - 哪些能力是基础能力？哪些是差异化能力？
+    - 能力与使用场景的关系是什么？
+    expected_fields:
+    - capability_name
+    - capability_definition
+    - parent_capability_id
+    - supported_use_case_ids
+    - evaluation_dimensions
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: decision_factors
+    required: true
+    order: 8
+    questions:
+    - 企业在选择 电商业财一体化软件 时关注哪些决策因素？
+    - 不同规模企业和角色的决策因素权重有何差异？
+    - 价格、部署、集成、安全、服务等因素的相对重要性？
+    expected_fields:
+    - factor_name
+    - factor_definition
+    - applicable_category_ids
+    - related_audience_ids
+    - evaluation_method
+    - importance
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: topics_and_questions
+    required: true
+    order: 9
+    questions:
+    - 电商业财一体化软件 行业围绕哪些核心主题和问题展开？
+    - 主题之间的层级关系是什么？
+    - 典型问题对应哪些用户意图？
+    expected_fields:
+    - topic_name
+    - parent_topic_id
+    - question_patterns
+    - related_intent_codes
+    - freshness_requirement
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: market_facts_and_trends
+    required: true
+    order: 10
+    questions:
+    - 电商业财一体化软件 在 CN 市场的规模、增长率和结构是怎样的？
+    - 主要趋势和驱动因素是什么？
+    - 有哪些关键的市场预测和展望？
+    expected_fields:
+    - fact_statement
+    - value_amount
+    - unit
+    - time_period
+    - geography
+    - methodology_summary
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: regulation_and_risks
+    required: true
+    order: 11
+    questions:
+    - 电商业财一体化软件 市场有哪些相关的法规和政策？
+    - 数据安全、隐私保护和行业合规要求是什么？
+    - 市场面临哪些主要风险和不确定性？
+    expected_fields:
+    - regulation_name
+    - issuing_body
+    - effective_date
+    - applicable_subjects
+    - risk_description
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: competition_structure
+    required: true
+    order: 12
+    questions:
+    - 电商业财一体化软件 市场的竞争格局是怎样的？
+    - 直接竞品和替代方案有哪些？
+    - 竞争范围和比较维度是什么？
+    expected_fields:
+    - competitor_name
+    - competition_scope
+    - comparison_dimensions
+    - market_position
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: source_ecology
+    required: true
+    order: 13
+    questions:
+    - 电商业财一体化软件 行业有哪些权威信息来源和研究机构？
+    - 各来源的覆盖主题、权威性和独立性如何？
+    - 来源生态中是否存在空白或过度依赖？
+    expected_fields:
+    - source_name
+    - publisher
+    - source_class
+    - authority_level
+    - independence_level
+    - covered_topics
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  - dimension_code: evidence_gaps
+    required: true
+    order: 14
+    questions:
+    - 哪些维度或问题没有找到充分证据？
+    - 哪些证据存在冲突或无法验证？
+    - 哪些数据因来源限制而无法获取？
+    expected_fields:
+    - gap_dimension
+    - gap_description
+    - gap_reason
+    - attempted_sources
+    - recommended_action
+    required_source_classes: *id001
+    evidence_rules:
+      min_independent_sources: 1
+  source_requirements:
+    primary_mode: whitelist_first
+    allowed_source_classes: *id001
+    excluded_source_classes:
+    - community
+    - social_media
+    - ugc_review
+    critical_claim_min_independent_sources: 2
+  report_contract:
+    format: markdown
+    inline_citation_format: '[S#]'
+    require_coverage_ledger: true
+    require_evidence_package: true
+    require_missing_data_section: true

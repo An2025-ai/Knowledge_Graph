@@ -1,0 +1,237 @@
+meta:
+  version: 1.1.0
+  status: active
+  scope: shared
+  description: Layer-aware extraction semantics, entity/relation dimensions, narrative chains, metrics,
+    and prompt rules for L2 industry and L3 brand graph extraction.
+semantic_terms:
+- term: audience
+  display_name: 客群
+  l2_meaning: 行业或赛道中的市场人群分层，通常来自研报、调研、统计或多来源市场观察。
+  l3_meaning: 品牌材料中宣称服务、定位或实际覆盖的目标客户、用户角色或客户类型。
+  distinction_rule: L2 强调市场分层和规模，L3 强调品牌服务对象和表达对象。
+- term: demand
+  display_name: 需求
+  l2_meaning: 行业中普遍存在、增长或变化的用户需求、购买动因和趋势性需求。
+  l3_meaning: 品牌材料中用于引出产品方案的客户痛点、业务需求或应用诉求。
+  distinction_rule: L2 需求应能代表市场共性，L3 需求可以是品牌文档中的场景化表述。
+- term: problem
+  display_name: 痛点
+  l2_meaning: 多品牌、多用户或第三方资料反复指向的行业共性问题。
+  l3_meaning: 品牌用来说明方案价值的问题描述，可能是 self claim 的一部分。
+  distinction_rule: L2 与 L3 的痛点分别在各自资料范围内定义，不跨层晋升或引用。
+- term: competitor
+  display_name: 竞品
+  l2_meaning: 行业内可替代或直接竞争的品牌、产品、方案阵营。
+  l3_meaning: 与某品牌在文档中被明确对标、替代或比较的具体品牌、产品或传统方案。
+  distinction_rule: L2 关注竞争格局，L3 关注本品牌视角下的对标对象。
+- term: opportunity
+  display_name: 机会
+  l2_meaning: 行业增长空间、未满足需求、空白价格带、新兴场景或可进入细分市场。
+  l3_meaning: 品牌可切入、可强化、可证明或可转化的价值方向。
+  distinction_rule: L2 机会是市场机会，L3 机会是品牌机会或产品承接机会。
+- term: risk
+  display_name: 风险
+  l2_meaning: 对行业、赛道、供应链、政策环境或竞争结构产生系统性影响的不确定性。
+  l3_meaning: 对品牌声誉、产品可信度、交付、合规、客户采用或宣传主张造成影响的风险。
+  distinction_rule: L2 风险看外部环境，L3 风险看品牌承诺、适用边界和证明缺口。
+- term: scenario
+  display_name: 场景
+  l2_meaning: 市场中的消费、使用或业务场景分类。
+  l3_meaning: 品牌方案明确适用、展示、部署或声明支持的落地场景。
+  distinction_rule: L2 场景可跨品牌复用，L3 场景必须绑定品牌、产品、方案或案例。
+- term: technology
+  display_name: 技术
+  l2_meaning: 行业通用技术路线、技术趋势、技术门槛、标准化技术能力。
+  l3_meaning: 品牌声称具备、产品采用、方案依赖或案例验证的具体技术能力。
+  distinction_rule: L3 技术若来自品牌材料，优先按 claim 或 fact+evidence 处理。
+- term: selling_point
+  display_name: 卖点
+  l2_meaning: 市场上各竞品共同竞争的价值维度或差异化维度。
+  l3_meaning: 品牌主动表达的产品优势、方案价值或差异化主张。
+  distinction_rule: L2 卖点是竞争维度，L3 卖点是品牌主张。
+- term: evidence
+  display_name: 证据
+  l2_meaning: 研报、统计数据、行业新闻、政策、第三方报告等外部证据。
+  l3_meaning: 技术报告、宣传册、白皮书、客户案例、认证、性能指标和客户背书。
+  distinction_rule: 证据必须保留 source_doc 和 evidence_text，不得只保留结论。
+- term: metric
+  display_name: 指标
+  l2_meaning: 市场规模、增速、市占率、渗透率、集中度、成熟度、风险等级等行业市场指标。
+  l3_meaning: 降本、增效、准确率、吞吐量、转化率、认证等级、证明强度等品牌材料中的证明指标。
+  distinction_rule: 同名指标必须带 level_scope、metric_name、metric_value、scope、source_doc 和 evidence_text。
+- term: trend
+  display_name: 趋势
+  l2_meaning: 行业需求、技术、政策、渠道变化方向。
+  l3_meaning: 品牌战略、产品路线、宣传重点或能力表达的变化方向。
+  distinction_rule: L2 趋势需要市场证据，L3 趋势必须绑定品牌材料或品牌路线图表达。
+narrative_chains:
+- chain_id: l2_market_opportunity
+  layer: l2_industry
+  purpose: 识别行业机会从哪里来。
+  path:
+  - industry
+  - category
+  - market_segment
+  - audience
+  - use_case
+  - demand
+  - problem
+  - opportunity
+  prompt_instruction: 优先连接行业、子行业/赛道、客群、场景、需求、痛点和机会点。
+- chain_id: l2_competitive_landscape
+  layer: l2_industry
+  purpose: 描述行业竞争格局和竞争强度来源。
+  path:
+  - industry
+  - category
+  - brand
+  - product
+  prompt_instruction: 将企业、品牌或产品作为市场参与者引用，指标用 competitive_intensity 或 concentration 表达。
+- chain_id: l2_unmet_demand
+  layer: l2_industry
+  purpose: 从用户需求识别未满足市场和突破机会。
+  path:
+  - demand
+  - problem
+  - opportunity
+  prompt_instruction: 未满足需求必须有文本证据，不能由模型自行推断。
+- chain_id: l2_risk_transmission
+  layer: l2_industry
+  purpose: 记录政策、技术、供应链、舆情等风险如何影响市场。
+  path:
+  - risk
+  - opportunity
+  - industry
+  - category
+  - brand
+  prompt_instruction: 风险必须带影响对象、时间或地域范围；缺失时在 statement 中说明范围未知。
+- chain_id: l2_trend_growth
+  layer: l2_industry
+  purpose: 从趋势识别新兴场景、新客群或新需求带来的增长机会。
+  path:
+  - trend
+  - use_case
+  - audience
+  - demand
+  - opportunity
+  prompt_instruction: 趋势要尽量绑定时间范围、证据和受益对象。
+- chain_id: l3_brand_value_proof
+  layer: l3_brand
+  purpose: 说明品牌如何表达自身价值并用证据证明。
+  path:
+  - brand
+  - brand_claim
+  - product
+  - solution
+  - capability
+  - service
+  - delivery_result
+  prompt_instruction: 区分事实和主张；宣传性词语必须标为 claim。
+- chain_id: l3_solution_evidence
+  layer: l3_brand
+  purpose: 从客户痛点串联方案、产品服务、技术支撑、效果指标和案例证据。
+  path:
+  - capability
+  - solution
+  - service
+  - technology
+  - case
+  prompt_instruction: 指标必须保留数值、单位、测试条件或来源文本；没有条件则标记为 claim。
+- chain_id: l3_applicability_delivery
+  layer: l3_brand
+  purpose: 连接产品方案、产品服务、目标客户和交付成果。
+  path:
+  - product
+  - solution
+  - service
+  - audience
+  - customer
+  - delivery_result
+  prompt_instruction: 适用范围必须绑定品牌文档证据，不要替换成行业事实。
+- chain_id: l3_claim_credibility
+  layer: l3_brand
+  purpose: 用证据、指标、认证或案例评估品牌主张可信度。
+  path:
+  - brand_claim
+  - certification
+  - case
+  - delivery_result
+  prompt_instruction: 没有证据的主张保留 claim，但不要标为 fact。
+- chain_id: l3_applicability_risk
+  layer: l3_brand
+  purpose: 识别产品能力的适用边界、版本条件和合规背书。
+  path:
+  - capability
+  - product_version
+  - technology
+  - certification
+  prompt_instruction: 对能力范围、适用版本、技术依赖和合规认证要求保持原文证据。
+profile_extraction_rules:
+  l2_industry:
+    role: 行业市场洞察图谱抽取器
+    focus: 行业结构、客群分类、需求变化、竞品格局、机会突破和风险预警。
+    include:
+    - 行业、子行业、细分赛道、区域市场、价格带、产业链环节
+    - 客群、人群标签、消费场景、地域、渠道偏好
+    - 用户需求、痛点、购买动因、阻碍因素、情绪
+    - 竞品品牌、竞品阵营、产品类型、卖点、渠道
+    - 机会点、空白市场、未满足需求、新兴场景、趋势
+    - 政策、舆情、技术门槛、供应链风险、替代威胁
+    exclude:
+    - 单个品牌没有外部支撑的自我宣传式表达
+    - 只描述文档写法、章节标题或资料来源的元信息
+    - 没有行业、赛道、地域、时间或证据范围的泛泛判断
+    assertion_guidance:
+    - 统计、趋势、市场变化优先标记为 observation。
+    - 第三方明确事实可标记为 fact。
+    - 多来源归纳但文本未直接给出时标记为 inference，并保留支持陈述。
+  l3_brand:
+    role: 品牌文档理解图谱抽取器
+    focus: 品牌表达、产品方案、技术能力、应用场景、客户案例、价值主张、证明和限制风险。
+    include:
+    - 品牌、公司、子品牌、业务线、品牌定位、品牌主张
+    - 产品、解决方案、平台、系统、模块、服务
+    - 技术、算法、架构、专利、标准、认证、性能指标
+    - 行业场景、业务场景、客户场景、使用流程
+    - 客户、合作伙伴、项目、案例、地区、交付成果
+    - 卖点、优势、客户价值、效果指标、证据
+    - 适用边界、依赖条件、合规要求、实施风险
+    exclude:
+    - 未在品牌材料中出现且没有证据的外部行业结论
+    - 将品牌主张直接改写成行业事实
+    - 将内容资产、章节标题或文件名当作构图实体
+    assertion_guidance:
+    - 品牌自述、宣传性优势、领先性表达优先标记为 claim。
+    - 认证、产品包含模块、方案应用于场景等可验证内容可标记为 fact。
+    - 性能、降本增效等指标若缺少测试条件或第三方来源，标记为 claim。
+prompt_output_rules:
+- 只抽取输入文本直接支持的信息，不得补充外部知识。
+- 每条关系和 statement 都应尽量带 evidence_text、source_refs 或可追溯字段。
+- 同名概念必须按当前 profile 的层级语义解释。
+- 输出 JSON 不得包含未列入当前 profile 的实体类型或关系类型。
+- 对无法确定层级、范围或证据的内容，保留为 statement，不要强行构造成实体关系。
+prompt_output_schema:
+  relations:
+  - level
+  - subject
+  - relation
+  - object
+  - entity_type_subject
+  - entity_type_object
+  - metric_name
+  - metric_value
+  - scope
+  - evidence_text
+  - source_doc
+  - confidence
+  statements:
+  - level
+  - text
+  - statement_class
+  - metric_name
+  - metric_value
+  - scope
+  - evidence_text
+  - source_doc
+  - confidence

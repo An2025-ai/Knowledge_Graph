@@ -47,6 +47,7 @@ temp/
 *.tmp
 
 # Generated runtime outputs
+runtime/l1/output/
 runtime/l2/output/
 runtime/visualize/output/
 

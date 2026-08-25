@@ -51,7 +51,6 @@ CREATE TABLE IF NOT EXISTS brand_workspace (
   id UUID PRIMARY KEY,
   tenant_id UUID NOT NULL,
   brand_entity_id UUID NOT NULL REFERENCES entity(id),
-  default_industry_id UUID,
   market VARCHAR(20) NOT NULL,
   language VARCHAR(20) NOT NULL,
   default_access_level VARCHAR(20) NOT NULL,
@@ -62,7 +61,7 @@ CREATE TABLE IF NOT EXISTS brand_workspace (
   UNIQUE (tenant_id, brand_entity_id, market, language)
 );
 
-COMMENT ON TABLE brand_workspace IS '品牌接入范围、默认权限和 L2 映射作用域';
+COMMENT ON TABLE brand_workspace IS '品牌接入范围和默认权限';
 
 -- ============================================================================
 -- assertion
@@ -110,25 +109,6 @@ CREATE TABLE IF NOT EXISTS assertion_evidence (
 );
 
 COMMENT ON TABLE assertion_evidence IS 'Assertion 与 Evidence 多对多支持关系';
-
--- ============================================================================
--- brand_mapping
--- ============================================================================
-CREATE TABLE IF NOT EXISTS brand_mapping (
-  id UUID PRIMARY KEY,
-  tenant_id UUID NOT NULL,
-  brand_id UUID NOT NULL,
-  local_entity_id UUID NOT NULL REFERENCES entity(id),
-  l2_entity_id UUID NOT NULL REFERENCES entity(id),
-  mapping_type VARCHAR(20) NOT NULL,
-  confidence NUMERIC(4,3),
-  mapping_note TEXT,
-  review_status VARCHAR(20) NOT NULL,
-  mapper_version VARCHAR(100),
-  UNIQUE (tenant_id, local_entity_id, l2_entity_id, mapping_type)
-);
-
-COMMENT ON TABLE brand_mapping IS 'L3 原始概念到 L2 规范实体的映射';
 
 -- ============================================================================
 -- claim_policy
@@ -281,7 +261,6 @@ CREATE INDEX IF NOT EXISTS idx_assertion_brand ON assertion (tenant_id, brand_id
 CREATE INDEX IF NOT EXISTS idx_assertion_supersedes ON assertion (supersedes_id);
 CREATE INDEX IF NOT EXISTS idx_brand_workspace_tenant ON brand_workspace (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_assertion_evidence_evidence ON assertion_evidence (evidence_id);
-CREATE INDEX IF NOT EXISTS idx_brand_mapping_l2 ON brand_mapping (l2_entity_id);
 CREATE INDEX IF NOT EXISTS idx_claim_policy_brand ON claim_policy (tenant_id, brand_id, status);
 CREATE INDEX IF NOT EXISTS idx_brand_snapshot_brand ON brand_snapshot (tenant_id, brand_id, published_at DESC);
 
@@ -403,7 +382,7 @@ DECLARE
     tenant_col TEXT := 'tenant_id';
 BEGIN
     -- brand_workspace 等均含 tenant_id；for all listed tables
-    FOREACH tbl IN ARRAY ARRAY['brand_workspace', 'assertion', 'brand_mapping',
+    FOREACH tbl IN ARRAY ARRAY['brand_workspace', 'assertion',
                                'claim_policy', 'brand_source_policy', 'product_record',
                                'knowledge_conflict', 'content_inventory', 'brand_snapshot']
     LOOP
@@ -448,7 +427,6 @@ $$ LANGUAGE plpgsql;
 -- RLS 备注
 COMMENT ON TABLE brand_workspace IS '启用 RLS，租户过滤 tenant_id = current_setting(%''app.tenant_id%'')';
 COMMENT ON TABLE assertion IS '启用 RLS，租户过滤 tenant_id = current_setting(%''app.tenant_id%'')';
-COMMENT ON TABLE brand_mapping IS '启用 RLS，租户过滤 tenant_id = current_setting(%''app.tenant_id%'')';
 COMMENT ON TABLE claim_policy IS '启用 RLS，租户过滤 tenant_id = current_setting(%''app.tenant_id%'')';
 
 -- ============================================================================
@@ -457,7 +435,7 @@ COMMENT ON TABLE claim_policy IS '启用 RLS，租户过滤 tenant_id = current_
 DO $$
 BEGIN
     RAISE NOTICE 'Brand Atlas L3 migration v1.0.0 applied.';
-    RAISE NOTICE 'Tables: tenant, brand_workspace, brand_source_policy, product_record, brand_mapping, assertion, assertion_evidence, knowledge_conflict, claim_policy, content_inventory, brand_snapshot.';
+    RAISE NOTICE 'Tables: tenant, brand_workspace, brand_source_policy, product_record, assertion, assertion_evidence, knowledge_conflict, claim_policy, content_inventory, brand_snapshot.';
     RAISE NOTICE 'RLS enabled, composite + JSONB expression indexes created, assertion append+supersedes enforced.';
 END;
 $$ LANGUAGE plpgsql;

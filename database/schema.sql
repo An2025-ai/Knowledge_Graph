@@ -3,7 +3,7 @@
 -- 版本: 1.0.0
 -- 创建日期: 2026-08-07
 -- 描述: 第一层通用知识层的数据库表结构，对应 common_knowledge/ 中的 YAML 定义
--- 参考: common_knowledge/ontology/entities.yaml, relations.yaml
+-- 参考: common_knowledge/ontology/l2_industry 与 ontology/l3_brand 下的实体、关系定义
 -- ============================================================================
 
 -- 创建扩展
@@ -15,7 +15,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS knowledge_definition (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    file_path       VARCHAR(500) NOT NULL UNIQUE,        -- 如 ontology/entities.yaml
+    file_path       VARCHAR(500) NOT NULL UNIQUE,        -- 如 ontology/l2_industry/entities.yaml
     file_name       VARCHAR(200) NOT NULL,               -- 如 entities.yaml
     category        VARCHAR(100) NOT NULL,               -- ontology / intents / sources / tasks / policies / examples
     version         VARCHAR(20) NOT NULL,                -- 语义化版本 x.y.z
@@ -56,11 +56,11 @@ COMMENT ON TABLE knowledge_version IS '知识定义版本变更历史，支持�
 
 -- ============================================================================
 -- 3. entity_type — 实体类型注册表
--- 对应 common_knowledge/ontology/entities.yaml
+-- 对应两套 Profile 限定的 ontology/*/entities.yaml
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS entity_type (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    type_code       VARCHAR(50) NOT NULL UNIQUE,         -- 如 brand, product, industry
+    type_code       VARCHAR(100) NOT NULL UNIQUE,        -- 如 l2_industry.brand, l3_brand.brand
     canonical_name  VARCHAR(200) NOT NULL,               -- 中文名称
     canonical_name_en VARCHAR(200),                      -- 英文名称
     definition      TEXT NOT NULL,                       -- 定义描述
@@ -79,15 +79,15 @@ CREATE TABLE IF NOT EXISTS entity_type (
 CREATE INDEX IF NOT EXISTS idx_et_type_code ON entity_type(type_code);
 CREATE INDEX IF NOT EXISTS idx_et_status ON entity_type(status);
 
-COMMENT ON TABLE entity_type IS '实体类型定义，系统支持的 21 种实体类型';
+COMMENT ON TABLE entity_type IS 'L2 行业与 L3 品牌两套独立构图实体类型；代码使用 Profile 前缀';
 
 -- ============================================================================
 -- 4. relation_type — 关系类型注册表
--- 对应 common_knowledge/ontology/relations.yaml
+-- 对应两套 Profile 限定的 ontology/*/relations.yaml
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS relation_type (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    relation_code   VARCHAR(50) NOT NULL UNIQUE,         -- 如 belongs_to, operates_in
+    relation_code   VARCHAR(100) NOT NULL UNIQUE,        -- 如 l2_industry.belongs_to
     description     TEXT NOT NULL,                       -- 关系描述
     description_en  TEXT,                                -- 英文描述
     subject_types   JSONB NOT NULL,                      -- 允许的主体实体类型数组
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS relation_type (
 
 CREATE INDEX IF NOT EXISTS idx_rt_relation_code ON relation_type(relation_code);
 
-COMMENT ON TABLE relation_type IS '关系类型定义，系统支持的 31 种关系类型';
+COMMENT ON TABLE relation_type IS 'L2 行业与 L3 品牌两套独立层内关系类型；代码使用 Profile 前缀';
 
 ALTER TABLE relation_type DROP CONSTRAINT IF EXISTS chk_rt_cardinality;
 ALTER TABLE relation_type ADD CONSTRAINT chk_rt_cardinality
@@ -152,7 +152,7 @@ COMMENT ON TABLE intent_definition IS '搜索意图类型定义，包含 13 种�
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS task_template (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    task_code       VARCHAR(50) NOT NULL UNIQUE,         -- 如 task_brand_onboarding
+    task_code       VARCHAR(50) NOT NULL UNIQUE,         -- 如 task_industry_knowledge_build
     name            VARCHAR(200) NOT NULL,               -- 中文名称
     name_en         VARCHAR(200),                        -- 英文名称
     version         VARCHAR(20) NOT NULL DEFAULT '1.0.0',
@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS task_template (
 
 CREATE INDEX IF NOT EXISTS idx_tt_task_code ON task_template(task_code);
 
-COMMENT ON TABLE task_template IS '任务模板定义，系统支持的 9 种任务类型';
+COMMENT ON TABLE task_template IS '知识构建工作流模板，当前支持 4 种治理/更新任务';
 
 -- ============================================================================
 -- 7. source_policy — 来源策略
@@ -233,7 +233,7 @@ COMMENT ON TABLE quality_rule IS '质量规则定义，20 条规则覆盖事实�
 
 -- ============================================================================
 -- 9. example_case — 示例案例
--- 对应 common_knowledge/examples/positive_examples.yaml + negative_examples.yaml
+-- 预留评测案例表；当前 L1 不发布示例文件
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS example_case (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -264,7 +264,7 @@ CREATE TABLE IF NOT EXISTS example_case (
 CREATE INDEX IF NOT EXISTS idx_ec_task ON example_case(task_id);
 CREATE INDEX IF NOT EXISTS idx_ec_type ON example_case(case_type);
 
-COMMENT ON TABLE example_case IS '示例案例库，包含正例和反例，用于培训和回归验证';
+COMMENT ON TABLE example_case IS '预留的评测案例表；当前 L1 不随运行时发布示例文件';
 
 -- ============================================================================
 -- 辅助表：决策阶段
@@ -328,17 +328,15 @@ $$ LANGUAGE plpgsql;
 -- 初始数据：插入 knowledge_definition 记录
 -- ============================================================================
 INSERT INTO knowledge_definition (file_path, file_name, category, version, description) VALUES
-    ('ontology/entities.yaml', 'entities.yaml', 'ontology', '1.2.0', '21 种实体类型定义'),
-    ('ontology/relations.yaml', 'relations.yaml', 'ontology', '1.2.0', '31 种关系类型定义'),
+    ('ontology/l2_industry/entities.yaml', 'entities.yaml', 'ontology', '2.0.0', 'L2 行业构图实体类型定义'),
+    ('ontology/l2_industry/relations.yaml', 'relations.yaml', 'ontology', '2.0.0', 'L2 行业关系类型定义'),
+    ('ontology/l2_industry/metrics.yaml', 'metrics.yaml', 'ontology', '2.0.0', 'L2 行业指标定义'),
+    ('ontology/l3_brand/entities.yaml', 'entities.yaml', 'ontology', '2.0.0', 'L3 品牌构图实体类型定义'),
+    ('ontology/l3_brand/relations.yaml', 'relations.yaml', 'ontology', '2.0.0', 'L3 品牌关系类型定义'),
+    ('ontology/l3_brand/metrics.yaml', 'metrics.yaml', 'ontology', '2.0.0', 'L3 品牌指标定义'),
     ('intents/intent_types.yaml', 'intent_types.yaml', 'intents', '1.0.0', '13 种意图类型 + 7 个决策阶段'),
-    ('intents/prompt_patterns.yaml', 'prompt_patterns.yaml', 'intents', '1.0.0', '41 个提问词模式'),
     ('sources/source_types.yaml', 'source_types.yaml', 'sources', '1.1.0', '13 种来源类型'),
     ('sources/authority_rules.yaml', 'authority_rules.yaml', 'sources', '1.0.0', '20 条质量规则'),
-    ('tasks/brand_onboarding.yaml', 'brand_onboarding.yaml', 'tasks', '1.2.0', '品牌导入任务模板'),
-    ('tasks/prompt_generation.yaml', 'prompt_generation.yaml', 'tasks', '1.0.0', '提问词生成任务模板'),
-    ('tasks/topic_planning.yaml', 'topic_planning.yaml', 'tasks', '1.0.0', '主题规划任务模板'),
-    ('tasks/search_diagnosis.yaml', 'search_diagnosis.yaml', 'tasks', '1.0.0', '搜索诊断任务模板'),
-    ('tasks/content_brief.yaml', 'content_brief.yaml', 'tasks', '1.0.0', '内容 Brief 生成任务模板'),
     ('tasks/industry_knowledge_build.yaml', 'industry_knowledge_build.yaml', 'tasks', '1.1.0', '行业知识构建任务模板'),
     ('tasks/industry_knowledge_refresh.yaml', 'industry_knowledge_refresh.yaml', 'tasks', '1.1.0', '行业知识刷新任务模板'),
     ('tasks/source_discovery.yaml', 'source_discovery.yaml', 'tasks', '1.1.0', '来源发现任务模板'),
@@ -348,9 +346,7 @@ INSERT INTO knowledge_definition (file_path, file_name, category, version, descr
     ('policies/context_policy.yaml', 'context_policy.yaml', 'policies', '1.2.0', '上下文检索策略'),
     ('policies/source_discovery_policy.yaml', 'source_discovery_policy.yaml', 'policies', '1.1.0', '来源发现策略'),
     ('policies/knowledge_promotion_policy.yaml', 'knowledge_promotion_policy.yaml', 'policies', '1.1.0', '知识晋升策略'),
-    ('policies/report_evidence_policy.yaml', 'report_evidence_policy.yaml', 'policies', '1.1.0', '报告证据策略'),
-    ('examples/positive_examples.yaml', 'positive_examples.yaml', 'examples', '1.0.0', '26 组正确示例'),
-    ('examples/negative_examples.yaml', 'negative_examples.yaml', 'examples', '1.0.0', '25 组错误示例')
+    ('policies/report_evidence_policy.yaml', 'report_evidence_policy.yaml', 'policies', '1.1.0', '报告证据策略')
 ON CONFLICT (file_path) DO NOTHING;
 
 -- ============================================================================

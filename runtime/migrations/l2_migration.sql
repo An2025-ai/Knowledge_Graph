@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS entity (
     CONSTRAINT chk_entity_status CHECK (status IN ('candidate','active','inactive','deprecated'))
 );
 COMMENT ON TABLE entity IS 'L2/L3 实体实例（唯一权威实体表）';
-COMMENT ON COLUMN entity.id IS '被 L3 brand_l3_migration 的 brand_workspace/assertion/brand_mapping/product_record 引用';
+COMMENT ON COLUMN entity.id IS '被 L3 brand_l3_migration 的 brand_workspace/assertion/product_record 引用';
 
 ALTER TABLE entity DROP CONSTRAINT IF EXISTS chk_entity_status;
 ALTER TABLE entity ADD CONSTRAINT chk_entity_status

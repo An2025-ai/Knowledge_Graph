@@ -1,4 +1,4 @@
-# GEO 第一层通用知识层 — 事实与主张策略
+# L1 通用知识层 — 事实与主张策略
 # 版本: 1.2.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
@@ -49,20 +49,19 @@ information_classes:
 
   - class: observation
     name: 观测
-    definition: 特定时间和条件下获取的搜索结果或系统观测
+    definition: 特定时间和条件下获取的来源快照、校验结果或变更事件
     evidence_requirement: 必须有观测时间戳
-    source_requirement: 标注观测平台和条件
+    source_requirement: 标注观测来源和条件
     verification: 需要多次观测交叉验证
     mutability: 高度时间敏感，可能下一次观测就不同
     sub_types:
-      - search_result: 搜索结果排名快照
-      - ai_answer: AI 生成的回答内容
-      - mention: 品牌/产品提及
-      - ranking: 搜索排名变化
+      - source_snapshot: 来源内容快照
+      - validation_run: 一次校验运行结果
+      - change_event: 知识变更事件
       - trend: 趋势观测
     examples:
-      - "2026-08-07 搜索'CRM'时，某品牌出现在 AI 回答中"
-      - "本周品牌在 AI 搜索中的提及率上升了 5%"
+      - "2026-08-07 来源页面的版本快照已保存"
+      - "2026-08-07 校验发现一条关系缺少证据"
 
   - class: inference
     name: 推断

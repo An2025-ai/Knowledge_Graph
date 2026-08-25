@@ -21,12 +21,11 @@
 |------|----------------|------|
 | `deepcleer/source_manifest.yaml` | §14.1 | 资料清单和版本冲突 |
 | `deepcleer/entity_sample.yaml` | §14.2 | 组织/品牌/产品实体样例 |
-| `deepcleer/capability_mapping.yaml` | §14.3 | 能力到 L2 映射候选 |
 | `deepcleer/conflicts.yaml` | §14.4 | 冲突和限定项清单 |
 | `deepcleer/assertion_sample.json` | §14.5 | 示例 Assertion |
 | `deepcleer/missing_information.yaml` | §14.6 | 缺失信息（不补齐） |
 
 ## 下一步
 
-- 阶段 1：完成 DeepCleer 单品牌闭环（接入需求 → 解析 → 实体 → L2 映射 → 审核 → 快照）
+- 阶段 1：完成 DeepCleer 单品牌闭环（接入需求 → 解析 → 实体归一 → 审核 → 快照）
 - 阶段 2：接入第二个不同类型品牌，验证无 DeepCleer 硬编码

@@ -1,0 +1,31 @@
+meta:
+  version: 2.0.0
+  updated_at: '2026-08-24'
+  status: active
+  description: l3_brand 独立 Schema Profile；不继承或访问其他业务层本体。
+profile_id: l3_brand
+layer: l3
+ontology:
+  entities: common_knowledge/ontology/l3_brand/entities.yaml
+  relations: common_knowledge/ontology/l3_brand/relations.yaml
+  metrics: common_knowledge/ontology/l3_brand/metrics.yaml
+inheritance: []
+cross_layer_access: false
+external_layer_dependencies: []
+statement_classes:
+- fact
+- claim
+- observation
+- inference
+promotion_policy:
+  default_confidence_threshold: 0.5
+  source_authority_allowed:
+  - high
+  - medium
+  evidence_access_status_allowed:
+  - verified
+  - crawled
+  - ok
+  evidence_support_status_allowed:
+  - directly_supports
+  - partially_supports

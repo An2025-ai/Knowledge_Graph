@@ -5,7 +5,6 @@ Usage:
     python -m runtime.visualize.export --layer L2 --out runtime/visualize/output/l2.json
     python -m runtime.visualize.export --layer L3 --out runtime/visualize/output/l3.json
     python -m runtime.visualize.export --all --out runtime/visualize/output/all.json
-    python -m runtime.visualize.export --all --include-mappings
 """
 from __future__ import annotations
 
@@ -30,7 +29,7 @@ def _layer_for(e: dict) -> str:
     return "L1"
 
 
-def build_graph(entities, relations, statements=None, brand_mappings=None):
+def build_graph(entities, relations, statements=None):
     """Convert DB rows into {nodes, edges, statements, stats}."""
     nodes = []
     for e in entities:
@@ -49,17 +48,6 @@ def build_graph(entities, relations, statements=None, brand_mappings=None):
         })
 
     edges = []
-    for m in (brand_mappings or []):
-        edges.append({
-            "id": f"bm_{m.get('local_entity_id')}_{m.get('l2_entity_id')}",
-            "relation_id": f"bm_{m.get('local_entity_id')}_{m.get('l2_entity_id')}",
-            "subject_id": str(m.get("local_entity_id")),
-            "object_id": str(m.get("l2_entity_id")),
-            "type": m.get("mapping_type") or "SAME_AS",
-            "confidence": float(m.get("confidence")) if m.get("confidence") is not None else None,
-            "cross_layer": True,
-            "verification_status": m.get("review_status"),
-        })
     for r in relations:
         edges.append({
             "id": str(r.get("id")),
@@ -226,7 +214,7 @@ def export_brand(db, brand_id, tenant_id=None, out_path=None) -> dict:
     return write_output(build_graph(entities, relations, statements), out_path)
 
 
-def export_all(db, out_path=None, include_mappings=False) -> dict:
+def export_all(db, out_path=None) -> dict:
     entities = _active_entities(db)
     relations = _query_rows(
         db,
@@ -243,14 +231,7 @@ def export_all(db, out_path=None, include_mappings=False) -> dict:
         "SELECT id, statement_text, statement_class, status FROM assertion "
         "WHERE status='active' LIMIT 500",
     ))
-    mappings = []
-    if include_mappings:
-        mappings = _query_rows(
-            db,
-            "SELECT local_entity_id, l2_entity_id, mapping_type, confidence, review_status "
-            "FROM brand_mapping",
-        )
-    return write_output(build_graph(entities, relations, statements, brand_mappings=mappings), out_path)
+    return write_output(build_graph(entities, relations, statements), out_path)
 
 
 def write_output(graph: dict, out_path=None) -> dict:
@@ -269,7 +250,6 @@ def main() -> int:
     parser.add_argument("--tenant", default=None, help="tenant id for brand export")
     parser.add_argument("--all", dest="all_", action="store_true", help="export everything")
     parser.add_argument("--layer", choices=["L1", "L2", "L3", "l1", "l2", "l3"], help="export one layer only")
-    parser.add_argument("--include-mappings", action="store_true", help="include optional L3-to-L2 mapping edges")
     args = parser.parse_args()
 
     from runtime.db import DB
@@ -282,7 +262,7 @@ def main() -> int:
         elif args.industry:
             export_industry(db, args.industry, args.out)
         else:
-            export_all(db, args.out, include_mappings=args.include_mappings)
+            export_all(db, args.out)
     print("[export] done - open the notebook to visualize")
     return 0
 

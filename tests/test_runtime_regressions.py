@@ -22,10 +22,13 @@ from runtime.l3.pipelines.candidate_pre_extraction import (
 )
 from runtime.l3.pipelines._helpers import resolve_brand_context, update_assertion
 from runtime.ner_client import _clean_span, _map_ner_type, _SCHEMA_ZH
-from runtime.l3.pipelines.l2_mapping import _find_l2_capability
 from runtime.migrations.__main__ import main as migration_main
 from runtime.neo4j.consistency import count_assertions_pg, count_entity_edges
 from runtime.neo4j.projection import ProjectionService
+from runtime.l1.prompt_builder import build_extraction_prompt
+from runtime.l1.policy_engine import load_promotion_policy
+from runtime.l1.registry import get_l1_registry
+from runtime.ontology_validator import validate_ontology
 from runtime.l3.executor import DEFAULT_PIPELINES
 from runtime.visualize.export import _relations_for_entity_ids, export_all, export_layer
 
@@ -222,16 +225,6 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertNotIn("session_replication_role", sql)
         self.assertEqual(params, ("active", "assertion-1"))
 
-    def test_l2_mapping_uses_uuid_safe_null_predicate(self):
-        db = RecordingDB(query_results=[[]])
-        _find_l2_capability(db, "tenant-1", "Analytics")
-        sql = " ".join(query[0] for query in db.queries)
-        self.assertIn("tenant_id IS NULL", sql)
-        self.assertNotIn("tenant_id = %s", sql)
-        self.assertIn("owner_brand IS NULL", sql)
-        self.assertNotIn("COALESCE(owner_brand, '')", sql)
-        self.assertEqual(db.queries[0][1], ("capability", "Analytics"))
-
     def test_induced_subgraph_requires_both_relation_endpoints(self):
         db = RecordingDB(query_results=[[]])
         _relations_for_entity_ids(db, ["a", "b"])
@@ -241,22 +234,15 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertIn(" AND object_id", sql)
         self.assertEqual(params, ("a", "b", "a", "b"))
 
-    def test_l3_default_all_pipeline_excludes_l2_mapping(self):
+    def test_l3_pipeline_has_no_l2_mapping(self):
         self.assertNotIn("l2_mapping", DEFAULT_PIPELINES)
 
-    def test_export_all_does_not_include_mappings_by_default(self):
+    def test_export_all_does_not_read_cross_layer_mappings(self):
         db = RecordingDB(query_results=[[], [], [], []])
         with patch("runtime.visualize.export.write_output", side_effect=lambda graph, out_path=None: graph):
             export_all(db, out_path=None)
         sql = " ".join(query[0] for query in db.queries)
         self.assertNotIn("FROM brand_mapping", sql)
-
-    def test_export_all_can_include_mappings_explicitly(self):
-        db = RecordingDB(query_results=[[], [], [], [], []])
-        with patch("runtime.visualize.export.write_output", side_effect=lambda graph, out_path=None: graph):
-            export_all(db, out_path=None, include_mappings=True)
-        sql = " ".join(query[0] for query in db.queries)
-        self.assertIn("FROM brand_mapping", sql)
 
     def test_export_layer_l1_reads_registry_tables(self):
         db = RecordingDB(query_results=[
@@ -374,6 +360,126 @@ class RuntimeRegressionTests(unittest.TestCase):
     def test_migration_module_entrypoint_is_importable(self):
         with patch("sys.argv", ["runtime.migrations", "--check"]):
             self.assertEqual(migration_main(), 0)
+
+    def test_l1_unknown_profile_fails_fast_not_global_fallback(self):
+        """A typo'd/unknown profile must raise instead of silently opening all types."""
+        registry = get_l1_registry()
+        # Unknown non-empty id -> raise on profile() and on query helpers.
+        with self.assertRaises(ValueError):
+            registry.profile("l2_industryy")
+        with self.assertRaises(ValueError):
+            registry.entity_types("l2_industryy")
+        with self.assertRaises(ValueError):
+            registry.relation_types("l2_industryy")
+        with self.assertRaises(ValueError):
+            registry.statement_classes("l2_industryy")
+        with self.assertRaises(ValueError):
+            registry.require_profile("nope")
+        # require_profile rejects empty too.
+        with self.assertRaises(ValueError):
+            registry.require_profile(None)
+
+    def test_l1_none_profile_is_rejected(self):
+        """Business types cannot be resolved without an explicit layer Profile."""
+        registry = get_l1_registry()
+        for value in (None, ""):
+            with self.assertRaises(ValueError):
+                registry.profile(value)
+            with self.assertRaises(ValueError):
+                registry.entity_types(value)
+            with self.assertRaises(ValueError):
+                registry.relation_types(value)
+
+    def test_l1_known_profiles_resolve_to_their_whitelist(self):
+        """Registered profiles still resolve to their restricted layer whitelist."""
+        registry = get_l1_registry()
+        self.assertEqual(registry.profile("l2_industry").profile_id, "l2_industry")
+        self.assertIn("industry", registry.entity_types("l2_industry"))
+        self.assertIn("brand", registry.entity_types("l3_brand"))
+        self.assertNotIn("observation", registry.entity_types("l3_brand"))
+
+    def test_l1_validate_profile_reports_unknown_not_raises(self):
+        """The validator reports an unknown profile as an error string; it must
+        not raise (unlike the runtime query helpers, which fail fast)."""
+        registry = get_l1_registry()
+        self.assertEqual(registry.validate_profile("nope"), ["unknown profile 'nope'"])
+
+    def test_l1_registry_loads_layer_profiles(self):
+        registry = get_l1_registry()
+        self.assertIn("l2_industry", registry.profiles)
+        self.assertIn("l3_brand", registry.profiles)
+        self.assertEqual(set(registry.profiles), {"l2_industry", "l3_brand"})
+        self.assertIn("industry", registry.entity_types("l2_industry"))
+        self.assertIn("brand", registry.entity_types("l3_brand"))
+        self.assertNotIn("observation", registry.entity_types("l3_brand"))
+
+    def test_l1_profiles_are_self_consistent(self):
+        registry = get_l1_registry()
+        self.assertEqual(registry.validate_profiles(), [])
+
+    def test_l1_all_allowed_types_have_owner_metadata(self):
+        """Guard against orphaned schema members: every entity/relation a profile
+        allows should carry owner/scope metadata, so the layer contract (who owns,
+        stability, promotion target) is explicit rather than silently unmanaged."""
+        registry = get_l1_registry()
+        for profile_id, profile in registry.profiles.items():
+            miss_e = (profile.allowed_entity_types - set(profile.entity_type_metadata))
+            miss_r = (profile.allowed_relation_types - set(profile.relation_type_metadata))
+            self.assertFalse(
+                miss_e,
+                f"{profile_id}: allowed entity types lack owner metadata {sorted(miss_e)}",
+            )
+            self.assertFalse(
+                miss_r,
+                f"{profile_id}: allowed relation types lack owner metadata {sorted(miss_r)}",
+            )
+
+    def test_l1_profile_metadata_keeps_relations_inside_profile(self):
+        registry = get_l1_registry()
+        meta = registry.relation_metadata("offers", "l3_brand")
+        self.assertEqual(meta["owner_layer"], "l3")
+        self.assertNotIn("from_layer", meta)
+        self.assertNotIn("to_layer", meta)
+
+    def test_l1_promotion_policy_reads_profile_defaults(self):
+        policy = load_promotion_policy("l3_brand", default_threshold=0.9)
+        self.assertEqual(policy.confidence_threshold, 0.5)
+        self.assertTrue(policy.direct_stable_promotion)
+        self.assertFalse(policy.source_authority_ok("low"))
+        self.assertTrue(policy.source_authority_ok("high"))
+        self.assertTrue(policy.evidence_ok("crawled", "directly_supports"))
+
+    def test_extraction_prompt_is_profile_driven(self):
+        prompt = build_extraction_prompt("l3_brand")
+        self.assertIn("当前 schema profile: l3_brand", prompt)
+        self.assertIn("organization", prompt)
+        self.assertIn("offers", prompt)
+        self.assertIn("禁止读取或推断其他层本体", prompt)
+        self.assertIn("模块化实体/关系/指标维度", prompt)
+        self.assertIn("l3_brand_value_proof", prompt)
+        self.assertIn("品牌自述", prompt)
+        self.assertIn("metric_name", prompt)
+
+    def test_profile_validator_blocks_runtime_records_as_graph_types(self):
+        payload = {
+            "entities": [
+                {"id": "ent_brand_acme", "type": "brand", "canonical_name": "Acme", "aliases": []},
+                {"id": "ent_source_report", "type": "source", "canonical_name": "Report", "aliases": []},
+            ],
+            "relations": [
+                {
+                    "subject": "ent_brand_acme",
+                    "relation": "cites",
+                    "object": "ent_source_report",
+                    "confidence": 0.8,
+                }
+            ],
+            "statements": [],
+        }
+        result = validate_ontology(payload, profile_id="l3_brand")
+        self.assertFalse(result.ok)
+        self.assertTrue(any("unknown entity type 'source'" in error for error in result.errors))
+        self.assertTrue(any("unknown relation type 'cites'" in error for error in result.errors))
 
     # --- PaddleNLP NER candidate layer ---
 

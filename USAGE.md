@@ -19,7 +19,7 @@
 │ L1 通用知识层 │ 定义对象/关系/意图/任务/证据规则（方法与规范）        │
 │ L2 行业知识层 │ 实例化共享行业坐标系（品类/角色/问题/能力/主题）      │
 │ L3 品牌认知层 │ 十步执行器已实现；真实数据、治理门禁和图投影需集成验收 │
-│ L4 动态观测层 │ 保存搜索和 AI 回答的时序结果（未实现，仅定义对象）     │
+│ L4 动态观测层 │ 保存待验证的时效性资料快照（未实现，仅定义对象）       │
 └──────────────┴──────────────────────────────────────────────────┘
 ```
 
@@ -40,20 +40,15 @@ Knowledge_Graph/
 │
 ├── common_knowledge/                # ── L1 通用知识层 ──
 │   ├── ontology/
-│   │   ├── entities.yaml            # 21 种实体类型定义
-│   │   └── relations.yaml           # 31 种关系类型定义
+│   │   ├── l2_industry/             # L2 行业本体：实体、关系、指标
+│   │   └── l3_brand/                # L3 品牌本体：实体、关系、指标
 │   ├── intents/
 │   │   ├── intent_types.yaml        # 13 种意图 + 7 个决策阶段
-│   │   └── prompt_patterns.yaml     # 41 个提问词模式
+│   │   └── intent_types.yaml        # 通用知识查询意图
 │   ├── sources/
 │   │   ├── source_types.yaml        # 13 种来源类型（3级权威）
 │   │   └── authority_rules.yaml     # 20 条质量规则
-│   ├── tasks/                       # 9 个任务模板
-│   │   ├── brand_onboarding.yaml    # 品牌导入
-│   │   ├── prompt_generation.yaml   # 提问词生成
-│   │   ├── topic_planning.yaml      # 主题规划
-│   │   ├── search_diagnosis.yaml    # 搜索诊断
-│   │   ├── content_brief.yaml       # 内容 Brief
+│   ├── tasks/                       # 4 个知识构建/治理任务
 │   │   ├── industry_knowledge_build.yaml    # 行业知识构建
 │   │   ├── industry_knowledge_refresh.yaml  # 行业知识刷新
 │   │   ├── source_discovery.yaml    # 来源发现与验证
@@ -65,9 +60,8 @@ Knowledge_Graph/
 │   │   ├── source_discovery_policy.yaml    # 来源发现策略
 │   │   ├── knowledge_promotion_policy.yaml # 知识晋升策略
 │   │   └── report_evidence_policy.yaml     # 报告证据策略
-│   └── examples/
-│       ├── positive_examples.yaml   # 26 组正确示例
-│       └── negative_examples.yaml   # 25 组错误示例
+│   ├── contracts/                   # 治理、运行协议等通用契约
+│   └── schema_profiles/             # 抽取规则和 L2/L3 独立 Profile
 │
 ├── industry_knowledge/              # ── L2 行业知识层 ──
 │   ├── README.md                    # L2 技术文档（1916 行）
@@ -77,9 +71,7 @@ Knowledge_Graph/
 │   │   └── industry_requirement.example.yaml
 │   ├── schemas/                     # 8 个 JSON Schema
 │   ├── taxonomies/                  # 分类模板
-│   │   ├── capabilities/            # 能力字典模板
-│   │   ├── decision_factors/        # 决策因素模板
-│   │   └── topics/                  # 主题树模板
+│   │   └── capabilities/            # 能力字典模板
 │   ├── pipelines/                   # 6 个数据处理流水线
 │   ├── policies/                    # 3 个 L2 策略
 │   └── examples/crm/                # CRM 试点示例
@@ -108,43 +100,27 @@ Knowledge_Graph/
 
 ## 3. L1 通用知识层使用说明
 
-### 3.1 核心概念速查
+### 3.1 两套独立业务本体
 
-**21 种实体类型**（`ontology/entities.yaml`）：
+L1 分别保存两套完整定义，通过 Profile 调用：
 
-| 实体 | 中文 | 描述 |
-|------|------|------|
-| brand | 品牌 | 提供产品或服务的组织 |
-| product | 产品 | 可独立描述的产品或服务 |
-| industry | 行业 | 宏观行业分类 |
-| category | 品类 | 市场中的解决方案类别 |
-| audience | 用户角色 | 相似任务和决策权的用户群体 |
-| use_case | 使用场景 | 用户使用产品的情境 |
-| capability | 能力 | 产品能做什么（v1.1.0 新增） |
-| decision_factor | 决策因素 | 用户选型关注的因素（v1.1.0 新增） |
-| job_to_be_done | 用户任务 | 用户想完成的任务（v1.1.0 新增） |
-| outcome | 期望结果 | 期望取得的业务结果（v1.1.0 新增） |
-| problem | 用户问题 | 用户遇到的痛点 |
-| topic | 主题 | 可持续组织内容的话题 |
-| prompt | 提问词 | 面向引擎的具体问题 |
-| competitor | 竞品 | 形成竞争的对象 |
-| content | 内容 | 内容资产 |
-| source | 来源 | 内容或事实的出处 |
-| fact | 事实 | 有证据支持的客观陈述 |
-| claim | 主张 | 有来源的主观陈述 |
-| observation | 观测 | 特定时间的快照 |
+- `l2_industry` 只加载 L2 行业实体、关系和指标。
+- `l3_brand` 只加载 L3 品牌实体、关系和指标。
 
-**31 种关系类型**（`ontology/relations.yaml`）已覆盖：
-- 结构：`belongs_to`, `operates_in`
-- 行为：`serves`, `supports_use_case`, `solves`, `has_capability`, `capability_supports_use_case`
-- 市场：`competes_with`, `alternative_to`, `partner_of`
-- 内容：`has_topic`, `covers`, `targets`, `expresses_intent`, `mentions`
-- 证据：`cites`, `supports`, `contradicts`, `derived_from`
-- 决策（v1.1.0 新增）：`has_problem`, `has_decision_factor`, `requires_capability`, `performs`, `produces_outcome`, `achieves_outcome`
+两层不继承共同业务本体，不建立跨层关系，也不相互读取指标。同名代码可以存在，但只按
+当前 Profile 的定义解析。`metric` 和 `evidence` 不是构图实体；指标保存在本层
+`metrics.yaml`，证据属于运行时记录。
+
+```powershell
+python -m runtime.l1.entity_types --profile l2_industry
+python -m runtime.l1.relation_types --profile l2_industry
+python -m runtime.l1.entity_types --profile l3_brand
+python -m runtime.l1.relation_types --profile l3_brand
+```
 
 ### 3.2 如何新增一个实体类型
 
-1. 打开 `common_knowledge/ontology/entities.yaml`
+1. 根据归属层打开 `common_knowledge/ontology/l2_industry/entities.yaml` 或 `common_knowledge/ontology/l3_brand/entities.yaml`
 2. 在 `entity_types:` 列表末尾添加新实体，格式如下：
 
 ```yaml
@@ -164,7 +140,7 @@ Knowledge_Graph/
 ```
 
 3. 更新文件头部 `meta.version` 和底部 `changelog`
-4. 如果新实体参与新的关系，同步更新 `relations.yaml`
+4. 如果新实体参与关系，只更新同目录的 `relations.yaml`，不得引用另一层类型
 
 > **注意**：修改 entity 类型属于主版本变更，如果破坏兼容性应升主版本（如 2.0.0）；仅新增类型属于次版本变更（1.x.0）。
 
@@ -208,16 +184,7 @@ how_to        操作方法
 alternative   替代方案
 ```
 
-要找提问词模式，参考 `intents/prompt_patterns.yaml`。例如对比类意图：
-```yaml
-- id: pat_cmp_01
-  pattern: "{product_a} 和 {product_b} 哪个更好？"
-  intent_id: intent_comparison
-  expected_entities: [product, competitor]
-  language: zh
-  examples:
-    - "Salesforce 和 HubSpot 哪个更好？"
-```
+查询意图只用于定义知识检索的语义范围；具体提问词生成不属于当前 L1 项目。
 
 ### 3.5 事实 vs 主张 vs 观测 vs 推断
 
@@ -227,7 +194,7 @@ alternative   替代方案
 |------|------|------|
 | **fact** | 有来源、客观可验证 | "该功能 2024 年 Q3 上线" |
 | **claim** | 有来源、但含立场/主观 | "行业领先"（品牌自述） |
-| **observation** | 特定时间的快照 | "某次 AI 回答提及品牌" |
+| **observation** | 特定时间的快照 | "某季度报告披露的市场数据" |
 | **inference** | 由多条前提推导 | "基于数据，品牌可见度上升" |
 
 **关键规则**：
@@ -257,8 +224,8 @@ L2 不是积累网页，而是建立**可复用的行业坐标系**：
 步骤 2: 编译研究需求（requirements/）
    └─ 生成 Industry Knowledge Requirement 契约文件
 
-步骤 3: 提交给 geo-research 生成行业报告
-   └─ geo-research 返回：报告 + 引用清单 + 证据包 + 覆盖台账
+步骤 3: 提交给外部资料采集工具生成行业资料
+   └─ 采集工具返回：资料 + 引用清单 + 证据包 + 覆盖台账
 
 步骤 4: 报告解析与证据解析（pipelines/）
    └─ report_ingestion → evidence_resolution
@@ -272,7 +239,7 @@ L2 不是积累网页，而是建立**可复用的行业坐标系**：
 
 ### 4.3 理解 Industry Knowledge Requirement
 
-参考 `requirements/industry_requirement.example.yaml`。这是发给 geo-research 的"任务合同"，定义了：
+参考 `requirements/industry_requirement.example.yaml`。这是发给资料采集工具的任务合同，定义了：
 - `required_dimensions`：必须研究哪些数据维度
 - `source_requirements`：允许哪些来源类型、不允许哪些
 - `report_contract`：报告格式、引用格式、必需交付物
@@ -340,7 +307,7 @@ L3 用于把某个客户品牌的官网、企业知识库、产品资料、案�
 
 ```
 来源登记 → 原件门禁 → 版式解析 → 语义分块 → 候选抽取
-→ 实体归一 → L2 映射 → 断言分类 → 证据核验 → 审核晋升
+→ L3 层内实体归一 → 断言分类 → 证据核验 → 审核晋升
 ```
 
 对应 `brand_knowledge/pipelines/` 下的 10 个文件。
@@ -360,7 +327,7 @@ proof_and_case, service_and_poc, messaging_and_content, competition_mapping
 
 ### 5.6 L3 数据库
 
-`brand_knowledge/database/brand_l3_migration.sql` 定义了 11 张业务表（tenant、brand_workspace、assertion、assertion_evidence、brand_mapping、claim_policy 等）+ RLS。这是与 L1 定义注册库（`database/schema.sql`）**独立**的迁移。
+`brand_knowledge/database/brand_l3_migration.sql` 定义了 10 张业务表（tenant、brand_workspace、assertion、assertion_evidence、claim_policy 等）+ RLS。这是与 L1 定义注册库（`database/schema.sql`）**独立**的迁移。
 
 该迁移依赖 `runtime/migrations/l2_migration.sql` 提供的 `entity`、`evidence`、`document` 等基础表。使用 `python -m runtime.migrations migrate` 按 L1 → L2 → L3 顺序初始化，随后可以运行 Neo4j 投影。
 
@@ -416,7 +383,7 @@ python database/publish.py --dry-run
 python database/publish.py
 
 # 只发布单个文件
-python database/publish.py --file ontology/entities.yaml
+python database/publish.py --file ontology/l2_industry/entities.yaml
 ```
 
 ### 6.4 数据库 10 张表（9 核心 + 1 辅助）
@@ -425,13 +392,13 @@ python database/publish.py --file ontology/entities.yaml
 |------|-----------|------|
 | `knowledge_definition` | 所有文件 | 文件版本元数据 |
 | `knowledge_version` | 自动 | 版本变更历史 |
-| `entity_type` | ontology/entities.yaml | 21 种实体类型 |
-| `relation_type` | ontology/relations.yaml | 31 种关系类型 |
+| `entity_type` | ontology/l2_industry/entities.yaml、ontology/l3_brand/entities.yaml | 两套独立构图实体类型 |
+| `relation_type` | ontology/l2_industry/relations.yaml、ontology/l3_brand/relations.yaml | 两套独立层内关系类型 |
 | `intent_definition` | intents/intent_types.yaml | 13 种意图 |
-| `task_template` | tasks/*.yaml | 9 个任务模板 |
+| `task_template` | tasks/*.yaml | 4 个知识构建/治理任务 |
 | `source_policy` | sources/source_types.yaml | 13 种来源类型 |
 | `quality_rule` | sources/authority_rules.yaml | 20 条质量规则 |
-| `example_case` | examples/*.yaml | 示例案例 |
+| `example_case` | 预留 | 评测案例表，当前不随 L1 发布 |
 | `decision_stage` | intents/intent_types.yaml | 7 个决策阶段（辅助表） |
 
 ---
@@ -491,17 +458,17 @@ git checkout v1.0.0
 
 ### 场景 A：为现有品牌进行品牌导入
 
-1. 参考 `common_knowledge/tasks/brand_onboarding.yaml` 理解所需上下文
-2. 参考 `common_knowledge/examples/positive_examples.yaml` 中的品牌导入示例
-3. 收集品牌官网、产品目录、行业分类、目标用户信息
-4. 创建品牌、产品、受众实体，建立 operates_in / belongs_to / serves 关系
+1. 参考 `common_knowledge/tasks/industry_knowledge_build.yaml` 定义构建任务
+2. 收集可追溯来源并按 L1 本体抽取实体、关系和陈述
+3. 运行关系、证据、冲突和上下文校验
+4. 通过 `knowledge_promotion` 流程晋升为可检索知识
 
 ### 场景 B：为某个行业建立 L2 知识库
 
 1. 复制 `industry_knowledge/scopes/industry_scope.example.yaml` 为你的行业
 2. 修改行业名称、品类、市场、目标受众
 3. 复制 `industry_knowledge/requirements/industry_requirement.example.yaml`
-4. 生成研究需求，提交给 geo-research 采集
+4. 生成研究需求并交给外部采集工具，返回后按 pipelines/ 定义的处理流程抽取和验证知识
 5. 报告返回后，按 pipelines/ 定义的处理流程抽取和验证知识
 
 ### 场景 C：验证当前知识定义是否一致
@@ -516,9 +483,8 @@ python database/publish.py --validate
 
 ## 9. 参考资源
 
-- [L1 技术规范](c:\Users\xiaolong_an\Documents\Codex\2026-08-06\xuan\outputs\GEO第一层通用知识层技术规范_v1.md)
+- [L1 设计与使用说明](L1_DESIGN_AND_USAGE.md)
 - [L2 技术文档](industry_knowledge/README.md)
 - [Schema.org](https://schema.org/)
 - [W3C SKOS](https://www.w3.org/TR/skos-reference/)
-- [GEO 论文](https://arxiv.org/abs/2311.09735)
 - [Graph RAG 论文](https://arxiv.org/abs/2404.16130)

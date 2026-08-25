@@ -49,29 +49,39 @@ DB_CONFIG = {
 
 # 文件→表映射
 FILE_TABLE_MAP = {
-    "ontology/entities.yaml": {
+    "ontology/l2_industry/entities.yaml": {
         "table": "entity_type",
         "key_field": "type_code",
-        "key_path": "type",
+        "key_path": "type_id",
         "data_path": "entity_types",
         "extra_fields": {},
     },
-    "ontology/relations.yaml": {
+    "ontology/l2_industry/relations.yaml": {
         "table": "relation_type",
         "key_field": "relation_code",
-        "key_path": "relation",
+        "key_path": "relation_id",
         "data_path": "relation_types",
         "extra_fields": {
             "subject_types": "subject_types",
             "object_types": "object_types",
         },
     },
-    "intents/intent_types.yaml": {
-        "table": "intent_definition",
-        "key_field": "intent_code",
-        "key_path": "id",
-        "data_path": "intent_types",
+    "ontology/l3_brand/entities.yaml": {
+        "table": "entity_type",
+        "key_field": "type_code",
+        "key_path": "type_id",
+        "data_path": "entity_types",
         "extra_fields": {},
+    },
+    "ontology/l3_brand/relations.yaml": {
+        "table": "relation_type",
+        "key_field": "relation_code",
+        "key_path": "relation_id",
+        "data_path": "relation_types",
+        "extra_fields": {
+            "subject_types": "subject_types",
+            "object_types": "object_types",
+        },
     },
     "sources/source_types.yaml": {
         "table": "source_policy",
@@ -85,51 +95,6 @@ FILE_TABLE_MAP = {
         "key_field": "rule_code",
         "key_path": "id",
         "data_path": "rules",
-        "extra_fields": {},
-    },
-    "tasks/brand_onboarding.yaml": {
-        "table": "task_template",
-        "key_field": "task_code",
-        "key_path": "id",
-        "data_path": None,
-        "is_single": True,
-        "record_key": "task",
-        "extra_fields": {},
-    },
-    "tasks/prompt_generation.yaml": {
-        "table": "task_template",
-        "key_field": "task_code",
-        "key_path": "id",
-        "data_path": None,
-        "is_single": True,
-        "record_key": "task",
-        "extra_fields": {},
-    },
-    "tasks/topic_planning.yaml": {
-        "table": "task_template",
-        "key_field": "task_code",
-        "key_path": "id",
-        "data_path": None,
-        "is_single": True,
-        "record_key": "task",
-        "extra_fields": {},
-    },
-    "tasks/search_diagnosis.yaml": {
-        "table": "task_template",
-        "key_field": "task_code",
-        "key_path": "id",
-        "data_path": None,
-        "is_single": True,
-        "record_key": "task",
-        "extra_fields": {},
-    },
-    "tasks/content_brief.yaml": {
-        "table": "task_template",
-        "key_field": "task_code",
-        "key_path": "id",
-        "data_path": None,
-        "is_single": True,
-        "record_key": "task",
         "extra_fields": {},
     },
     # v1.1.0 新增任务
@@ -169,23 +134,6 @@ FILE_TABLE_MAP = {
         "record_key": "task",
         "extra_fields": {},
     },
-    "examples/positive_examples.yaml": {
-        "table": "example_case",
-        "key_field": "case_code",
-        "key_path": "id",
-        "data_path": "examples",
-        "extra_fields": {"case_type": "positive"},
-    },
-    "examples/negative_examples.yaml": {
-        "table": "example_case",
-        "key_field": "case_code",
-        "key_path": "id",
-        "data_path": None,
-        "is_multi_group": True,
-        "group_prefix": "task_",
-        "group_suffix": "_examples",
-        "extra_fields": {"case_type": "negative"},
-    },
 }
 
 # 字段映射：YAML 字段 → 数据库列
@@ -215,20 +163,6 @@ FIELD_MAPPING = {
         "confidence_required": "confidence_required",
         "source_refs_required": "source_refs_required",
         "examples": "examples",
-        "version": "version",
-        "status": "status",
-    },
-    "intent_definition": {
-        "id": "intent_code",
-        "name": "name",
-        "name_en": "name_en",
-        "decision_stage": "decision_stage",
-        "description": "description",
-        "question_patterns": "question_patterns",
-        "expected_answer_blocks": "expected_answer_blocks",
-        "preferred_evidence": "preferred_evidence",
-        "content_types": "content_types",
-        "quality_checks": "quality_checks",
         "version": "version",
         "status": "status",
     },
@@ -710,64 +644,47 @@ def validate_all():
                     except TypeError as exc:
                         errors.append(f"JSONB 序列化失败 {project_relpath}[{index}].{field}: {exc}")
 
-    # L1 注册表之间的引用一致性。
-    try:
-        entities = yaml_data["common_knowledge/ontology/entities.yaml"]["entity_types"]
-        relations = yaml_data["common_knowledge/ontology/relations.yaml"]["relation_types"]
-        intents = yaml_data["common_knowledge/intents/intent_types.yaml"]["intent_types"]
-        patterns = yaml_data["common_knowledge/intents/prompt_patterns.yaml"]["patterns"]
-        entity_types = {item["type"] for item in entities}
-        relation_codes = {item["relation"] for item in relations}
-        intent_codes = {item["id"] for item in intents}
-        task_codes = {
-            data["task"]["id"]
-            for path, data in yaml_data.items()
-            if path.startswith("common_knowledge/tasks/")
-        }
-        allowed_non_entity_types = {"intent", "assertion"}
-        allowed_cardinalities = {
-            "one-to-one", "one-to-many", "many-to-one", "many-to-many"
-        }
+    # L2/L3 本体分别校验；同名代码只在所属 Profile 内解析。
+    allowed_cardinalities = {"one-to-one", "one-to-many", "many-to-one", "many-to-many"}
+    for profile_id in ("l2_industry", "l3_brand"):
+        try:
+            base = f"common_knowledge/ontology/{profile_id}"
+            entities = yaml_data[f"{base}/entities.yaml"]["entity_types"]
+            relations = yaml_data[f"{base}/relations.yaml"]["relation_types"]
+            metrics = yaml_data[f"{base}/metrics.yaml"]["metrics"]
+            entity_types = {item["type"] for item in entities}
+            relation_codes = {item["relation"] for item in relations}
 
-        for label, items, key in (
-            ("entity type", entities, "type"),
-            ("relation", relations, "relation"),
-            ("intent", intents, "id"),
-            ("prompt pattern", patterns, "id"),
-        ):
-            values = [item[key] for item in items]
-            duplicates = sorted({value for value in values if values.count(value) > 1})
-            if duplicates:
-                errors.append(f"重复 {label}: {', '.join(duplicates)}")
+            for label, items, key in (
+                ("entity type", entities, "type"),
+                ("relation", relations, "relation"),
+                ("metric", metrics, "metric"),
+            ):
+                values = [item[key] for item in items]
+                duplicates = sorted({value for value in values if values.count(value) > 1})
+                if duplicates:
+                    errors.append(f"{profile_id} 重复 {label}: {', '.join(duplicates)}")
 
-        for relation in relations:
-            if relation.get("cardinality") not in allowed_cardinalities:
-                errors.append(
-                    f"未知关系基数 {relation['relation']}: {relation.get('cardinality')}"
-                )
-            for field in ("subject_types", "object_types"):
-                for type_code in relation.get(field, []):
-                    if type_code not in entity_types | allowed_non_entity_types:
-                        errors.append(f"未知实体类型 {relation['relation']}.{field}: {type_code}")
-            inverse = relation.get("inverse_relation")
-            if inverse and inverse not in relation_codes:
-                errors.append(f"未知反向关系 {relation['relation']}: {inverse}")
-
-        for pattern in patterns:
-            if pattern.get("intent_id") not in intent_codes:
-                errors.append(f"未知意图引用 {pattern['id']}: {pattern.get('intent_id')}")
-
-        positive = yaml_data["common_knowledge/examples/positive_examples.yaml"]["examples"]
-        negative = yaml_data["common_knowledge/examples/negative_examples.yaml"]
-        examples = list(positive)
-        for group, items in negative.items():
-            if group.startswith("task_") and group.endswith("_examples") and isinstance(items, list):
-                examples.extend(items)
-        for example in examples:
-            if example.get("task_id") not in task_codes:
-                errors.append(f"未知任务引用 {example.get('id')}: {example.get('task_id')}")
-    except (KeyError, TypeError) as exc:
-        errors.append(f"L1 交叉引用检查失败: {exc}")
+            for entity in entities:
+                if entity.get("type_id") != f"{profile_id}.{entity['type']}":
+                    errors.append(f"{profile_id} 实体缺少限定 type_id: {entity['type']}")
+            for relation in relations:
+                if relation.get("relation_id") != f"{profile_id}.{relation['relation']}":
+                    errors.append(f"{profile_id} 关系缺少限定 relation_id: {relation['relation']}")
+                if relation.get("cardinality") not in allowed_cardinalities:
+                    errors.append(f"未知关系基数 {profile_id}.{relation['relation']}: {relation.get('cardinality')}")
+                for field in ("subject_types", "object_types"):
+                    for type_code in relation.get(field, []):
+                        if type_code not in entity_types:
+                            errors.append(f"跨层或未知实体类型 {profile_id}.{relation['relation']}.{field}: {type_code}")
+                inverse = relation.get("inverse_relation")
+                if inverse and inverse not in relation_codes:
+                    errors.append(f"未知反向关系 {profile_id}.{relation['relation']}: {inverse}")
+            for metric in metrics:
+                if metric.get("external_layer_dependencies"):
+                    errors.append(f"指标存在跨层依赖 {profile_id}.{metric['metric']}")
+        except (KeyError, TypeError) as exc:
+            errors.append(f"{profile_id} 本体交叉引用检查失败: {exc}")
 
     # 校验 JSON Schema 本身以及仓库中与 Schema 对应的示例。
     if not HAS_JSONSCHEMA:

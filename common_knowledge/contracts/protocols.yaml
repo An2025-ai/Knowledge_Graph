@@ -1,0 +1,97 @@
+meta:
+  version: 1.0.0
+  status: active
+  scope: shared
+  description: L1 runtime protocols for LLM operations, retrieval context packages, and governed updates.
+
+operation_roles:
+
+  - role: producer
+    name: 内部生产 LLM
+    description: L1-L3 pipeline 中的抽取/分类/消歧 LLM，从文档中产生候选知识
+    write_mode: candidate_only
+    direction: document → LLM → candidate
+    operations:
+      - code: extract_knowledge
+        name: 知识抽取
+        input: [document, context]
+        output: [entities, relations, assertions, evidence_refs]
+      - code: classify_assertion
+        name: 陈述分类
+        input: [text, source, context]
+        output: [assertion_type, rationale, evidence_refs]
+      - code: resolve_entity
+        name: 实体消歧
+        input: [mention, candidate_entities, context]
+        output: [resolved_entity_id, confidence, rationale]
+      - code: detect_conflict
+        name: 冲突检测
+        input: [assertions, context]
+        output: [conflicts, rationale]
+
+  - role: validator
+    name: 校验 LLM
+    description: 只读校验操作，不修改图谱数据
+    write_mode: read_only
+    direction: graph → LLM → validation_result
+    operations:
+      - code: validate_relation
+        name: 关系校验
+        input: [subject, relation, object, context]
+        output: [valid, violations]
+
+  - role: consumer
+    name: 外部消费 LLM
+    description: 内容生成/问答/分析 LLM（L4 层），只读检索知识图谱
+    write_mode: read_only
+    direction: graph → context_package → LLM → output
+    operations:
+      - code: retrieve_context
+        name: 上下文检索
+        input: [query, scope, filters]
+        output: [context_package]
+    retrieval_contract:
+      meta:
+        version: 1.0.0
+        status: active
+        scope: shared
+        description: 面向 LLM 的可追溯知识上下文格式
+      context_package:
+        required_fields: [query, scope, entities, relations, assertions, evidence, conflicts, missing_information]
+        assertion_fields: [statement, statement_class, confidence, source_refs, valid_from, valid_to, scope]
+        rules:
+          - 每条 assertion 必须带 statement_class
+          - fact 和 claim 必须带 source_refs
+          - observation 必须带 valid_from 或 valid_to
+          - inference 必须带 supporting_assertion_refs
+          - 冲突不得被静默丢弃
+
+  - role: governor
+    name: 治理 LLM / 人工审批
+    description: 负责知识变更审批的治理角色，只能创建提案不能直接修改 active 知识
+    write_mode: proposal_only
+    direction: feedback → change_proposal → lifecycle → graph
+    operations:
+      - code: propose_update
+        name: 更新提案
+        input: [feedback, retrieved_subgraph, existing_assertions]
+        output: [change_proposal]
+    update_protocol:
+      meta:
+        version: 1.0.0
+        status: active
+        scope: shared
+        description: LLM、L4 反馈和知识层之间的受治理更新流程
+      change_lifecycle: [draft, validated, benchmarked, approved, published, rejected]
+      change_types:
+        - add_entity_type
+        - add_relation_type
+        - modify_constraint
+        - modify_policy
+        - deprecate_type
+        - revise_assertion
+      rules:
+        - LLM 只能创建 candidate_assertion 或 change_proposal
+        - active 知识不得被无版本覆盖
+        - schema 变更必须通过全量引用检查
+        - published 变更必须保留迁移和回滚信息

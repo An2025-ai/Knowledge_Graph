@@ -112,6 +112,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--text", help="Raw text input for extraction.")
     parser.add_argument("--run-id", help="Explicit extraction run id.")
     parser.add_argument("--geo-research-run-id", help="Geo-research run id for lineage.")
+    parser.add_argument("--searxng-url", help="SearXNG URL passed to geo-research.")
+    parser.add_argument("--results-per-query", "--authority-results-per-query",
+                        dest="results_per_query", type=int,
+                        help="geo-research search results per query.")
+    parser.add_argument("--max-pages", type=int, help="geo-research maximum crawled pages.")
+    parser.add_argument("--max-sources", type=int, help="geo-research maximum model sources.")
+    parser.add_argument("--max-report-sources", type=int, help="geo-research final cited/model source cap.")
+    parser.add_argument("--max-industry-authorities", type=int, help="Maximum deduped authority/domain pool size.")
+    parser.add_argument("--max-pages-per-authority", type=int, help="Maximum crawled pages from one authority/domain.")
+    parser.add_argument("--max-pages-per-authority-per-dim", type=int, help="Maximum crawled pages from one authority/domain for one dimension.")
+    parser.add_argument("--min-sources-per-dimension", "--min-per-dim",
+                        dest="min_sources_per_dimension", type=int,
+                        help="Minimum acceptable cited sources per dimension.")
+    parser.add_argument("--target-sources-per-dimension", "--target-per-dim",
+                        dest="target_sources_per_dimension", type=int,
+                        help="Target cited sources per dimension.")
     parser.add_argument(
         "--skip-source-enrichment",
         action="store_true",

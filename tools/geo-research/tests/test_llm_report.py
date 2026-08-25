@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from src.llm_client import LLMConfig, extract_json_object
 from src.llm_report import (
+    build_authority_pool,
     evidence_for_model,
     is_geo_request,
     is_public_url,
@@ -119,6 +120,30 @@ class ReportPipelineTests(unittest.TestCase):
         ]
         selected = select_for_crawl(records, 2)
         self.assertEqual({item["query"] for item in selected}, {"q1", "q2"})
+
+    def test_authority_pool_caps_deduped_domains_not_sources(self):
+        records = [
+            {"id": "a1", "query": "site:gov.cn 行业 规模", "dataset": "market", "rank": 1, "url": "https://www.gov.cn/a", "dimension": "market_facts"},
+            {"id": "a2", "query": "site:gov.cn 行业 趋势", "dataset": "market", "rank": 2, "url": "https://www.gov.cn/b", "dimension": "market_facts"},
+            {"id": "b1", "query": "site:stats.gov.cn 行业 数据", "dataset": "market", "rank": 1, "url": "https://stats.gov.cn/a", "dimension": "market_facts"},
+        ]
+        pool = build_authority_pool(records, limit=1)
+        self.assertEqual(len(pool), 1)
+        self.assertIn(pool[0]["authority_id"], {"gov.cn", "stats.gov.cn"})
+
+    def test_crawl_selection_respects_authority_page_caps(self):
+        records = [
+            {"id": "a1", "query": "site:gov.cn q1", "dataset": "market", "rank": 1, "url": "https://gov.cn/a", "dimension": "d1"},
+            {"id": "a2", "query": "site:gov.cn q2", "dataset": "market", "rank": 1, "url": "https://gov.cn/b", "dimension": "d1"},
+            {"id": "b1", "query": "site:stats.gov.cn q3", "dataset": "market", "rank": 1, "url": "https://stats.gov.cn/a", "dimension": "d1"},
+        ]
+        pool = build_authority_pool(records, limit=2)
+        selected = select_for_crawl(records, 3, authority_pool=pool, max_pages_per_authority=1)
+        self.assertEqual(len(selected), 2)
+        self.assertEqual(
+            {item["url"].split("/")[2] for item in selected},
+            {"gov.cn", "stats.gov.cn"},
+        )
 
 
 if __name__ == "__main__":

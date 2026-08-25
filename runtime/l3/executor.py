@@ -22,9 +22,7 @@ from typing import Any
 
 from runtime.db import DB
 
-# Default pipeline chain. The L2 mapping step remains available as an explicit
-# single pipeline, but is not part of --all because layered graph output should
-# not require cross-layer links.
+# L3 is self-contained and never creates mappings to L2.
 DEFAULT_PIPELINES = [
     "source_registration",
     "original_file_gate",
@@ -37,9 +35,7 @@ DEFAULT_PIPELINES = [
     "evidence_verification",
     "review_promotion",
 ]
-
-OPTIONAL_PIPELINES = ["l2_mapping"]
-PIPELINES = DEFAULT_PIPELINES + OPTIONAL_PIPELINES
+PIPELINES = DEFAULT_PIPELINES
 
 # Pipelines that need a --document-id (produced by source_registration).
 REQUIRE_DOCUMENT_ID = {
@@ -95,11 +91,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--pipeline", choices=PIPELINES, help="Name of a single L3 pipeline to run")
     p.add_argument("--all", action="store_true", help="Run the default L3 pipelines in sequence")
-    p.add_argument(
-        "--include-l2-mapping",
-        action="store_true",
-        help="Include the optional L3-to-L2 mapping step in --all runs",
-    )
     p.add_argument("--file", help="Path to the brand source document (md/txt/html)")
     p.add_argument("--brand", required=True, help="Brand key / id")
     p.add_argument("--tenant", help="Tenant key (default: 'default')")
@@ -139,8 +130,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.all:
         names = list(DEFAULT_PIPELINES)
-        if args.include_l2_mapping:
-            names.insert(names.index("assertion_classification"), "l2_mapping")
     else:
         names = [args.pipeline]
 

@@ -1,0 +1,524 @@
+meta:
+  version: 3.0.0
+  updated_at: '2026-08-24'
+  status: active
+  layer: l3
+  profile_id: l3_brand
+  description: 由 L1 管理的 L3 品牌本体；只约束 L3 品牌知识实例。四维度精简：品牌身份、产品服务、技术能力、客户案例。L3 聚焦单一核心品牌视角，行业与市场语义由 L2 覆盖。
+  cross_layer_relations: false
+entity_types:
+
+# ============================== 品牌身份 ==============================
+- type: organization
+  canonical_name: 组织
+  canonical_name_en: Organization
+  definition: '作为法律或运营主体、负责拥有并运营品牌的实体。一个组织可拥有并运营多个品牌，与品牌身份（brand）严格区分，用于解决"一个法律实体 = 多个品牌"的归属问题。'
+  examples:
+  - 上海智算云图科技有限公司
+  - 阿里巴巴集团
+  - 华为技术有限公司
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - legal_name
+  - registration_number
+  - headquarters
+  - official_domains
+  constraints:
+  - 通过 owns_brand 关系拥有 brand，一个组织可拥有多个品牌
+  - 品牌不是法律实体，organization 才是
+  - 与 brand 的区别：organization 是法律主体，brand 是市场品牌身份
+  version: 1.2.0
+  type_id: l3_brand.organization
+  layer: l3
+  owner_layer: l3
+  ontology_group: brand_identity
+
+- type: brand
+  canonical_name: 品牌
+  canonical_name_en: Brand
+  definition: 'L3 聚焦的核心品牌身份，是品牌知识图谱的主题根节点。品牌是对外提供产品或服务的品牌身份，通过 offers 提供产品、通过 owns_brand 归属组织。所有品牌维度的关系和指标都以该核心品牌为中心组织。'
+  examples:
+  - Salesforce
+  - 华为
+  - 字节跳动
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - brand_logo
+  - brand_slogan
+  - brand_positioning
+  - founding_year
+  - headquarters
+  - website
+  constraints:
+  - canonical_name 必须唯一
+  - L3 只有一个核心品牌，所有竞争、案例、产品关系围绕它组织
+  - 品牌是品牌身份，产品是具体可售物，二者通过 offers 关系区分
+  - 通过 owned_by 反向关联一个 organization，通过 business_line 支持品牌下多个业务条线
+  version: 1.1.0
+  type_id: l3_brand.brand
+  layer: l3
+  owner_layer: l3
+  ontology_group: brand_identity
+
+- type: business_line
+  canonical_name: 业务线
+  canonical_name_en: Business Line
+  definition: '核心品牌之下按目标市场、价值主张或交付模式划分的经营条线。业务线是品牌内、产品之上的中间组织单元，用于表达核心品牌在不同战场的布局，与产品（可售单位）和竞品（外部实体）均有区别。'
+  examples:
+  - 华为消费者业务
+  - 云计算事业群
+  - 企业服务业务线
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - parent_business_line_id
+  - brand_id
+  - primary_product_ids
+  - revenue_model
+  constraints:
+  - 必须通过 belongs_to_line 反向关联到至少一个 brand
+  - 支持层级结构（通过 parent_business_line_id）
+  - 同一品牌下业务线之间是并行编排关系，不引入竞争参照
+  - 与 product 的区别：business_line 是经营单元，product 是该单元内的可售产物
+  version: 1.0.0
+  type_id: l3_brand.business_line
+  layer: l3
+  owner_layer: l3
+  ontology_group: brand_identity
+
+- type: brand_claim
+  canonical_name: 品牌主张
+  canonical_name_en: Brand Claim
+  definition: '核心品牌对外公开作出、可在证据中核实的优势陈述或承诺，表达品牌希望市场认知的特定定位。品牌主张是品牌身份的可验证事实层，与产品的客观能力（capability）相对，强调"品牌宣传了什么"。
+ '
+  examples:
+  - 全球最值得信赖的企业云平台
+  - 让企业数据资产不再沉睡
+  - 面向未来的智能终端
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - claim_strength
+  - claim_category
+  - evidence_refs
+  constraints:
+  - 品牌主张必须来自品牌自有资料并通过 claims 关联到品牌
+  - 属于"宣传层"，与既成事实（产品能力、交付结果）区分
+  - 每条主张应可追溯到具体证据来源，避免无据断言
+  - 与 capability 的区别：brand_claim 是品牌对外宣传主张，capability 是可核实的产品能力
+  version: 1.0.0
+  type_id: l3_brand.brand_claim
+  layer: l3
+  owner_layer: l3
+  ontology_group: brand_identity
+
+# ============================== 产品服务 ==============================
+- type: product
+  canonical_name: 产品
+  canonical_name_en: Product
+  definition: '核心品牌提供、可独立描述和定价的具体产品或服务。产品是品牌交付价值的落地单元，归属业务线、具备能力、支撑使用场景、面向用户角色、并通过案例佐证价值。'
+  examples:
+  - Salesforce Sales Cloud
+  - 华为 Mate 60 Pro
+  - 企业微信
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - brand_id
+  - category_id
+  - pricing_model
+  - deployment_type
+  - product_line_id
+  constraints:
+  - 必须通过 offers 与至少一个 brand 关联
+  - 具备能力通过 has_capability 关联到 capability
+  - 相关版本通过 version_of 关联到 product_version
+  - 与 service 的区别：product 是可交付的具体产物，service 是围绕产物的持续性服务
+  version: 1.0.0
+  type_id: l3_brand.product
+  layer: l3
+  owner_layer: l3
+  ontology_group: product_solution
+
+- type: product_version
+  canonical_name: 产品版本
+  canonical_name_en: Product Version
+  definition: '某个产品的特定发布版本，具备明确的版本号、发布时间和该版本独有的能力或状态。版本是产品演化的时间切片，用于表达产品能力随版本升级的变化与代际演进。'
+  examples:
+  - Salesforce Winter '26
+  - 华为 HarmonyOS 4.0
+  - 企业微信 v4.1
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  - release_date
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - product_id
+  - version_notes
+  - superseded_version_id
+  - release_channel
+  constraints:
+  - 必须通过 version_of 关联到至少一个 product
+  - 新版本一般通过 supersedes 取代旧版本
+  - 一个版本的能力变更通过 has_capability 落实到能力变化
+  - 与 product 的区别：product 是持续存在的主体，product_version 是该主体的具体发布切片
+  version: 1.0.0
+  type_id: l3_brand.product_version
+  layer: l3
+  owner_layer: l3
+  ontology_group: product_solution
+
+- type: solution
+  canonical_name: 解决方案
+  canonical_name_en: Solution
+  definition: '核心品牌面向特定客户问题或行业场景，组合一个或多个产品与服务形成的整体交付方案。解决方案强调"针对谁解决了什么"，是品牌由产品向行业价值主张的延伸。'
+  examples:
+  - 面向制造企业的数字化转型解决方案
+  - 金融行业全渠道联络中心方案
+  - 中小企业一站式 CRM 方案
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - target_audience_ids
+  - covered_product_ids
+  - covered_service_ids
+  - industry_focus
+  constraints:
+  - 通过 composed_of 组合多个 product 或 service
+  - 面向特定 customer 或 audience，解决特定行业问题
+  - 与 product 的区别：product 是可售单体，solution 是面向问题/场景的组合交付
+  - 通过案例（case）佐证解决方案的实际成效
+  version: 1.0.0
+  type_id: l3_brand.solution
+  layer: l3
+  owner_layer: l3
+  ontology_group: product_solution
+
+- type: service
+  canonical_name: 服务
+  canonical_name_en: Service
+  definition: '核心品牌围绕产品交付提供的持续性或一次性服务，包括实施、培训、运维、咨询、支持等。服务与产品互补，构成客户完整获得价值所需的供给。'
+  examples:
+  - 专属实施服务
+  - 7×24 小时技术支持
+  - 企业战略咨询
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - service_type
+  - service_level
+  - related_product_ids
+  - pricing_model
+  constraints:
+  - 通常依托一个或多个 product 或 solution 提供
+  - 服务等级（service_level）应给出可核实的交付承诺
+  - 与 product 的区别：service 是持续性/过程性供给，product 是时可定义产出的产物
+  - 服务效果可通过案例（case）佐证
+  version: 1.0.0
+  type_id: l3_brand.service
+  layer: l3
+  owner_layer: l3
+  ontology_group: product_solution
+
+# ============================== 技术能力 ==============================
+- type: capability
+  canonical_name: 能力
+  canonical_name_en: Capability
+  definition: '产品具备的独立功能或技术能力，回答"产品能做什么"。能力是品牌内横向比较的共享坐标系，使不同产品、版本能在同一能力维度下客观比较，不预设好坏判断。'
+  examples:
+  - 销售预测
+  - 自然语言处理
+  - 自动化工作流
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - parent_capability_id
+  - related_problem_ids
+  - evaluation_dimensions
+  constraints:
+  - 只描述能力本身，不描述具体品牌是否具备
+  - 支持层级结构（通过 parent_capability_id）
+  - 通过 has_capability 关联到拥有该能力的产品/版本
+  - 与 technology 的区别：capability 是产品功能维度的能力，technology 是底层实现技术
+  version: 1.1.0
+  type_id: l3_brand.capability
+  layer: l3
+  owner_layer: l3
+  ontology_group: technical_capability
+
+- type: technology
+  canonical_name: 技术
+  canonical_name_en: Technology
+  definition: '核心品牌采用或自研的底层技术，是能力得以实现的工程基础。技术描述"用什么实现"，能力描述"能做什么"，目标是让品牌的技术底座与技术壁垒可被客观评估。'
+  examples:
+  - 自研分布式数据库
+  - 大语言模型推理引擎
+  - 端侧神经网络加速方案
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - technology_type
+  - maturity_level
+  - related_capability_ids
+  - research_origin
+  constraints:
+  - 通过基于关系（composition）落实到具体 product 或 capability
+  - 技术方向、成熟度应给出可核实依据
+  - 与 capability 的区别：technology 是底层实现，capability 是产品功能呈现
+  - 相关专利/认证通过课题关系佐证技术可信度
+  version: 1.0.0
+  type_id: l3_brand.technology
+  layer: l3
+  owner_layer: l3
+  ontology_group: technical_capability
+
+- type: certification
+  canonical_name: 认证
+  canonical_name_en: Certification
+  definition: '由第三方机构或权威标准体系授予产品、技术或服务的安全、合规、质量资质。认证为品牌的技术与产品能力提供外部背书，是可核实的外在证据。'
+  examples:
+  - ISO 27001 信息安全认证
+  - SOC 2 合规审计
+  - 等保三级认证
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - issuing_authority
+  - certification_type
+  - valid_from
+  - valid_until
+  constraints:
+  - 必须由可识别的第三方或标准机构授予（issuing_authority 必填）
+  - 通过认证关系（certifies）关联到具体 product、technology 或 service
+  - 认证有有效期，过期或失效应在 status 中体现
+  - 与 capability 的区别：capability 是产品自身能力，certification 是外部授予的资质
+  version: 1.0.0
+  type_id: l3_brand.certification
+  layer: l3
+  owner_layer: l3
+  ontology_group: technical_capability
+
+# ============================== 客户案例 ==============================
+- type: audience
+  canonical_name: 用户角色
+  canonical_name_en: Audience
+  definition: '具有相似任务、痛点和决策权的用户群体，是"谁"的维度。产品和解决方案面向特定用户角色，一个角色可在不同行业出现，是品牌价值主张的接收方。'
+  examples:
+  - 销售负责人
+  - CTO/技术决策者
+  - 中小企业主
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - persona_attributes
+  - decision_authority
+  constraints:
+  - canonical_name 必须唯一
+  - persona_attributes 为可选的结构化画像字段
+  - 与 customer 的区别：audience 是抽象的岗位/人群画像，customer 是具体可识别的客户对象
+  version: 1.0.0
+  type_id: l3_brand.audience
+  layer: l3
+  owner_layer: l3
+  ontology_group: customer_case
+
+- type: customer
+  canonical_name: 客户
+  canonical_name_en: Customer
+  definition: '使用或采购核心品牌产品/服务、在公开渠道可识别的具体客户对象。客户是品牌价值获得验证的实体对象，是案例与交付成果的载体。'
+  examples:
+  - 某某商业银行
+  - 某大型制造集团
+  - 某连锁零售企业
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - customer_industry
+  - customer_size
+  - customer_tier
+  - is_public_reference
+  constraints:
+  - 通过 adopted（采购）关系关联到所采用的 product 或 solution
+  - 具体客户对象应来自公开可核实的案例披露，不得虚构
+  - 与 audience 的区别：customer 是具体客户实体，audience 是抽象用户角色
+  - 通过案例（case）记录该客户的采用与成效
+  version: 1.0.0
+  type_id: l3_brand.customer
+  layer: l3
+  owner_layer: l3
+  ontology_group: customer_case
+
+- type: case
+  canonical_name: 案例
+  canonical_name_en: Case
+  definition: '核心品牌为特定客户交付产品/解决方案并获得可核实成效的完整故事。案例是品牌价值主张的实证，连接客户、产品/解决方案与交付成果，是营销与销售的核心素材。'
+  examples:
+  - 某制造业客户数字化转型案例
+  - 某银行渠道整合交付案例
+  examples_note: 案例 = 客户 + 采用方案 + 交付成果 + 成效证据
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - customer_id
+  - involved_product_ids
+  - involved_solution_ids
+  - outcome_metric_refs
+  - published_date
+  constraints:
+  - 必须关联至少一个 customer 与一个 product 或 solution
+  - 成效须能追溯到可核实的交付成果或数据指标
+  - 作为 proves 关系的载体，佐证品牌主张与产品能力
+  - 与 delivery_result 的区别：case 是完整叙事，delivery_result 是其中的成果条目
+  version: 1.0.0
+  type_id: l3_brand.case
+  layer: l3
+  owner_layer: l3
+  ontology_group: customer_case
+
+- type: delivery_result
+  canonical_name: 交付成果
+  canonical_name_en: Delivery Result
+  definition: '案例或客户现场中可衡量、可核实的交付产出与成效条目。交付成果是品牌价值主张的量化实证，通常以指标（如效率提升百分比、成本降幅、功能上线数）表达。'
+  examples:
+  - 线索转化率提升 42%
+  - 人工客服成本下降 35%
+  - 数据报表生成时间从 2 天缩至 30 分钟
+  required_fields:
+  - id
+  - type
+  - canonical_name
+  - status
+  - version
+  optional_fields:
+  - aliases
+  - description
+  - scope
+  - source_refs
+  - case_id
+  - metric_catalog_ref
+  - metric_value
+  - time_period
+  - verified_by
+  constraints:
+  - 必须可追溯到具体的 case 或 customer
+  - 成果数值（metric_value）应附带时间范围与证据来源
+  - 与 case 的区别：delivery_result 是成果条目，case 是包含成果的完整叙事
+  - 通过 evidence_sufficiency / proof_strength 等指标评估成果可信度
+  version: 1.0.0
+  type_id: l3_brand.delivery_result
+  layer: l3
+  owner_layer: l3
+  ontology_group: customer_case

@@ -41,7 +41,7 @@ scope:
     - use_cases
     - capabilities
     - decision_factors
-    - competition
+    - competition_structure
   research_questions:
     - 中小企业选择 CRM 最关注什么因素？
     - CRM 产品需要哪些标准能力？

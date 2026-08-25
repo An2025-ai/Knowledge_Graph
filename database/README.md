@@ -83,13 +83,13 @@ python database/publish.py
 |------|------|-----------|
 | `knowledge_definition` | 知识定义文件元数据 | 所有文件的 meta 信息 |
 | `knowledge_version` | 版本变更历史 | 自动记录 |
-| `entity_type` | 实体类型注册表 | `ontology/entities.yaml` |
-| `relation_type` | 关系类型注册表 | `ontology/relations.yaml` |
+| `entity_type` | 分层实体类型注册表 | `ontology/l2_industry/entities.yaml`、`ontology/l3_brand/entities.yaml` |
+| `relation_type` | 分层关系类型注册表 | `ontology/l2_industry/relations.yaml`、`ontology/l3_brand/relations.yaml` |
 | `intent_definition` | 意图定义 | `intents/intent_types.yaml` |
 | `task_template` | 任务模板 | `tasks/*.yaml` |
 | `source_policy` | 来源策略 | `sources/source_types.yaml` |
 | `quality_rule` | 质量规则 | `sources/authority_rules.yaml` |
-| `example_case` | 示例案例 | `examples/*.yaml` |
+| `example_case` | 预留评测案例表（当前不发布） | — |
 | `decision_stage` | 决策阶段（辅助表） | `intents/intent_types.yaml` |
 
 ## 字段类型说明
@@ -111,7 +111,7 @@ python database/publish.py --dry-run
 python database/publish.py
 
 # 仅发布单个文件
-python database/publish.py --file ontology/entities.yaml
+python database/publish.py --file ontology/l2_industry/entities.yaml
 
 # 初始化数据库
 python database/publish.py --init-db

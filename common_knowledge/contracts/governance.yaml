@@ -1,0 +1,91 @@
+meta:
+  version: 1.0.0
+  status: active
+  scope: shared
+  description: L1 governance definitions for assertion classes, context scopes, and construction quality metrics.
+
+assertion_types:
+  - code: fact
+    name: 事实
+    source_required: true
+    valid_time_required: false
+    direct_promotion: conditional
+  - code: claim
+    name: 主张
+    source_required: true
+    valid_time_required: false
+    direct_promotion: false
+  - code: observation
+    name: 时效性观测
+    source_required: true
+    valid_time_required: true
+    direct_promotion: false
+  - code: inference
+    name: 推断
+    source_required: true
+    valid_time_required: false
+    supporting_assertions_required: true
+    direct_promotion: false
+
+context_types:
+  - code: valid_time
+    name: 有效时间
+    required_for: [observation]
+  - code: regional_market
+    name: 区域市场
+    required_for: []
+  - code: industry_scope
+    name: 行业范围
+    required_for: []
+  - code: brand_scope
+    name: 品牌范围
+    required_for: []
+  - code: audience
+    name: 适用受众
+    required_for: []
+  - code: scope
+    name: 通用范围
+    required_for: []
+  - code: category
+    name: 品类
+    required_for: []
+  - code: product_version
+    name: 产品版本
+    required_for: []
+  - code: source_scope
+    name: 来源适用范围
+    required_for: []
+
+quality_metrics:
+  - code: entity_resolution_accuracy
+    name: 实体消歧准确率
+    unit: ratio
+    purpose: 衡量实体提及是否正确归并
+  - code: relation_validity_rate
+    name: 关系合法率
+    unit: ratio
+    purpose: 衡量抽取关系是否满足 domain/range
+  - code: evidence_coverage
+    name: 证据覆盖率
+    unit: ratio
+    purpose: 衡量事实和主张是否有可追溯证据
+  - code: conflict_detection_rate
+    name: 冲突发现率
+    unit: ratio
+    purpose: 衡量已知冲突被识别和记录的比例
+  - code: duplicate_rate
+    name: 重复率
+    unit: ratio
+    purpose: 衡量重复实体或陈述的比例
+  - code: stale_detection_rate
+    name: 过期发现率
+    unit: ratio
+    purpose: 衡量过期知识是否被及时识别
+  - code: promotion_acceptance_rate
+    name: 晋升接受率
+    unit: ratio
+    purpose: 衡量候选知识通过治理门禁的比例
+  - code: retrieval_grounding_rate
+    name: 检索落地率
+    unit: ratio
+    purpose: 衡量 LLM 输出是否引用检索到的知识和证据

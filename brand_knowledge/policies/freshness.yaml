@@ -13,7 +13,7 @@ meta:
   description: >
     定义 L3 品牌认知层的更新频率、语义差异保存、页面消失处理和快照规则。
     官网产品/定价/FAQ 每日或每周变化检测，产品文档在新版本上传时更新，
-    案例/新闻/资质每周发现，内部产品口径按审批流触发，L2 映射每月复核，
+    案例/新闻/资质每周发现，内部产品口径按审批流触发，层内实体归一定期复核，
     品牌主题与内容覆盖每周校正。更新流程保存语义 Diff（新增/修改/删除/
     版本/权限/证据变化）。页面消失不等于事实立即失效，应进入 needs_review
     并保留历史证据。每次发布生成 brand_snapshot。
@@ -43,11 +43,6 @@ update_frequencies:
     frequency: event_driven
     trigger: approval_flow
     description: 内部产品口径，按产品/销售/法务审批流事件触发
-
-  - data_type: l2_mapping
-    frequency: monthly
-    trigger: review
-    description: L2 映射每月复核，L2 本体版本变化或大量 unmapped 候选时触发
 
   - data_type: brand_topic_content_coverage
     frequency: weekly
