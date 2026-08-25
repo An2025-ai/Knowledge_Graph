@@ -20,15 +20,6 @@ NEAR_DUPLICATE_THRESHOLD = 0.85
 SEMANTIC_NEAR_DUPLICATE_THRESHOLD = 0.92
 
 
-def _valid_statement_classes(profile_id: str = DEFAULT_PROFILE_ID) -> tuple[str, ...]:
-    """Authoritative statement classes from L1 ontology (profile.statement_classes).
-
-    Falls back to the four classic kinds when a profile does not constrain them.
-    """
-    classes = get_l1_registry().statement_classes(profile_id)
-    return tuple(classes) if classes else ("fact", "claim", "observation", "inference")
-
-
 def _valid_entity_types(profile_id: str = DEFAULT_PROFILE_ID) -> set[str]:
     """Authoritative, extractable entity types from the live L1 ontology."""
     try:
@@ -368,13 +359,10 @@ def _evaluate_gates(
         "pass" if not conflict else "review",
     ))
 
-    valid_statement_classes = _valid_statement_classes(profile_id)
-    statement_classes = {s.get("statement_class") for s in statements}
-    type_ok = cand.get("candidate_type") in valid_statement_classes and all(
-        value in valid_statement_classes for value in statement_classes
-    )
-    results.append(_result("gate_9_statement_type", type_ok,
-                           f"candidate_type={cand.get('candidate_type')}, statements={sorted(statement_classes)}"))
+    # gate_9 (statement type) removed: inputs are pre-filtered and the statement
+    # class is already constrained to the four classes at write time — the
+    # extraction schema validator rejects non-standard classes and extraction
+    # clamps them to "observation". Types are no longer re-checked at promotion.
 
     confidence = cand.get("confidence")
     quality_ok = confidence is not None and float(confidence) >= threshold

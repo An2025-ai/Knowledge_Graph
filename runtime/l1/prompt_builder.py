@@ -171,4 +171,6 @@ def build_extraction_prompt(profile_id: str | None = None) -> str:
 推荐关系字段：{", ".join(output_schema.get("relations", []))}
 推荐陈述字段：{", ".join(output_schema.get("statements", []))}
 只抽取文本直接支持的内容。没有来源的推断标记为 inference，能力或品牌自述优先标记为 claim。
+陈述的 statement_class 只能取上述"允许的陈述类别"之一（fact/claim/observation/inference），不得使用其他任意标签。
+confidence 表示该陈述被上下文文本直接支持的程度（0~1）：文本明确给出的事实给高值，仅有文本间接支撑或推理给中值，文本未直接支持、属主观判断的给低值；没有可靠依据时请如实给低值，不要一律填 0.0 或 1.0。
 """
