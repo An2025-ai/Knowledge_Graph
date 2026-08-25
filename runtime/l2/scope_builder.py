@@ -194,36 +194,41 @@ DIMENSION_TEMPLATE = [
     },
 ]
 
-# Allowed source classes (L2 contract).
-ALLOWED_SOURCE_CLASSES = [
-    "government", "regulator", "standards_body", "industry_association",
-    "industry_research", "academic", "brokerage_research", "reliable_media",
-    "competitor_official", "company_disclosure",
-]
+# Allowed source classes (L2 contract), single source of truth: the shared
+# L1 source_discovery_policy (loaded via registry). Kept as derived constants
+# so callers that import them keep working unchanged.
+from runtime.l1.registry import get_l1_registry  # noqa: E402
 
-# Excluded source classes (L2: no UGC / community).
-EXCLUDED_SOURCE_CLASSES = ["community", "social_media", "ugc_review"]
+_SOURCE_POLICY = get_l1_registry()
+ALLOWED_SOURCE_CLASSES = _SOURCE_POLICY.allowed_source_classes()
+
+# Excluded source classes (L2: no UGC / community) — policy's forbidden set,
+# excluding "creator_platform" which the runtime code also treats as excluded.
+EXCLUDED_SOURCE_CLASSES = sorted(_SOURCE_POLICY.forbidden_source_classes())
 
 # Per-dimension required source classes (authoritative, mirrors the L2 requirement
 # contract). Each dimension gets its SPECIFIC set rather than the global whitelist,
 # so the geo-research two-layer source strategy can target the right source types
-# per industry dimension.
+# per industry dimension. Derived from the L1 policy map.
 DIMENSION_SOURCE_CLASSES = {
-    "market_definition": ["government", "standards_body", "industry_association", "industry_research"],
-    "category_structure": ["industry_research", "standards_body", "competitor_official"],
-    "market_participants": ["industry_research", "company_disclosure", "competitor_official", "reliable_media"],
-    "audience_and_decision_chain": ["industry_research", "academic", "reliable_media"],
-    "problems_and_jobs": ["industry_research", "reliable_media", "competitor_official"],
-    "use_cases": ["competitor_official", "industry_research", "reliable_media"],
-    "capabilities": ["competitor_official", "standards_body", "industry_research"],
-    "decision_factors": ["industry_research", "academic", "reliable_media"],
-    "topics_and_questions": ["reliable_media", "industry_research", "competitor_official"],
-    "market_facts_and_trends": ["government", "industry_research", "brokerage_research"],
-    "regulation_and_risks": ["government", "regulator", "standards_body"],
-    "competition_structure": ["industry_research", "competitor_official", "company_disclosure"],
-    "source_ecology": ["government", "industry_research", "academic", "reliable_media"],
-    "evidence_gaps": ["industry_research", "reliable_media"],
+    code: _SOURCE_POLICY.dimension_source_classes(code)
+    for code in (
+        "market_definition", "category_structure", "market_participants",
+        "audience_and_decision_chain", "problems_and_jobs", "use_cases",
+        "capabilities", "decision_factors", "topics_and_questions",
+        "market_facts_and_trends", "regulation_and_risks", "competition_structure",
+        "source_ecology", "evidence_gaps",
+    )
 }
+
+DIMENSION_ALIASES = {
+    "competition": "competition_structure",
+}
+
+
+def normalize_dimension_code(code: str) -> str:
+    """Normalize legacy or user-facing dimension aliases to canonical codes."""
+    return DIMENSION_ALIASES.get(code, code)
 
 
 def _slug(value: str) -> str:
@@ -250,6 +255,8 @@ def build_scope(
 
     # Fill the 14-dimension template with the industry/market.
     required_dimensions = []
+    priority_dims = [normalize_dimension_code(d) for d in (priority_dims or [])]
+
     for i, dim in enumerate(DIMENSION_TEMPLATE, start=1):
         questions = [q.format(industry=industry, market=market) for q in dim["questions"]]
         if dim["dimension_code"] in (priority_dims or []):

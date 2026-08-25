@@ -1,11 +1,11 @@
-# GEO 第一层通用知识层 — 任务模板：知识晋升
+# L1 通用知识层 — 任务模板：知识晋升
 # 版本: 1.1.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.1.0
+  version: 2.0.0
   created_at: 2026-08-11
-  updated_at: 2026-08-11
+  updated_at: 2026-08-25
   status: active
   scope: shared
 
@@ -13,7 +13,7 @@ task:
   id: task_knowledge_promotion
   name: 知识晋升
   name_en: Knowledge Promotion
-  version: 1.1.0
+  version: 2.0.0
   purpose: >
     将通过质量关卡验证的候选知识（从报告提取中产生）
     晋升为 L2 稳定知识。实现从候选到已验证再到活跃状态的
@@ -24,6 +24,16 @@ task:
     由晋升任务统一处理，包括重复检测、冲突检查、语句分类和
     审核队列管理。只有通过所有质量关卡的候选知识才能被晋升
     为活跃状态，未通过的候选知识被拒绝并记录拒绝原因。
+    本模板为任务蓝图，不内联具体实体/关系/类型枚举；候选知识的
+    实体/关系/陈述类型以 profile_id 引用的 Schema Profile 本体为
+    唯一事实源。
+
+  profile:
+    profile_id: REUSABLE
+    resolution: >
+      晋升目标层经 profile_id 解析（当前实际服务于 l2_industry，
+      实体/关系/指标引用 ontology/ 与 statement_classes）。模板本身
+      不绑定具体业务层，可复用于任何 profile 的候选晋升。
 
   required_context:
     - extraction_candidates:
@@ -79,7 +89,7 @@ task:
         description: 晋升为 L2 的陈述列表（事实和主张）
         item_fields:
           - statement_id: 陈述 ID
-          - statement_type: 陈述类型（fact / claim）
+          - statement_type: 陈述类型（引用 profile 本体的 statement_classes，如 fact / claim / observation / inference，不在此内联）
           - content: 陈述内容
           - promotion_status: 晋升状态
           - evidence_support: 证据支持度评分
@@ -179,6 +189,11 @@ task:
   # 预留：promotion_pass_rate, gate_failure_distribution, review_queue_backlog, knowledge_growth_rate
 
 changelog:
+  - version: 2.0.0
+    date: 2026-08-24
+    changes:
+      - Option A 整改：移除陈述类型内联枚举，改为引用 profile 本体的 statement_classes；模板改为 profile 无关的通用任务蓝图
+    author: Brand Atlas Team
   - version: 1.1.0
     date: 2026-08-11
     changes:

@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover
     yaml = None
 
 from runtime.db import DB
+from runtime.l1.registry import get_l1_registry
 from runtime.l2.scope_builder import DIMENSION_TEMPLATE
 from runtime.l2.search.providers import (
     fallback_search_result,
@@ -33,20 +34,14 @@ from runtime.l2.search.providers import (
 
 
 DIMENSION_SOURCE_CLASSES = {
-    "market_definition": ["government", "standards_body", "industry_association", "industry_research"],
-    "category_structure": ["industry_research", "standards_body", "competitor_official"],
-    "market_participants": ["industry_research", "company_disclosure", "competitor_official", "reliable_media"],
-    "audience_and_decision_chain": ["industry_research", "academic", "reliable_media"],
-    "problems_and_jobs": ["industry_research", "reliable_media", "competitor_official"],
-    "use_cases": ["competitor_official", "industry_research", "reliable_media"],
-    "capabilities": ["competitor_official", "standards_body", "industry_research"],
-    "decision_factors": ["industry_research", "academic", "reliable_media"],
-    "topics_and_questions": ["reliable_media", "industry_research", "competitor_official"],
-    "market_facts_and_trends": ["government", "industry_research", "brokerage_research"],
-    "regulation_and_risks": ["government", "regulator", "standards_body"],
-    "competition_structure": ["industry_research", "competitor_official", "company_disclosure"],
-    "source_ecology": ["government", "industry_research", "academic", "reliable_media"],
-    "evidence_gaps": ["industry_research", "reliable_media"],
+    code: get_l1_registry().dimension_source_classes(code)
+    for code in (
+        "market_definition", "category_structure", "market_participants",
+        "audience_and_decision_chain", "problems_and_jobs", "use_cases",
+        "capabilities", "decision_factors", "topics_and_questions",
+        "market_facts_and_trends", "regulation_and_risks", "competition_structure",
+        "source_ecology", "evidence_gaps",
+    )
 }
 
 DIMENSION_KEYWORDS = {
@@ -66,37 +61,11 @@ DIMENSION_KEYWORDS = {
     "evidence_gaps": ["gap", "missing", "uncertain", "缺口", "不足", "不确定"],
 }
 
+# Default trusted domains per market region, single source of truth: the L1
+# source_discovery_policy (via registry). Kept as a derived map for callers.
 DEFAULT_TRUSTED_DOMAINS = {
-    "CN": [
-        "gov.cn",
-        "miit.gov.cn",
-        "cac.gov.cn",
-        "samr.gov.cn",
-        "stats.gov.cn",
-        "caict.ac.cn",
-        "cnis.ac.cn",
-        "sac.gov.cn",
-        "cnii.com.cn",
-        "iresearch.com.cn",
-        "analysys.cn",
-        "199it.com",
-        "idc.com",
-        "gartner.com",
-    ],
-    "GLOBAL": [
-        "gov",
-        "edu",
-        "oecd.org",
-        "worldbank.org",
-        "imf.org",
-        "mckinsey.com",
-        "bcg.com",
-        "deloitte.com",
-        "pwc.com",
-        "idc.com",
-        "gartner.com",
-        "forrester.com",
-    ],
+    "CN": get_l1_registry().trusted_domains("CN"),
+    "GLOBAL": get_l1_registry().trusted_domains("GLOBAL"),
 }
 
 
@@ -245,30 +214,6 @@ def _score_candidate(candidate: dict[str, Any], industry: str, seed_sources: lis
 
 
 def _query_templates(dimension_code: str) -> list[str]:
-    return {
-        "market_definition": ["{industry} {market} 市场 定义 边界", "{industry} 行业 标准 定义"],
-        "category_structure": ["{industry} 品类 结构 子品类", "{industry} 解决方案 分类"],
-        "market_participants": ["{industry} {market} 主要厂商 市场份额", "{industry} 头部企业 产品"],
-        "audience_and_decision_chain": ["{industry} 用户角色 决策链", "{industry} 采购决策 角色"],
-        "problems_and_jobs": ["{industry} 用户痛点 需求", "{industry} job to be done"],
-        "use_cases": ["{industry} 使用场景 案例", "{industry} 应用场景"],
-        "capabilities": ["{industry} 产品能力 功能模块", "{industry} capabilities features"],
-        "decision_factors": ["{industry} 选型 决策因素", "{industry} 采购 评估指标"],
-        "topics_and_questions": ["{industry} 热门问题 主题", "{industry} 常见问题"],
-        "market_facts_and_trends": ["{industry} 市场规模 增长率 趋势", "{industry} industry report market size"],
-        "regulation_and_risks": ["{industry} 法规 政策 风险", "{industry} 数据安全 合规"],
-        "competition_structure": ["{industry} 竞争格局 竞品", "{industry} alternatives competitors"],
-        "source_ecology": ["{industry} 权威 来源 研究机构", "{industry} 行业协会 标准"],
-        "evidence_gaps": ["{industry} 数据缺口 证据不足"],
-    }.get(dimension_code, ["{industry} {dimension}"])
-
-
-def _query_templates(dimension_code: str) -> list[str]:
-    """Readable Chinese/English query templates used by source discovery.
-
-    This overrides the legacy mojibake templates above without changing the
-    public function contract.
-    """
     return {
         "market_definition": ["{industry} {market} 市场 定义 边界", "{industry} 行业 标准 定义"],
         "category_structure": ["{industry} 品类 结构 子品类", "{industry} 解决方案 分类"],

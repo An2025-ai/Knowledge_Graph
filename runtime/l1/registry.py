@@ -338,6 +338,39 @@ class L1Registry:
             )
         return result
 
+    def source_discovery_policy(self) -> dict[str, Any]:
+        """Return the source_discovery_policy.yaml loaded at startup (single source of truth)."""
+        return self.policy_specs.get("source_discovery_policy", {}) or {}
+
+    def source_classes_by_mode(self, mode: str) -> list[str]:
+        """Return source class names for `source_classes.<mode>.categories` ("allowed"|"discovery_only"|"forbidden")."""
+        section = self.source_discovery_policy().get("source_classes", {}).get(mode, {})
+        return [str(item.get("class")) for item in section.get("categories", []) if item.get("class")]
+
+    def allowed_source_classes(self) -> list[str]:
+        return self.source_classes_by_mode("allowed")
+
+    def forbidden_source_classes(self) -> set[str]:
+        return set(self.source_classes_by_mode("forbidden"))
+
+    def dimension_source_classes(self, dimension_code: str) -> list[str]:
+        """Per-dimension preferred source classes, from the policy's dimension_source_classes map."""
+        section = self.source_discovery_policy().get("dimension_source_classes") or {}
+        mapping = section.get("mapping") if isinstance(section, dict) and "mapping" in section else section
+        mapping = mapping or {}
+        return list(mapping.get(dimension_code) or [])
+
+    def source_domain_blacklist(self) -> list[str]:
+        return list(self.source_discovery_policy().get("domain_blacklist", {}).get("domains") or [])
+
+    def trusted_domains(self, market: str | None = None) -> list[str]:
+        """Default trusted domains for a market region, from the policy's trusted_domains map."""
+        mapping = self.source_discovery_policy().get("trusted_domains") or {}
+        key = (market or "").upper()
+        if key in mapping:
+            return list(mapping[key])
+        return list(mapping.get("GLOBAL") or [])
+
     def prompt_output_schema(self) -> dict[str, Any]:
         return dict(self.extraction_contract.get("prompt_output_schema", {}))
 

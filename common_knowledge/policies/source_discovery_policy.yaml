@@ -1,11 +1,11 @@
-# GEO 第一层通用知识层 — 来源发现与验证策略
+# L1 通用知识层 — 来源发现与验证策略
 # 版本: 1.1.0
 # 范围: 跨品牌、跨行业复用的方法与规范层
 
 meta:
-  version: 1.1.0
+  version: 1.2.0
   created_at: 2026-08-11
-  updated_at: 2026-08-11
+  updated_at: 2026-08-25
   status: active
   scope: shared
   description: >
@@ -223,10 +223,74 @@ source_quality_dimensions:
         1: 完全不透明
 
 # ============================================================
+# 维度 → 首选来源类别
+# ============================================================
+
+dimension_source_classes:
+  description: 每个 L2 知识维度倾向的来源类别；值来自原先代码内联的 DIMENSION_SOURCE_CLASSES，迁移至此作为单一事实源
+  mapping:
+    market_definition: [government, standards_body, industry_association, industry_research]
+    category_structure: [industry_research, standards_body, competitor_official]
+    market_participants: [industry_research, company_disclosure, competitor_official, reliable_media]
+    audience_and_decision_chain: [industry_research, academic, reliable_media]
+    problems_and_jobs: [industry_research, reliable_media, competitor_official]
+    use_cases: [competitor_official, industry_research, reliable_media]
+    capabilities: [competitor_official, standards_body, industry_research]
+    decision_factors: [industry_research, academic, reliable_media]
+    topics_and_questions: [reliable_media, industry_research, competitor_official]
+    market_facts_and_trends: [government, industry_research, brokerage_research]
+    regulation_and_risks: [government, regulator, standards_body]
+    competition_structure: [industry_research, competitor_official, company_disclosure]
+    source_ecology: [government, industry_research, academic, reliable_media]
+    evidence_gaps: [industry_research, reliable_media]
+
+# ============================================================
+# 各区域默认可信域名
+# ============================================================
+
+trusted_domains:
+  description: 各市场区域的默认可信域名，用于来源权威评分；值来自原先代码内联的 DEFAULT_TRUSTED_DOMAINS，迁移至此作为单一事实源
+  CN:
+    - gov.cn
+    - miit.gov.cn
+    - cac.gov.cn
+    - samr.gov.cn
+    - stats.gov.cn
+    - caict.ac.cn
+    - cnis.ac.cn
+    - sac.gov.cn
+    - cnii.com.cn
+    - iresearch.com.cn
+    - analysys.cn
+    - 199it.com
+    - idc.com
+    - gartner.com
+  GLOBAL:
+    - gov
+    - edu
+    - oecd.org
+    - worldbank.org
+    - imf.org
+    - mckinsey.com
+    - bcg.com
+    - deloitte.com
+    - pwc.com
+    - idc.com
+    - gartner.com
+    - forrester.com
+
+# ============================================================
 # 变更记录
 # ============================================================
 
 changelog:
+  - version: 1.2.0
+    date: 2026-08-25
+    changes:
+      - 新增 dimension_source_classes 映射（14 个维度→首选来源类别），作为代码内联 DIMENSION_SOURCE_CLASSES 的单一事实源
+      - 新增 trusted_domains 分区域映射（CN/GLOBAL），作为代码内联 DEFAULT_TRUSTED_DOMAINS 的单一事实源
+      - 来源白名单/维度类别/可信域名统一由本文件经 L1 registry 驱动，消除多份代码内联导致的漂移
+    author: Brand Atlas Team
   - version: 1.1.0
     date: 2026-08-11
     changes:

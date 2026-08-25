@@ -29,6 +29,41 @@ def _valid_statement_classes(profile_id: str = DEFAULT_PROFILE_ID) -> tuple[str,
     return tuple(classes) if classes else ("fact", "claim", "observation", "inference")
 
 
+def _valid_entity_types(profile_id: str = DEFAULT_PROFILE_ID) -> set[str]:
+    """Authoritative, extractable entity types from the live L1 ontology."""
+    try:
+        return get_l1_registry().entity_types(profile_id, extractable_only=True)
+    except Exception:  # noqa: BLE001 - degraded fallback to DB row value
+        return set()
+
+
+def _valid_relation_types(profile_id: str = DEFAULT_PROFILE_ID) -> set[str]:
+    """Authoritative, extractable relation types from the live L1 ontology."""
+    try:
+        return get_l1_registry().relation_types(profile_id, extractable_only=True)
+    except Exception:  # noqa: BLE001 - degraded fallback to DB row value
+        return set()
+
+
+def _relation_constraints(profile_id: str = DEFAULT_PROFILE_ID) -> dict[str, dict]:
+    """Per-relation subject_types/object_types constraints from the live ontology."""
+    registry = get_l1_registry()
+    try:
+        specs = registry.profile(profile_id).relation_specs
+    except Exception:  # noqa: BLE001 - degraded fallback to DB row value
+        return {}
+    constraints: dict[str, dict] = {}
+    for code, spec in specs.items():
+        subject = _as_list(spec.get("subject_types"))
+        obj = _as_list(spec.get("object_types"))
+        if subject or obj:
+            constraints[code] = {
+                "subject_types": subject,
+                "object_types": obj,
+            }
+    return constraints
+
+
 def _candidates(db: DB, report_id: str | None) -> list[dict]:
     select = (
         "SELECT rc.id AS candidate_uuid, rc.report_id, rc.section_id, rc.statement, "
@@ -234,7 +269,18 @@ def _evaluate_gates(
     results.append(_result("gate_1_industry_scope", scoped,
                            f"industry={expected_industry or 'missing'}"))
 
-    invalid_entities = [e["entity_type"] for e in entities if not e.get("registered_type")]
+    # Authoritative entity/relation type whitelists come from the live L1
+    # ontology (registry), the same source the extraction pipeline uses to admit
+    # types. The DB LEFT JOINs above still carry a `registered_type` as a
+    # degraded fallback when the registry yields nothing (e.g. unknown profile).
+    valid_entity_types = _valid_entity_types(profile_id)
+    valid_relation_types = _valid_relation_types(profile_id)
+    relation_constraints = _relation_constraints(profile_id)
+
+    invalid_entities = [
+        e["entity_type"] for e in entities
+        if e["entity_type"] not in (valid_entity_types or {e.get("registered_type")})
+    ]
     results.append(_result(
         "gate_2_entity_type", not invalid_entities and bool(entities or statements),
         "registered entity types" if not invalid_entities else f"unregistered={invalid_entities}",
@@ -242,9 +288,15 @@ def _evaluate_gates(
 
     invalid_relations = []
     for rel in relations:
-        allowed_subjects = _as_list(rel.get("subject_types"))
-        allowed_objects = _as_list(rel.get("object_types"))
-        if (not rel.get("registered_type")
+        rel_spec = relation_constraints.get(rel["relation_type"], {})
+        allowed_subjects = _as_list(rel.get("subject_types")) or _as_list(rel_spec.get("subject_types"))
+        allowed_objects = _as_list(rel.get("object_types")) or _as_list(rel_spec.get("object_types"))
+        registered_ok = (
+            rel["relation_type"] in valid_relation_types
+            if valid_relation_types
+            else bool(rel.get("registered_type"))
+        )
+        if (not registered_ok
                 or (allowed_subjects and rel.get("subject_type") not in allowed_subjects)
                 or (allowed_objects and rel.get("object_type") not in allowed_objects)):
             invalid_relations.append(rel.get("relation_type"))

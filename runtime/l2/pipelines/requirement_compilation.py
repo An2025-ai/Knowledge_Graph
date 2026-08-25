@@ -37,8 +37,11 @@ DEFAULT_REPORT_CONTRACT = {
     "sla_hours": 72,
 }
 
-# A conservative default source profile. These are the registered, allowed
-# source classes for industry knowledge (mirrors requirement example).
+# A conservative default source profile. The registered, allowed source classes
+# for industry knowledge come from the single shared L1 source_discovery_policy
+# (loaded via registry), so the whitelist never drifts from the governance spec.
+from runtime.l1.registry import get_l1_registry  # noqa: E402
+
 DEFAULT_SOURCE_REQUIREMENTS = {
     "primary_mode": "whitelist_first",
     "fallback_discovery": {
@@ -47,20 +50,18 @@ DEFAULT_SOURCE_REQUIREMENTS = {
         "require_original_url": True,
         "require_selection_reason": True,
     },
-    "allowed_source_classes": [
-        "government",
-        "regulator",
-        "standards_body",
-        "industry_association",
-        "industry_research",
-        "academic",
-        "brokerage_research",
-        "reliable_media",
-        "competitor_official",
-        "company_disclosure",
-    ],
+    "allowed_source_classes": get_l1_registry().allowed_source_classes(),
     "critical_claim_min_independent_sources": 2,
 }
+
+DIMENSION_ALIASES = {
+    "competition": "competition_structure",
+}
+
+
+def _normalize_dimension_code(code: str) -> str:
+    """Normalize legacy or user-facing dimension aliases to canonical codes."""
+    return DIMENSION_ALIASES.get(code, code)
 
 
 def _scope_id_for_industry(db: DB, industry_id: str) -> str | None:
@@ -84,6 +85,8 @@ def _build_required_dimensions(scope: dict) -> list[dict]:
         dims = []
         for i, dim in enumerate(explicit, start=1):
             entry = dict(dim)
+            if entry.get("dimension_code"):
+                entry["dimension_code"] = _normalize_dimension_code(entry["dimension_code"])
             entry.setdefault("required", True)
             entry.setdefault("order", i)
             entry.setdefault("expected_fields", ["canonical_name", "definition", "evidence_spans"])
@@ -92,7 +95,7 @@ def _build_required_dimensions(scope: dict) -> list[dict]:
             dims.append(entry)
         return dims
 
-    priority = scope.get("priority_dimensions") or []
+    priority = [_normalize_dimension_code(dim) for dim in (scope.get("priority_dimensions") or [])]
     questions = scope.get("research_questions") or []
     dimensions: list[dict] = []
 
