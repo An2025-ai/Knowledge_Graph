@@ -1,6 +1,6 @@
 """Render the exported Brand Atlas knowledge graph into interactive pyvis HTML.
 
-Reads runtime/visualize/output/knowledge_graph.json (from runtime.visualize.export)
+Reads engine/visualize/output/knowledge_graph.json (from engine.visualize.export)
 and produces:
   - a full graph (all nodes/edges, colored by entity type)
   - a focused subgraph around the e-commerce finance industry nodes
@@ -19,8 +19,8 @@ from pathlib import Path
 from pyvis.network import Network
 
 ROOT = Path(__file__).resolve().parents[1]
-JSON_PATH = ROOT / "runtime" / "visualize" / "output" / "knowledge_graph.json"
-OUT_DIR = ROOT / "runtime" / "visualize" / "output"
+JSON_PATH = ROOT / "engine" / "visualize" / "output" / "knowledge_graph.json"
+OUT_DIR = ROOT / "engine" / "visualize" / "output"
 
 # Node color / shape by entity type (L1 labels projected into the graph).
 TYPE_STYLE = {

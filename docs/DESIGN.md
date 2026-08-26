@@ -28,20 +28,20 @@ Brand Atlas 是一个**证据驱动、分层治理**的知识图谱系统。Post
 - **L3 品牌认知层**：品牌产品、能力、定位、案例、内部文档。
 - **L4 动态反馈层**：查询反馈、校验结果、采纳/拒绝。仅定义对象，未实现。
 
-## 2. runtime/ 执行分层
+## 2. engine/ 执行分层
 
-runtime 按执行层级/阶段划分，依赖方向单一、仅向低阶段流动：
+engine 按执行层级/阶段划分，依赖方向单一、仅向低阶段流动：
 
 | 阶段 | 模块 | 职责 |
 |------|------|------|
-| ① 基础设施 | `runtime/core/`（db, knowledge_service, metrics） | PostgreSQL 访问、稳定哈希/upsert、运维健康指标 |
-| ② 外部模型适配 | `runtime/clients/`（embeddings, ner_client） | pgvector 向量化、UIE NER（可选缺省降级） |
-| ③ L1 本体校验 | `runtime/ontology/`（ontology, ontology_validator） | 读 common_knowledge/，校验 L3 profile |
-| ④ 证据→候选 | `runtime/extraction/`（evidence_parsing, candidate_extraction） | span→evidence unit；证据→候选 |
-| ⑤ 跨文档融合 | `runtime/fusion/`（fusion_service） | 合并重复/冲突候选 → 门禁候选 |
-| ⑥ 门禁晋级 | `runtime/promotion/`（promotion_service） | 候选 → active graph |
+| ① 基础设施 | `engine/core/`（db, knowledge_service, metrics） | PostgreSQL 访问、稳定哈希/upsert、运维健康指标 |
+| ② 外部模型适配 | `engine/clients/`（embeddings, ner_client） | pgvector 向量化、UIE NER（可选缺省降级） |
+| ③ L1 本体校验 | `engine/ontology/`（ontology, ontology_validator） | 读 common_knowledge/，校验 L3 profile |
+| ④ 证据→候选 | `engine/extraction/`（evidence_parsing, candidate_extraction） | span→evidence unit；证据→候选 |
+| ⑤ 跨文档融合 | `engine/fusion/`（fusion_service） | 合并重复/冲突候选 → 门禁候选 |
+| ⑥ 门禁晋级 | `engine/promotion/`（promotion_service） | 候选 → active graph |
 
-> `runtime/common/`（L1 registry / policy_engine）读 common_knowledge/，是纯 L1 层，不依赖上面任何阶段，故保持原状。
+> `engine/common/`（L1 registry / policy_engine）读 common_knowledge/，是纯 L1 层，不依赖上面任何阶段，故保持原状。
 
 ## 3. L2/L3 知识构建链路（证据 → 候选 → 门禁 → 主图）
 
@@ -60,7 +60,7 @@ runtime 按执行层级/阶段划分，依赖方向单一、仅向低阶段流�
 
 每个 executor 把证据→主图链路拆成若干可独立重跑的 Pipeline（幂等、步骤级事务）。
 
-**L2 行业知识八步**（`runtime/industry/executor.py` `ALL_ORDER`）：
+**L2 行业知识八步**（`engine/industry/executor.py` `ALL_ORDER`）：
 
 ```
 article_registration → content_parsing → evidence_unit_merge →
@@ -68,7 +68,7 @@ candidate_extraction → candidate_normalization → candidate_vectorization →
 knowledge_fusion → promotion
 ```
 
-**L3 品牌知识九步**（`runtime/brand/executor.py` `DEFAULT_PIPELINES`）：
+**L3 品牌知识九步**（`engine/brand/executor.py` `DEFAULT_PIPELINES`）：
 
 ```
 document_registration → sensitive_content_warning → content_parsing →
@@ -90,11 +90,11 @@ PostgreSQL 是单一事实源，定义集中在 `database/`：
 | `schema.sql` | L1 核心表：knowledge_definition, knowledge_version, entity_type, relation_type, intent_definition, task_template, source_policy, quality_rule, example_case… |
 | `l2_l3_schema.sql` | L2/L3 **证据→候选→门禁→主图统一建表**（evidence, knowledge_candidate, gate_candidate, active graph 等 35 表） |
 
-**迁移**：`runtime/migrations/__init__.py` 的 `MIGRATIONS` 只映射两把键，`ORDER = ["l1", "l2_l3"]`：
+**迁移**：`engine/migrations/__init__.py` 的 `MIGRATIONS` 只映射两把键，`ORDER = ["l1", "l2_l3"]`：
 
 ```bash
-python -m runtime.migrations --only l1       # 应用 database/schema.sql
-python -m runtime.migrations --only l2_l3    # 应用 database/l2_l3_schema.sql
+python -m engine.migrations --only l1       # 应用 database/schema.sql
+python -m engine.migrations --only l2_l3    # 应用 database/l2_l3_schema.sql
 ```
 
 > 只往 `database/l2_l3_schema.sql` 新增表，新 SQL 依赖只进根 `requirements.txt`。
@@ -104,15 +104,15 @@ python -m runtime.migrations --only l2_l3    # 应用 database/l2_l3_schema.sql
 Neo4j 是排重建的查询投影，从 PG 的 `graph_outbox` 事件队列（或全量快照）幂等 MERGE：
 
 ```bash
-python -m runtime.neo4j.projection --init            # 应用 cypher_init.cypher
-python -m runtime.neo4j.projection --full            # 全量重建
-python -m runtime.neo4j.projection --process-outbox  # 增量同步
-python -m runtime.neo4j.projection --check           # 连通性检查
+python -m engine.neo4j.projection --init            # 应用 cypher_init.cypher
+python -m engine.neo4j.projection --full            # 全量重建
+python -m engine.neo4j.projection --process-outbox  # 增量同步
+python -m engine.neo4j.projection --check           # 连通性检查
 ```
 
 - 实体标签通过 L1 registry 解析（`get_common_registry().neo4j_entity_label`），未命中的有确定性回退。
 - 层标记：L3 = owner_brand 非空、L2 = 有 industry 标签、L1 = 其余共享。
-- 一致性校验见 `runtime/neo4j/consistency.py`。
+- 一致性校验见 `engine/neo4j/consistency.py`。
 
 ## 7. 优化手段（来自 OPTIMIZATION_TECH_PLAN）
 

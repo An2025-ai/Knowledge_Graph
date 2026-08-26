@@ -1,12 +1,12 @@
 import unittest
 
-from runtime.common.change_proposals import validate_change_proposal
-from runtime.common.registry import get_common_registry
-from runtime.common.operations import list_operation_roles, get_role, write_mode_for
-from runtime.common.retrieval import build_context_package, validate_context_package
-from runtime.common.validate import validate_common
-from runtime.common.profiles import list_profiles
-from runtime.common.policies import list_policies
+from engine.common.change_proposals import validate_change_proposal
+from engine.common.registry import get_common_registry
+from engine.common.operations import list_operation_roles, get_role, write_mode_for
+from engine.common.retrieval import build_context_package, validate_context_package
+from engine.common.validate import validate_common
+from engine.common.profiles import list_profiles
+from engine.common.policies import list_policies
 
 
 class L1ContractTests(unittest.TestCase):

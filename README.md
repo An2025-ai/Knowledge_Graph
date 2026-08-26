@@ -20,8 +20,8 @@ L1 不是行业百科，也不是客户品牌知识库，而是：统一知识�
 | 层级 | 内容 | 位置 |
 |------|------|------|
 | **L1 通用知识层** | 本体、陈述、上下文、来源、治理、更新和检索协议 | common_knowledge/ |
-| **L2 行业/品类知识层** | 行业实体、市场主题、行业趋势、竞品公共信息 | runtime/industry/ + database/ |
-| **L3 品牌认知层** | 品牌产品、能力、定位、案例、内部文档 | runtime/brand/ + database/ |
+| **L2 行业/品类知识层** | 行业实体、市场主题、行业趋势、竞品公共信息 | engine/industry/ + database/ |
+| **L3 品牌认知层** | 品牌产品、能力、定位、案例、内部文档 | engine/brand/ + database/ |
 | L4 动态反馈层 | 查询反馈、校验结果、采纳/拒绝和知识更新反馈 | 后续实现 |
 
 ## 目录结构
@@ -40,7 +40,7 @@ Knowledge_Graph/
 │   ├── schema.sql                 # L1 核心表（entity_type/relation_type/…）
 │   ├── l2_l3_schema.sql           # L2/L3 证据→候选→门禁→主图统一建表
 │   └── publish_l1.py              # L1 注册库发布（JSON snapshot）
-├── runtime/                       # 可执行代码（按执行层级/阶段分目录）
+├── engine/                       # 可执行代码（按执行层级/阶段分目录）
 │   ├── core/                      # ① 基础设施层：db / knowledge_service / metrics
 │   ├── clients/                   # ② 外部模型适配器：embeddings / ner_client
 │   ├── ontology/                  # ③ L1 本体校验（读 common_knowledge/）
@@ -66,17 +66,17 @@ Knowledge_Graph/
 pip install -r requirements.txt
 
 # 2. 启动 PostgreSQL(pgvector) 与 Neo4j
-cd runtime && docker compose up -d && cd ..
+cd engine && docker compose up -d && cd ..
 
 # 3. 初始化数据库迁移
-python -m runtime.migrations --only l1
-python -m runtime.migrations --only l2_l3
+python -m engine.migrations --only l1
+python -m engine.migrations --only l2_l3
 
 # 4. 构建 L2 行业知识（单文档）
-python -m runtime.industry.executor --all --file <doc.md>
+python -m engine.industry.executor --all --file <doc.md>
 
 # 5. 构建 L3 品牌知识（单文档，需指定品牌）
-python -m runtime.brand.executor --all --file <doc.md> --brand <brand_id>
+python -m engine.brand.executor --all --file <doc.md> --brand <brand_id>
 ```
 
 ## 当前实现状态

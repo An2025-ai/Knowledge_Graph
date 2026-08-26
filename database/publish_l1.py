@@ -10,8 +10,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from runtime.common.registry import get_common_registry
-from runtime.common.validate import validate_common
+from engine.common.registry import get_common_registry
+from engine.common.validate import validate_common
 
 
 def build_snapshot() -> dict:

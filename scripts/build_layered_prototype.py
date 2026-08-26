@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Build the self-contained layered 2D graph prototype.
 
-Reads runtime/visualize/output/l1_graph.json, l2_graph.json, l3_graph.json
-(produced by `python -m runtime.visualize.export --layer L1/L2/L3`) and writes a
-single self-contained HTML (runtime/visualize/output/layered_2d.html) that opens
+Reads engine/visualize/output/l1_graph.json, l2_graph.json, l3_graph.json
+(produced by `python -m engine.visualize.export --layer L1/L2/L3`) and writes a
+single self-contained HTML (engine/visualize/output/layered_2d.html) that opens
 directly via file:// (data is inlined, vis-network is loaded from the local
 assets/ directory — no CDN, no fetch).
 
@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = ROOT / "runtime" / "visualize" / "output"
+OUT_DIR = ROOT / "engine" / "visualize" / "output"
 
 LAYER_NAMES = {"l1": "L1 通用定义层", "l2": "L2 行业实例层", "l3": "L3 品牌实例层"}
 
