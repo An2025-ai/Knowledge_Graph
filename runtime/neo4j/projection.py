@@ -352,7 +352,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not HAS_NEO4J:
-        print("[neo4j] neo4j driver not installed. Run: pip install -r runtime/requirements.txt")
+        print("[neo4j] neo4j driver not installed. Run: pip install -r requirements.txt (execution-engines group)")
         return 1
 
     proj = ProjectionService()
@@ -364,7 +364,7 @@ def main() -> int:
         if args.init:
             proj.init_schema()
         if args.full or args.process_outbox:
-            from runtime.db import DB
+            from runtime.core.db import DB
 
             with DB() as pg_db:
                 if args.full:

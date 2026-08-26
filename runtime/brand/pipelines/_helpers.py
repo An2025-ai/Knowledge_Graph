@@ -21,7 +21,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from runtime.db import DB
+from runtime.core.db import DB
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +193,7 @@ def upsert_entity(
     # Persist the entity's vector so entity_embedding/`<=>` retrieval is usable.
     # Optional + non-fatal: if the embedding layer is unavailable we skip silently.
     try:
-        from runtime.embeddings import write_embedding
+        from runtime.clients.embeddings import write_embedding
 
         write_embedding(db, "entity_embedding", eid, canonical_name, tenant_id)
     except Exception:  # noqa: BLE001 - optional vector layer

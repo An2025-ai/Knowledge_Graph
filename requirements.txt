@@ -1,3 +1,59 @@
+# Brand Atlas Knowledge Graph — unified project requirements
+#
+# One file per research-harvester clean-architecture convention. Install all:
+#   pip install -r requirements.txt
+#
+# Optional groups below are documented but always install cleanly; the heavy
+# local-model stack (torch / paddlenlp) does not build on every machine, so the
+# code degrades gracefully when it is absent (NER/embedding layers skip).
+
+# --- Core runtime (always required) ---
 PyYAML>=6.0,<7
 jsonschema>=4.20,<5
 psycopg2-binary>=2.9,<3
+
+# --- Execution engines ---
+# Neo4j projection + graph export, HTTP for external providers.
+neo4j>=5.20,<6
+requests>=2.31
+
+# --- Optimization (OPTIMIZATION_TECH_PLAN.md) ---
+# Strict extraction contracts + rule/dictionary pre-extraction + pgvector.
+pydantic>=2.0
+regex>=2024.0.0
+pyahocorasick>=2.0
+pgvector>=0.3.0
+numpy>=1.26
+
+# --- Visualization (Jupyter + interactive graph) ---
+# Install the VSCode "Jupyter" extension (ms-toolsai.jupyter) to open the
+# notebook at runtime/visualize/knowledge_graph.ipynb.
+jupyter>=1.0,<2
+ipykernel>=6.29
+pyvis>=0.3.2
+networkx>=3.2
+
+# --- Optional document parsing libraries ---
+# Install only when the corresponding source type is needed. PDF/Office layout
+# parsing is heavy and can be skipped for pure web/markdown intake.
+trafilatura>=1.6            # clean web page text extraction
+beautifulsoup4>=4.12        # HTML structure extraction
+lxml>=5.0                   # HTML/XML parser
+pymupdf>=1.24               # lightweight PDF text/page extraction
+python-docx>=1.1            # DOCX structure extraction
+python-pptx>=0.6.23         # PPTX slide extraction
+openpyxl>=3.1               # XLSX table extraction
+
+# --- Optional local models (bge-m3 embedding + reranker / NER) ---
+# bge-m3 + bge-reranker-v2-m3 via sentence-transformers (local provider).
+# NER uses PaddleNLP UIE (paddlenlp 2.6.1 + paddlepaddle 2.6.2): the UIE static
+# graph export FAILS under paddlepaddle 3.x, so keep this verified pair pinned.
+# If unavailable, set HF_ENDPOINT=https://hf-mirror.com when huggingface.co is
+# unreachable. When these are NOT installed, the NER/embedding layers gracefully
+# degrade to empty and the L2/L3 pipelines still run.
+sentence-transformers>=3.0
+torch
+transformers
+accelerate
+paddlenlp==2.6.1
+paddlepaddle==2.6.2

@@ -252,7 +252,7 @@ def main() -> int:
     parser.add_argument("--layer", choices=["L1", "L2", "L3", "l1", "l2", "l3"], help="export one layer only")
     args = parser.parse_args()
 
-    from runtime.db import DB
+    from runtime.core.db import DB
 
     with DB() as db:
         if args.layer:

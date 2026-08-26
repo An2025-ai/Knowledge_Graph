@@ -8,28 +8,31 @@ from pathlib import Path
 from unittest.mock import patch
 from datetime import date
 
-from runtime.db import DB, json_dumps
-from runtime.industry.executor import _propagate_result
-from runtime.industry.pipelines.geo_research_report_job import _build_research_package
-from runtime.industry.pipelines.source_discovery import discover_sources
-from runtime.industry.search.providers import SearchResult
-from runtime.industry.pipelines.extraction import _upsert_entity
-from runtime.industry.pipelines.promotion import _disposition, _evaluate_gates
-from runtime.brand.pipelines.candidate_pre_extraction import (
-    _ner_type_to_candidate,
-    _ner_entities,
+from runtime.core.db import DB, json_dumps
+from runtime.industry.executor import _propagate_result, ALL_ORDER as L2_ORDER
+from runtime.extraction.candidate_extraction import (
     pre_extract,
+    ner_candidates,
+    build_candidate_rows,
+    _NER_TYPE_MAP,
 )
 from runtime.brand.pipelines._helpers import resolve_brand_context, update_assertion
-from runtime.ner_client import _clean_span, _map_ner_type, _SCHEMA_ZH
+from runtime.brand.pipelines.sensitive_content_warning import scan_risks
+from runtime.clients.ner_client import _clean_span, _map_ner_type, _SCHEMA_ZH
 from runtime.migrations.__main__ import main as migration_main
 from runtime.neo4j.consistency import count_assertions_pg, count_entity_edges
 from runtime.neo4j.projection import ProjectionService
 from runtime.common.prompt_builder import build_extraction_prompt
 from runtime.common.policy_engine import load_promotion_policy
 from runtime.common.registry import get_common_registry
-from runtime.ontology_validator import validate_ontology
-from runtime.brand.executor import DEFAULT_PIPELINES
+from runtime.ontology.ontology_validator import validate_ontology
+from runtime.brand.executor import DEFAULT_PIPELINES as L3_ORDER
+from runtime.promotion.promotion_service import (
+    evaluate_instance,
+    disposition,
+    NEAR_DUPLICATE_THRESHOLD,
+)
+from runtime.fusion.fusion_service import group_and_emit, resolve_entities, load_candidates
 from runtime.visualize.export import _relations_for_entity_ids, export_all, export_layer
 
 
@@ -55,158 +58,78 @@ class RecordingDB:
         self.inserts.append((sql, params))
         return "inserted-id"
 
+    def _json(self, value):
+        import json as _json
+
+        return _json.dumps(value, ensure_ascii=False)
+
+    def upsert(self, table, row, key_field="id"):
+        self.inserts.append((table, row))
+
+    def transaction(self):
+        from contextlib import nullcontext
+
+        return nullcontext()
+
+
+def _fake_policy():
+    return load_promotion_policy("l2_industry", 0.5)
+
 
 class RuntimeRegressionTests(unittest.TestCase):
-    def test_executor_propagates_pipeline_outputs(self):
-        args = argparse.Namespace(requirement_id=None, report_id=None, report=None)
+    # ------------------------------------------------------------------
+    # 新链路协调（executor 传播 + 管道顺序）
+    # ------------------------------------------------------------------
+
+    def test_executor_propagates_document_uuid(self):
+        args = argparse.Namespace(document_uuid=None, document_id=None)
         _propagate_result(
-            "geo_research_report_job",
-            {
-                "requirement_id": "ikr_crm",
-                "report_id": "grep_1",
-                "report_path": "reports/crm.md",
-            },
+            "content_parsing",
+            {"document_uuid": "uuid-1", "document_id": "doc_crm"},
             args,
         )
-        self.assertEqual(args.requirement_id, "ikr_crm")
-        self.assertEqual(args.report_id, "grep_1")
-        self.assertEqual(args.report, "reports/crm.md")
+        self.assertEqual(args.document_uuid, "uuid-1")
+        self.assertEqual(args.document_id, "doc_crm")
 
-    def test_executor_propagates_research_package_outputs(self):
-        args = argparse.Namespace(source_list=None, research_package=None, evidence=None)
-        _propagate_result(
-            "geo_research_report_job",
-            {
-                "source_list": "sources.json",
-                "research_package": "package",
-                "evidence_path": "package/evidence_index.json",
-            },
-            args,
+    def test_l2_pipeline_order_matches_plan_s11_1(self):
+        self.assertEqual(
+            L2_ORDER,
+            [
+                "article_registration",
+                "content_parsing",
+                "evidence_unit_merge",
+                "candidate_extraction",
+                "candidate_normalization",
+                "candidate_vectorization",
+                "knowledge_fusion",
+                "promotion",
+            ],
         )
-        self.assertEqual(args.source_list, "sources.json")
-        self.assertEqual(args.research_package, "package")
-        self.assertEqual(args.evidence, "package/evidence_index.json")
 
-    def test_source_discovery_offline_builds_candidate_list(self):
-        payload = discover_sources(
-            "CRM软件",
-            "CN",
-            [{"dimension_code": "capabilities", "expected_fields": ["capability_name"]}],
-            ["中国信通院"],
-            max_results_per_query=1,
-            use_provider=False,
+    def test_l3_pipeline_has_no_l2_mapping(self):
+        self.assertNotIn("l2_mapping", L3_ORDER)
+        self.assertEqual(
+            L3_ORDER,
+            [
+                "document_registration",
+                "sensitive_content_warning",
+                "content_parsing",
+                "evidence_unit_merge",
+                "candidate_extraction",
+                "candidate_normalization",
+                "candidate_vectorization",
+                "knowledge_fusion",
+                "promotion",
+            ],
         )
-        self.assertEqual(payload["stats"]["dimensions"], 1)
-        self.assertGreaterEqual(payload["stats"]["sources"], 1)
-        self.assertIn("query_plan", payload)
-        self.assertEqual(payload["sources"][0]["approval_status"], "pending")
-
-    def test_source_discovery_prefers_trusted_dimension_sources(self):
-        results = [
-            SearchResult(
-                title="Vendor blog",
-                url="https://random-vendor.example/blog/crm",
-                snippet="CRM marketing page",
-                rank=1,
-            ),
-            SearchResult(
-                title="CAICT CRM capability report",
-                url="https://www.caict.ac.cn/report/crm-capability",
-                snippet="CRM capability function module research report",
-                rank=2,
-            ),
-        ]
-        with patch("runtime.industry.pipelines.source_discovery.provider_status", return_value={"provider": "searxng", "searxng_available": True}), \
-                patch("runtime.industry.pipelines.source_discovery.search", return_value=results):
-            payload = discover_sources(
-                "CRM",
-                "CN",
-                [{"dimension_code": "capabilities", "expected_fields": ["capability_name"]}],
-                [],
-                max_results_per_query=2,
-                trusted_domains=["caict.ac.cn"],
-                max_sources_per_dimension=1,
-                strict_authority=True,
-            )
-        self.assertEqual(payload["stats"]["sources"], 1)
-        self.assertIn("caict.ac.cn", payload["sources"][0]["url"])
-        self.assertEqual(payload["sources"][0]["accepted_for_research"], True)
-        self.assertGreater(payload["sources"][0]["authority_score"], 0.8)
-
-    def test_research_package_skips_rejected_source_candidates(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            source_list = Path(tmp) / "sources.json"
-            package_dir = Path(tmp) / "package"
-            source_list.write_text(json.dumps({
-                "industry": "CRM",
-                "market": "CN",
-                "sources": [
-                    {
-                        "source_id": "src_ok",
-                        "title": "Accepted Source",
-                        "url": "https://www.caict.ac.cn/report/crm",
-                        "snippet": "CRM capability report",
-                        "source_class": "industry_research",
-                        "source_type": "web",
-                        "dimension_codes": ["capabilities"],
-                        "accepted_for_research": True,
-                    },
-                    {
-                        "source_id": "src_bad",
-                        "title": "Rejected Source",
-                        "url": "https://random-vendor.example/blog",
-                        "snippet": "Generic blog",
-                        "source_class": "reliable_media",
-                        "source_type": "web",
-                        "dimension_codes": ["capabilities"],
-                        "accepted_for_research": False,
-                    },
-                ],
-            }, ensure_ascii=False), encoding="utf-8")
-            built = _build_research_package(str(source_list), str(package_dir), fetch=False)
-            self.assertEqual(built["manifest"]["stats"]["sources"], 1)
-            evidence = json.loads((package_dir / "evidence_index.json").read_text(encoding="utf-8"))
-            self.assertEqual(len(evidence["sources"]), 1)
-            self.assertEqual(evidence["sources"][0]["source_id"], "src_ok")
-
-    def test_research_package_contains_report_and_evidence_index(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            source_list = Path(tmp) / "sources.json"
-            package_dir = Path(tmp) / "package"
-            source_list.write_text(json.dumps({
-                "industry": "CRM软件",
-                "market": "CN",
-                "sources": [{
-                    "source_id": "src_demo",
-                    "title": "Demo Source",
-                    "url": "https://www.google.com/search?q=crm",
-                    "snippet": "CRM software capability evidence",
-                    "source_class": "industry_research",
-                    "source_type": "web",
-                    "dimension_codes": ["capabilities"],
-                }],
-            }, ensure_ascii=False), encoding="utf-8")
-            built = _build_research_package(str(source_list), str(package_dir), fetch=False)
-            self.assertTrue((package_dir / "manifest.json").exists())
-            self.assertTrue((package_dir / "report.md").exists())
-            self.assertTrue((package_dir / "evidence_index.json").exists())
-            self.assertTrue((package_dir / "coverage_ledger.json").exists())
-            self.assertEqual(built["manifest"]["stats"]["evidence"], 1)
 
     def test_nested_dates_are_json_serializable(self):
         encoded = json_dumps({"published": [date(2026, 8, 12)]})
         self.assertEqual(json.loads(encoded), {"published": ["2026-08-12"]})
 
-    def test_entity_id_is_stable_across_chunks(self):
-        db = RecordingDB()
-        existing_ids = set()
-        registry = {}
-        entity = {"type": "brand", "canonical_name": "Acme"}
-        first = _upsert_entity(db, entity, existing_ids, registry, None, "ind_crm", dry_run=True)
-        second = _upsert_entity(db, entity, existing_ids, registry, None, "ind_crm", dry_run=True)
-        self.assertEqual(first, "ent_brand_acme")
-        self.assertEqual(second, first)
-        self.assertEqual(existing_ids, {"ent_brand_acme"})
+    # ------------------------------------------------------------------
+    # L1 契约 / policy / prompt（稳定支撑）
+    # ------------------------------------------------------------------
 
     def test_l3_dry_run_does_not_insert_context_rows(self):
         db = RecordingDB(query_results=[[], []])
@@ -234,9 +157,6 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertIn(" AND object_id", sql)
         self.assertEqual(params, ("a", "b", "a", "b"))
 
-    def test_l3_pipeline_has_no_l2_mapping(self):
-        self.assertNotIn("l2_mapping", DEFAULT_PIPELINES)
-
     def test_export_all_does_not_read_cross_layer_mappings(self):
         db = RecordingDB(query_results=[[], [], [], []])
         with patch("runtime.visualize.export.write_output", side_effect=lambda graph, out_path=None: graph):
@@ -255,53 +175,6 @@ class RuntimeRegressionTests(unittest.TestCase):
             graph = export_layer(db, "L1", out_path=None)
         self.assertEqual(graph["stats"]["nodes"], 2)
         self.assertTrue(all(node["layer"] == "L1" for node in graph["nodes"]))
-
-    def test_zero_confidence_fails_quality_gate(self):
-        db = RecordingDB(query_routes={
-            "FROM entity e LEFT JOIN entity_type": [{
-                "id": "e1", "entity_type": "brand", "industry_id": "ind_crm",
-                "registered_type": "brand",
-            }],
-            "FROM relation r": [],
-            "FROM statement": [{
-                "id": "s1", "statement_text": "A supported observation",
-                "statement_class": "fact", "scope": {"industry_id": "ind_crm"},
-            }],
-            "FROM citation_resolution": [{
-                "evidence_id": "ev1", "support_status": "directly_supports",
-                "access_status": "verified", "source_uuid": "src1",
-                "source_class": "industry_research", "source_type": "academic",
-                "approval_status": "approved", "l2_enabled": True,
-                "authority_level": "high", "policy_status": "active",
-            }],
-            "other.normalized_statement_hash": [],
-            "status='promoted' ORDER BY": [],
-        })
-        candidate = {
-            "candidate_uuid": "candidate-1",
-            "statement": "A supported observation",
-            "candidate_type": "fact",
-            "citation_labels": ["1"],
-            "confidence": 0,
-            "industry_id": "ind_crm",
-            "source_requirements": {"allowed_source_classes": ["industry_research"]},
-            "normalized_statement_hash": "hash-1",
-        }
-        results, failed = _evaluate_gates(db, candidate, threshold=0.5)
-        self.assertEqual(failed, "gate_10_quality")
-        self.assertEqual(results[-1]["detail"], "confidence=0 threshold=0.5")
-        self.assertEqual(_disposition(results)[0], "review")
-
-    def test_hard_gate_failure_takes_priority_over_review(self):
-        results = [
-            {"gate_id": "gate_1_industry_scope", "passed": False,
-             "detail": "missing", "action": "reject"},
-            {"gate_id": "gate_10_quality", "passed": False,
-             "detail": "low", "action": "review"},
-        ]
-        disposition, decisive = _disposition(results)
-        self.assertEqual(disposition, "reject")
-        self.assertEqual(decisive["gate_id"], "gate_1_industry_scope")
 
     def test_transaction_commits_or_rolls_back_and_restores_autocommit(self):
         class Connection:
@@ -362,9 +235,7 @@ class RuntimeRegressionTests(unittest.TestCase):
             self.assertEqual(migration_main(), 0)
 
     def test_l1_unknown_profile_fails_fast_not_global_fallback(self):
-        """A typo'd/unknown profile must raise instead of silently opening all types."""
         registry = get_common_registry()
-        # Unknown non-empty id -> raise on profile() and on query helpers.
         with self.assertRaises(ValueError):
             registry.profile("l2_industryy")
         with self.assertRaises(ValueError):
@@ -375,12 +246,10 @@ class RuntimeRegressionTests(unittest.TestCase):
             registry.statement_classes("l2_industryy")
         with self.assertRaises(ValueError):
             registry.require_profile("nope")
-        # require_profile rejects empty too.
         with self.assertRaises(ValueError):
             registry.require_profile(None)
 
     def test_l1_none_profile_is_rejected(self):
-        """Business types cannot be resolved without an explicit layer Profile."""
         registry = get_common_registry()
         for value in (None, ""):
             with self.assertRaises(ValueError):
@@ -391,7 +260,6 @@ class RuntimeRegressionTests(unittest.TestCase):
                 registry.relation_types(value)
 
     def test_l1_known_profiles_resolve_to_their_whitelist(self):
-        """Registered profiles still resolve to their restricted layer whitelist."""
         registry = get_common_registry()
         self.assertEqual(registry.profile("l2_industry").profile_id, "l2_industry")
         self.assertIn("industry", registry.entity_types("l2_industry"))
@@ -399,8 +267,6 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertNotIn("observation", registry.entity_types("l3_brand"))
 
     def test_l1_validate_profile_reports_unknown_not_raises(self):
-        """The validator reports an unknown profile as an error string; it must
-        not raise (unlike the runtime query helpers, which fail fast)."""
         registry = get_common_registry()
         self.assertEqual(registry.validate_profile("nope"), ["unknown profile 'nope'"])
 
@@ -418,9 +284,6 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertEqual(registry.validate_profiles(), [])
 
     def test_l1_all_allowed_types_have_owner_metadata(self):
-        """Guard against orphaned schema members: every entity/relation a profile
-        allows should carry owner/scope metadata, so the layer contract (who owns,
-        stability, promotion target) is explicit rather than silently unmanaged."""
         registry = get_common_registry()
         for profile_id, profile in registry.profiles.items():
             miss_e = (profile.allowed_entity_types - set(profile.entity_type_metadata))
@@ -442,7 +305,7 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertNotIn("to_layer", meta)
 
     def test_l1_promotion_policy_reads_profile_defaults(self):
-        policy = load_promotion_policy("l3_brand", default_threshold=0.9)
+        policy = load_promotion_policy("l3_brand", 0.9)
         self.assertEqual(policy.confidence_threshold, 0.5)
         self.assertTrue(policy.direct_stable_promotion)
         self.assertFalse(policy.source_authority_ok("low"))
@@ -481,24 +344,26 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertTrue(any("unknown entity type 'source'" in error for error in result.errors))
         self.assertTrue(any("unknown relation type 'cites'" in error for error in result.errors))
 
-    # --- PaddleNLP NER candidate layer ---
-
-    def test_ner_type_mapping_whitelists_and_drops(self):
-        self.assertEqual(_ner_type_to_candidate("organization"), "organization")
-        self.assertEqual(_ner_type_to_candidate("ORG"), "organization")
-        self.assertEqual(_ner_type_to_candidate("product_name"), "product")
-        self.assertEqual(_ner_type_to_candidate("cert"), "certification")
-        # Unknown / non-domain generic labels are dropped (not candidates).
-        self.assertIsNone(_ner_type_to_candidate("person"))
-        self.assertIsNone(_ner_type_to_candidate("location"))
-        self.assertIsNone(_ner_type_to_candidate(""))
+    # ------------------------------------------------------------------
+    # 候选抽取（L1-aware，证据优先）
+    # ------------------------------------------------------------------
 
     def test_pre_extract_without_ner_client_is_unchanged(self):
-        # No ner_client -> no paddlenlp generator candidates appear.
         text = "DeepCleer 支持自动对账，获得 ISO 27001 认证。"
         candidates = pre_extract(text)
         self.assertTrue(candidates)
         self.assertFalse([c for c in candidates if c["generator"].startswith("paddlenlp:")])
+
+    def test_ner_type_mapping_whitelists_and_drops(self):
+        self.assertEqual(_NER_TYPE_MAP["organization"], "organization")
+        self.assertEqual(_NER_TYPE_MAP["org"], "organization")
+        self.assertEqual(_NER_TYPE_MAP["product_name"], "product")
+        self.assertEqual(_NER_TYPE_MAP["cert"], "certification")
+        # person maps to a valid L1 brand-customer entity rather than being dropped
+        self.assertEqual(_NER_TYPE_MAP["person"], "customer")
+        # Unknown / non-domain generic labels are not mapped and never become candidates.
+        self.assertNotIn("location", _NER_TYPE_MAP)
+        self.assertNotIn("", _NER_TYPE_MAP)
 
     def test_ner_layer_builds_candidates_and_ids_generator(self):
         class FakeNER:
@@ -506,26 +371,51 @@ class RuntimeRegressionTests(unittest.TestCase):
                 return [
                     {"type": "organization", "text": "上海智云图科技有限公司", "score": 0.95},
                     {"type": "capability", "text": "自动对账", "score": 0.85},
-                    {"type": "person", "text": "张三", "score": 0.9},  # dropped by mapping
+                    {"type": "person", "text": "张三", "score": 0.9},  # -> customer
                 ]
 
-        candidates = _ner_entities("sample", FakeNER())
-        ners = [c for c in candidates if c["generator"].startswith("paddlenlp:")]
-        self.assertEqual(len(ners), 2)
-        self.assertTrue(all(c["generator"] == "paddlenlp:ner:%s" % c["candidate_type"]
-                            for c in ners))
-        org = next(c for c in ners if c["candidate_type"] == "organization")
+        candidates = ner_candidates("sample", FakeNER())
+        self.assertEqual(len(candidates), 3)
+        self.assertTrue(all(c["generator"].startswith("paddlenlp:ner:")
+                            for c in candidates))
+        org = next(c for c in candidates if c["candidate_payload"]["entity_type"] == "organization")
         self.assertEqual(org["candidate_payload"]["name"], "上海智云图科技有限公司")
         self.assertEqual(org["confidence"], 0.95)
-        # A dropped label never becomes a candidate.
-        self.assertNotIn("person", [c["candidate_type"] for c in ners])
+        # person is mapped to customer (valid L1 brand type), not dropped
+        cust = next(c for c in candidates if c["candidate_payload"]["entity_type"] == "customer")
+        self.assertEqual(cust["candidate_payload"]["name"], "张三")
+
+    def test_build_candidate_rows_requires_evidence_text(self):
+        context = {
+            "document_uuid": "duuid", "document_id": "doc1", "profile_id": "l2_industry",
+            "layer": "l2_industry",
+        }
+        ev_unit = {"unit_id": "EU1", "source_span_ids": ["ES1"], "text": "营收 12 亿元。"}
+        rows = build_candidate_rows(
+            context, ev_unit,
+            [{"candidate_type": "metric", "candidate_payload": {"value": "12", "name": "营收"},
+              "confidence": 0.85, "generator": "regex:numeric_metric"}],
+        )
+        self.assertEqual(rows[0]["evidence_text"], "营收 12 亿元。")
+        self.assertTrue(rows[0]["schema_valid"])
+        self.assertEqual(rows[0]["document_id" if rows[0].get("document_id") else "document_uuid"],
+                         rows[0]["document_uuid"])
+        # 实体预筛本身不落成知识候选（否则噪音）
+        entity_rows = build_candidate_rows(
+            context, ev_unit,
+            [{"candidate_type": "entity",
+              "candidate_payload": {"name": "Acme", "entity_type": "organization"},
+              "confidence": 0.9, "generator": "paddlenlp:ner:organization"}],
+        )
+        self.assertEqual(entity_rows, [])
 
     def test_pre_extract_with_ner_client_appends_ner_candidates(self):
         class FakeNER:
             def named_entities(self, text):
                 return [{"type": "product", "text": "AI 业财平台", "score": 0.9}]
 
-        candidates = pre_extract("提供 AI 业财平台，支持自动对账。", ner_client=FakeNER())
+        candidates = pre_extract("提供 AI 业财平台，支持自动对账。", ner_client=FakeNER(),
+                                 profile_id="l3_brand")
         ners = [c for c in candidates if c["generator"].startswith("paddlenlp:")]
         self.assertTrue(ners)
         self.assertEqual(ners[0]["candidate_payload"]["name"], "AI 业财平台")
@@ -535,21 +425,16 @@ class RuntimeRegressionTests(unittest.TestCase):
             def named_entities(self, text):
                 raise RuntimeError("model init failed")
 
-        # Optional layer must not raise into the caller.
-        self.assertEqual(_ner_entities("any text", BrokenNER()), [])
+        self.assertEqual(ner_candidates("any text", BrokenNER()), [])
 
     def test_ner_chinese_schema_label_mapping(self):
-        # UIE needs Chinese schema labels for Chinese text; the config keeps
-        # English candidate_type, and labels translate both ways.
         self.assertEqual(_SCHEMA_ZH["organization"], "公司")
         self.assertEqual(_SCHEMA_ZH["certification"], "认证")
-        # UIE Chinese output labels map back to English candidate_type.
         self.assertEqual(_map_ner_type("公司"), "organization")
         self.assertEqual(_map_ner_type("产品"), "product")
         self.assertEqual(_map_ner_type("能力"), "capability")
 
     def test_ner_span_cleaning_trims_dangling_brackets(self):
-        # UIE sometimes leaves an unclosed opening bracket at a span boundary.
         self.assertEqual(_clean_span("DeepCleer 深澈智算（上海智云图科技有限公司"),
                          "DeepCleer 深澈智算（上海智云图科技有限公司")
         self.assertEqual(_clean_span("（智能风控大脑）"), "（智能风控大脑）")
@@ -557,29 +442,160 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertEqual(_clean_span("  X  "), "X")
         self.assertEqual(_clean_span(""), "")
 
-    def test_ner_dry_run_does_not_insert(self):
-        db = RecordingDB(query_routes={
-            "FROM tenant": [],                       # tenant lookup empty
-            "FROM entity": [],                       # brand lookup empty
-            "FROM document WHERE document_id": [{"id": "doc-uuid"}],
-            "FROM document_chunk": [{"id": "chunk-1", "chunk_index": 0,
-                                     "text": "提供 AI 业财平台。"}],
-        })
+    # ------------------------------------------------------------------
+    # 融合（knowledge_fusion：实体消解 / 冲突 / 融合）
+    # ------------------------------------------------------------------
 
-        class FakeNER:
-            def named_entities(self, text):
-                return [{"type": "product", "text": "AI 业财平台", "score": 0.9}]
+    def test_fusion_resolves_entities_by_type_and_name(self):
+        db = RecordingDB()
+        candidates = [
+            {"candidate_id": "KC1", "subject": {"name": "Acme", "entity_type": "brand"},
+             "confidence": 0.8, "evidence_unit_id": "EU1"},
+            {"candidate_id": "KC2", "subject": {"name": "Acme", "entity_type": "brand"},
+             "confidence": 0.7, "evidence_unit_id": "EU2"},
+        ]
+        entities = resolve_entities(db, candidates, profile_id="l3_brand",
+                                    layer="l3_brand", tenant_id=None)
+        self.assertEqual(len(entities), 1)
+        ent = next(iter(entities.values()))
+        self.assertEqual(ent["confidence"], 0.8)  # max aggregated
+        self.assertEqual(len(ent["source_candidate_ids"]), 2)
+        self.assertEqual(len(ent["evidence_refs"]), 2)
 
-        args = argparse.Namespace(brand="Acme", tenant="demo", document_id="doc_x",
-                                  dry_run=True, skip_ner=False)
-        import runtime.brand.pipelines.candidate_pre_extraction as cpe
-        with patch.object(cpe, "get_ner_client", lambda: FakeNER()):
-            result = cpe.run(db, args)
-        # dry-run: counts candidates but writes nothing to extraction_candidate.
-        self.assertGreater(result["candidate_count"], 0)
-        self.assertGreater(result["ner_count"], 0)
-        self.assertTrue(result["ner_enabled"])
-        self.assertEqual(db.inserts, [])
+    def test_fusion_conflicts_split_different_objects(self):
+        db = RecordingDB()
+        candidates = [
+            {"candidate_id": "KC1", "candidate_type": "relation",
+             "subject": {"name": "Acme", "entity_type": "brand"},
+             "predicate": {"type": "offers"},
+             "object": {"name": "产品A"}, "confidence": 0.8,
+             "evidence_text": "Acme 提供产品A。", "evidence_unit_id": "EU1"},
+            {"candidate_id": "KC2", "candidate_type": "relation",
+             "subject": {"name": "Acme", "entity_type": "brand"},
+             "predicate": {"type": "offers"},
+             "object": {"name": "产品B"}, "confidence": 0.8,
+             "evidence_text": "Acme 提供产品B。", "evidence_unit_id": "EU2"},
+        ]
+        entities = resolve_entities(db, candidates, profile_id="l3_brand",
+                                    layer="l3_brand", tenant_id=None)
+        stats = group_and_emit(db, candidates, entities, profile_id="l3_brand",
+                               layer="l3_brand", tenant_id=None)
+        self.assertEqual(stats["conflict_groups"], 1)
+        self.assertEqual(stats["conflicted"], 2)
+        self.assertEqual(stats["emitted"], 2)
+
+    def test_fusion_fuses_same_object(self):
+        db = RecordingDB()
+        candidates = [
+            {"candidate_id": "KC1", "candidate_type": "relation",
+             "subject": {"name": "Acme", "entity_type": "brand"},
+             "predicate": {"type": "offers"},
+             "object": {"name": "产品A"}, "confidence": 0.8,
+             "evidence_text": "Acme 提供产品A。", "evidence_unit_id": "EU1"},
+            {"candidate_id": "KC2", "candidate_type": "relation",
+             "subject": {"name": "Acme", "entity_type": "brand"},
+             "predicate": {"type": "offers"},
+             "object": {"name": "产品A"}, "confidence": 0.7,
+             "evidence_text": "Acme 提供产品A 认证。", "evidence_unit_id": "EU2"},
+        ]
+        entities = resolve_entities(db, candidates, profile_id="l3_brand",
+                                    layer="l3_brand", tenant_id=None)
+        stats = group_and_emit(db, candidates, entities, profile_id="l3_brand",
+                               layer="l3_brand", tenant_id=None)
+        self.assertEqual(stats["conflict_groups"], 0)
+        self.assertEqual(stats["fused"], 1)  # 1 extra merged
+        self.assertEqual(stats["emitted"], 1)
+
+    def test_load_candidates_queries_by_profile(self):
+        db = RecordingDB(query_results=[[]])
+        load_candidates(db, "l3_brand")
+        self.assertIn("knowledge_candidates", db.queries[0][0])
+        self.assertIn("profile_id=%s", db.queries[0][0])
+
+    # ------------------------------------------------------------------
+    # 门禁（promotion：L1 eval + disposition）
+    # ------------------------------------------------------------------
+
+    def test_gate_evidence_requires_direct_support(self):
+        db = RecordingDB()
+        k = {
+            "knowledge_id": "GK1", "knowledge_type": "statement",
+            "subject_entity_id": "ent_brand_acme", "confidence": 0.9,
+            "evidence_refs": [{"access_status": "ok",
+                               "support_status": "directly_supports"}],
+        }
+        results = evaluate_instance(db, k, profile_id="l2_industry", policy=_fake_policy())
+        gate = next(r for r in results if r["gate_id"] == "gate_evidence")
+        self.assertTrue(gate["passed"])
+
+    def test_gate_evidence_rejects_unsupported_evidence(self):
+        db = RecordingDB()
+        k = {
+            "knowledge_id": "GK1", "knowledge_type": "statement",
+            "subject_entity_id": "ent_brand_acme", "confidence": 0.9,
+            "evidence_refs": [{"access_status": "ok",
+                               "support_status": "contradicts"}],
+        }
+        results = evaluate_instance(db, k, profile_id="l2_industry", policy=_fake_policy())
+        gate = next(r for r in results if r["gate_id"] == "gate_evidence")
+        self.assertFalse(gate["passed"])
+
+    def test_zero_confidence_fails_quality_gate(self):
+        db = RecordingDB()
+        k = {
+            "knowledge_id": "GK1", "knowledge_type": "statement",
+            "subject_entity_id": "ent_brand_acme", "confidence": 0,
+            "evidence_refs": [{"access_status": "ok",
+                               "support_status": "directly_supports"}],
+        }
+        results = evaluate_instance(db, k, profile_id="l2_industry", policy=_fake_policy())
+        conf_gate = next(r for r in results if r["gate_id"] == "gate_confidence")
+        self.assertEqual(conf_gate["detail"], "confidence=0 threshold=0.5")
+        decision, decisive = disposition(results)
+        self.assertEqual(decision, "review")
+        self.assertEqual(decisive["gate_id"], "gate_confidence")
+
+    def test_hard_gate_failure_takes_priority_over_review(self):
+        results = [
+            {"gate_id": "gate_ontology", "passed": False,
+             "detail": "missing", "action": "reject"},
+            {"gate_id": "gate_confidence", "passed": False,
+             "detail": "low", "action": "review"},
+        ]
+        decision, decisive = disposition(results)
+        self.assertEqual(decision, "reject")
+        self.assertEqual(decisive["gate_id"], "gate_ontology")
+
+    def test_all_gates_pass_promotes(self):
+        db = RecordingDB()
+        k = {
+            "knowledge_id": "GK1", "knowledge_type": "statement",
+            "subject_entity_id": "ent_brand_acme", "confidence": 0.95,
+            "evidence_refs": [{"access_status": "ok",
+                               "support_status": "directly_supports"}],
+        }
+        results = evaluate_instance(db, k, profile_id="l2_industry", policy=_fake_policy())
+        self.assertTrue(all(r["passed"] for r in results))
+        self.assertEqual(disposition(results)[0], "promote")
+
+    # ------------------------------------------------------------------
+    # 敏感内容提醒（L3 §10.2）
+    # ------------------------------------------------------------------
+
+    def test_sensitive_content_warning_grades_severity(self):
+        high = scan_risks("本项目是行业唯一，获得 ISO 27001 认证，ROI 提升 30%。")
+        types = {w["warning_type"]: w["severity"] for w in high}
+        self.assertEqual(types.get("absolute_claim"), 2)
+        self.assertEqual(types.get("certification_claim"), 2)
+        self.assertEqual(types.get("financial_kpi"), 2)
+        self.assertTrue(all(w["severity"] >= 2 for w in high))
+
+    def test_sensitive_content_warning_marks_blocked_false(self):
+        # 只提醒不阻断（§10.2）
+        self.assertEqual(scan_risks("普通产品介绍。"), [])
+        from runtime.brand.pipelines.sensitive_content_warning import _render_action
+        self.assertEqual(_render_action(2), "review_before_publication")
+        self.assertEqual(_render_action(1), "flag_for_disclosure")
 
 
 if __name__ == "__main__":

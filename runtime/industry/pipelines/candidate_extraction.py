@@ -1,11 +1,8 @@
-"""L3 pipeline: candidate_extraction — L1-aware 候选知识抽取（方案 §11.2）。
+"""L2 pipeline: candidate_extraction — L1-aware 候选知识抽取（方案 §6）。
 
-合并原 candidate_pre_extraction / candidate_extraction / assertion_classification 的
-抽取职责为一次 L1-aware（profile=l3_brand）抽取：读取文档 evidence_units，
-NER + 正则/规则预筛 → L1 映射过滤 →（可选）LLM 结构化抽取，写入 ``knowledge_candidates``
-（§9.2），保留 evidence_text 与完整溯源。过滤与 L1 品牌本体无关的 unit（§6.3.1）。
-
-注意：L3 不做标题断言分类——断言级别由 L1 门禁在 promotion 阶段统一裁决（§10.2）。
+读取文档的 evidence_units，跑 NER + 正则/规则预筛 → L1 映射过滤 → （可选）LLM 结构化抽取，
+把命中候选写入 ``knowledge_candidates``（§9.2），保留 evidence_text 与完整溯源。
+过滤掉与 L1 ontology 无关的 unit（§6.3.1），降低 LLM 成本。
 """
 from __future__ import annotations
 
@@ -19,19 +16,8 @@ from runtime.core.knowledge_service import (
 )
 
 
-DEFAULT_PROFILE_ID = "l3_brand"
+DEFAULT_PROFILE_ID = "l2_industry"
 DEFAULT_UNIT_LIMIT = 200
-
-
-def _resolve_document_uuid(db: DB, args) -> Any:
-    document_uuid = getattr(args, "document_uuid", None)
-    if document_uuid:
-        return document_uuid
-    document_id = getattr(args, "document_id", None)
-    rows = db.query("SELECT id FROM document WHERE document_id=%s LIMIT 1", (document_id,))
-    if not rows:
-        raise ValueError("candidate_extraction requires --document-uuid or a known --document-id")
-    return rows[0]["id"]
 
 
 def run(db: DB, args) -> dict[str, Any]:
@@ -39,12 +25,13 @@ def run(db: DB, args) -> dict[str, Any]:
 
     profile_id = getattr(args, "profile_id", None) or DEFAULT_PROFILE_ID
     get_common_registry().require_profile(profile_id)
-    layer = getattr(args, "layer", None) or "l3_brand"
+    layer = getattr(args, "layer", None) or "l2_industry"
 
     document_uuid = _resolve_document_uuid(db, args)
     document_id = getattr(args, "document_id", None)
     prov = document_provenance(db, document_uuid)
 
+    # 可选 NER（PaddleNLP），缺失则退化为纯规则模式
     ner_client = None
     ner_enabled = not getattr(args, "skip_ner", False)
     if ner_enabled:
@@ -112,19 +99,30 @@ def run(db: DB, args) -> dict[str, Any]:
     }
 
 
+def _resolve_document_uuid(db: DB, args) -> Any:
+    document_uuid = getattr(args, "document_uuid", None)
+    if document_uuid:
+        return document_uuid
+    document_id = getattr(args, "document_id", None)
+    rows = db.query("SELECT id FROM document WHERE document_id=%s LIMIT 1", (document_id,))
+    if not rows:
+        raise ValueError("candidate_extraction requires --document-uuid or a known --document-id")
+    return rows[0]["id"]
+
+
 if __name__ == "__main__":
     import argparse
-    import json
 
-    parser = argparse.ArgumentParser(description="L3 L1-aware candidate extraction")
+    parser = argparse.ArgumentParser(description="L2 L1-aware candidate extraction")
     parser.add_argument("--document-id")
     parser.add_argument("--document-uuid")
-    parser.add_argument("--uuid", dest="document_uuid")
     parser.add_argument("--profile-id", default=DEFAULT_PROFILE_ID)
-    parser.add_argument("--layer", default="l3_brand")
+    parser.add_argument("--layer", default="l2_industry")
     parser.add_argument("--unit-limit", type=int, default=DEFAULT_UNIT_LIMIT)
     parser.add_argument("--skip-ner", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     with DB.from_env() as db:
+        import json
+
         print(json.dumps(run(db, args), ensure_ascii=False, default=str))

@@ -1,4 +1,4 @@
-"""Rewrite vis-network CDN references to local lib/ paths in the rendered HTML."""
+"""Rewrite vis-network CDN references to local assets/ paths in the rendered HTML."""
 from __future__ import annotations
 
 import re
@@ -20,8 +20,8 @@ def main() -> None:
         content = p.read_text(encoding="utf-8")
         n_js = len(CDN_JS.findall(content))
         n_css = len(CDN_CSS.findall(content))
-        content = CDN_JS.sub('<script src="lib/vis-network.min.js"></script>', content)
-        content = CDN_CSS.sub('<link rel="stylesheet" href="lib/vis-network.min.css">', content)
+        content = CDN_JS.sub('<script src="assets/vis-network.min.js"></script>', content)
+        content = CDN_CSS.sub('<link rel="stylesheet" href="assets/vis-network.min.css">', content)
         p.write_text(content, encoding="utf-8")
         print(f"{f}: replaced {n_js} JS + {n_css} CSS CDN refs; cdnjs residual={content.count('cdnjs.cloudflare')}")
 

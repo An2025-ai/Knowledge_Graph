@@ -5,7 +5,7 @@ Reads runtime/visualize/output/l1_graph.json, l2_graph.json, l3_graph.json
 (produced by `python -m runtime.visualize.export --layer L1/L2/L3`) and writes a
 single self-contained HTML (runtime/visualize/output/layered_2d.html) that opens
 directly via file:// (data is inlined, vis-network is loaded from the local
-lib/ directory — no CDN, no fetch).
+assets/ directory — no CDN, no fetch).
 
 Features:
   - L1 / L2 / L3 tabs (progressive presentation)
@@ -66,7 +66,7 @@ def _build_html() -> str:
 <head>
 <meta charset="utf-8">
 <title>Brand Atlas 分层知识图谱 · 2D 展示原型</title>
-<link rel="stylesheet" href="lib/vis-network.min.css">
+<link rel="stylesheet" href="assets/vis-network.min.css">
 <style>
   body {{ margin:0; font-family: "Microsoft YaHei", system-ui, sans-serif; background:#0f1222; color:#e6e8f0; }}
   header {{ padding:14px 20px; background:#171a2e; border-bottom:1px solid #2a2f4a; }}
@@ -97,7 +97,7 @@ def _build_html() -> str:
 </div>
 <div id="empty" style="display:none"></div>
 
-<script src="lib/vis-network.min.js"></script>
+<script src="assets/vis-network.min.js"></script>
 <script>
 window.LAYERS = {data_json};
 

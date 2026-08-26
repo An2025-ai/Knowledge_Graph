@@ -1,10 +1,13 @@
 """L3 Pipeline Orchestrator.
 
-Runs one — or all — of the L3 brand-cognition pipeline executors against a brand
-document, producing the "brand docs/report -> brand knowledge" flow.
+按方案 §11.2 编排九条 L3 品牌认知管道（独立主题流程，不与 L2 共用），产出一条
+"品牌文档 -> brand knowledge" 链路：
+
+    document_registration → sensitive_content_warning → content_parsing
+    → evidence_unit_merge → candidate_extraction → candidate_normalization
+    → candidate_vectorization → knowledge_fusion → promotion
 
 Usage:
-    python -m runtime.brand.executor --pipeline source_registration --file <doc.md> --brand <brand_id>
     python -m runtime.brand.executor --pipeline candidate_extraction --file <doc.md> --brand <brand_id> [--dry-run]
     python -m runtime.brand.executor --all --file <doc.md> --brand <brand_id> [--dry-run]
 
@@ -17,36 +20,37 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 import sys
 from typing import Any
 
-from runtime.db import DB
+from runtime.core.db import DB
 
-# L3 is self-contained and never creates mappings to L2.
+# L3 is self-contained and never creates mappings to L2（§11.2 独立文件目录）。
 DEFAULT_PIPELINES = [
-    "source_registration",
-    "original_file_gate",
-    "layout_aware_parsing",
-    "semantic_chunking",
-    "candidate_pre_extraction",
+    "document_registration",
+    "sensitive_content_warning",
+    "content_parsing",
+    "evidence_unit_merge",
     "candidate_extraction",
-    "entity_resolution",
-    "assertion_classification",
-    "evidence_verification",
-    "review_promotion",
+    "candidate_normalization",
+    "candidate_vectorization",
+    "knowledge_fusion",
+    "promotion",
 ]
 PIPELINES = DEFAULT_PIPELINES
 
-# Pipelines that need a --document-id (produced by source_registration).
+# Pipelines that need a --document-id (produced by document_registration).
 REQUIRE_DOCUMENT_ID = {
-    "layout_aware_parsing",
-    "semantic_chunking",
-    "candidate_pre_extraction",
+    "content_parsing",
+    "evidence_unit_merge",
     "candidate_extraction",
+    "candidate_normalization",
+    "candidate_vectorization",
 }
 
 # Pipelines that need a --file.
-REQUIRE_FILE = {"source_registration", "original_file_gate", "layout_aware_parsing"}
+REQUIRE_FILE = {"document_registration", "sensitive_content_warning", "content_parsing"}
 
 
 def load_pipeline(name: str):
@@ -79,7 +83,7 @@ def _validate(names: list[str], args) -> None:
             raise SystemExit(f"pipeline '{name}' requires --file <doc.md>")
         if name in REQUIRE_DOCUMENT_ID and not getattr(args, "document_id", None):
             raise SystemExit(
-                f"pipeline '{name}' requires --document-id (from source_registration). "
+                f"pipeline '{name}' requires --document-id (from document_registration). "
                 f"Use --all, or pass --document-id."
             )
 
@@ -92,9 +96,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--pipeline", choices=PIPELINES, help="Name of a single L3 pipeline to run")
     p.add_argument("--all", action="store_true", help="Run the default L3 pipelines in sequence")
     p.add_argument("--file", help="Path to the brand source document (md/txt/html)")
+    p.add_argument("--text", help="Raw brand source text (content_parsing)")
     p.add_argument("--brand", required=True, help="Brand key / id")
     p.add_argument("--tenant", help="Tenant key (default: 'default')")
     p.add_argument("--document-id", help="document_id (auto-derived under --all)")
+    p.add_argument("--document-uuid", help="document.uuid (auto-derived under --all)")
     p.add_argument("--source-id", help="source_id (auto-derived under --all)")
     p.add_argument("--dry-run", action="store_true", help="Do not write to the DB")
     # pass-through / optional metadata
@@ -103,9 +109,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--canonical-url", help="Canonical URL")
     p.add_argument("--access-level", choices=["public", "internal", "confidential", "restricted"])
     p.add_argument("--language", help="Document language")
+    p.add_argument("--published-at", help="ISO published_at timestamp")
     p.add_argument("--content-hash", help="Source content hash (for snapshot)")
     p.add_argument("--skip-ner", action="store_true",
                    help="Disable the optional PaddleNLP NER candidate layer")
+    p.add_argument("--unit-limit", type=int, default=200,
+                   help="Max evidence units scanned by candidate_extraction")
+    p.add_argument("--confidence-threshold", type=float,
+                   help="Promotion gate confidence threshold (default from policy)")
+    p.add_argument("--knowledge-id", help="Promote only this gate_candidate_knowledge id")
     return p
 
 
@@ -119,20 +131,14 @@ def main(argv: list[str] | None = None) -> int:
     # Derive a stable document_id from the file name when running --all so the
     # downstream pipelines can reference the same document across steps.
     if args.all and not args.document_id:
-        import os
         fname = os.path.basename(args.file) if args.file else "document"
         stem = os.path.splitext(fname)[0]
         args.document_id = f"doc_{stem}"
     if args.all and not args.source_id:
-        import os
         fname = os.path.basename(args.file) if args.file else "source"
         args.source_id = f"src_{fname}"
 
-    if args.all:
-        names = list(DEFAULT_PIPELINES)
-    else:
-        names = [args.pipeline]
-
+    names = DEFAULT_PIPELINES if args.all else [args.pipeline]
     _validate(names, args)
 
     with DB.from_env() as db:
@@ -149,16 +155,15 @@ def main(argv: list[str] | None = None) -> int:
                 results[name] = {"pipeline": name, "error": str(exc)}
                 failed = True
                 break
-            # --all: chain the auto document_id/source_id we already set; also
-            # carry the content hash forward for the final snapshot.
-            if args.all and name == "source_registration":
-                args.content_hash = result.get("content_hash") or args.content_hash
+            # --all: carry the document UUID forward for downstream pipelines.
+            if result.get("document_uuid"):
+                args.document_uuid = result["document_uuid"]
 
         if args.all:
             print("\n=== L3 run summary ===")
             for name, res in results.items():
-                keys = [k for k in ("stats", "section_count", "span_count", "mapping_count",
-                                    "promoted", "queued") if k in res]
+                keys = [k for k in ("span_count", "unit_count", "candidate_count",
+                                    "warning_count", "promoted", "review") if k in res]
                 brief = {k: res[k] for k in keys}
                 print(f"  {name}: {brief or res.get('status', 'ok')}")
     return 1 if failed else 0

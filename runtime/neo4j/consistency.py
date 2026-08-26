@@ -55,7 +55,7 @@ def main() -> int:
     parser.add_argument("--counts-only", action="store_true", help="only compare counts")
     args = parser.parse_args()
 
-    from runtime.db import DB
+    from runtime.core.db import DB
     from runtime.neo4j import projection
 
     if not projection.HAS_NEO4J:
