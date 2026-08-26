@@ -43,7 +43,7 @@ if not os.environ.get("HF_ENDPOINT"):
 # not once per NERClient / pipeline step.
 _LOCAL_MODEL_CACHE: dict[str, Any] = {}
 
-DEFAULT_MODEL_CONFIG = Path(__file__).resolve().parent / "config" / "model-config.local.json"
+DEFAULT_MODEL_CONFIG = Path(__file__).resolve().parents[1] / "config" / "model-config.local.json"
 
 # Default schema the NER model is asked to extract. Keys on the right are the
 # candidate_type values in ``knowledge_candidates``; see _TYPE_ALIASES below.

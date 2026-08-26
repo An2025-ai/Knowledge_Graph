@@ -38,7 +38,6 @@ def run(db: DB, args) -> dict[str, Any]:
         )
 
     span_rows = parse_to_span_rows(text, span_prefix=getattr(args, "span_prefix", DEFAULT_SPAN_PREFIX))
-    unit_rows = []
     if not getattr(args, "dry_run", False):
         count = write_spans(db, document_uuid, span_rows)
     else:

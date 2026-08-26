@@ -270,11 +270,17 @@ CREATE TABLE IF NOT EXISTS gate_candidate_knowledge (
     latest_published_at TIMESTAMPTZ,
     confidence      NUMERIC(4,3) NOT NULL DEFAULT 0.5,
     embedding_id    VARCHAR(64),
+    -- schema 校验标记（审查 High #7）：抽取/融合显式置 True 时才放行 gate_schema；
+    -- 默认 FALSE 让未校验候选在门禁阶段被挡下，而非静默通过。
+    schema_valid    BOOLEAN NOT NULL DEFAULT FALSE,
     gate_status     VARCHAR(20) NOT NULL DEFAULT 'pending'
         CHECK (gate_status IN ('pending','passed','rejected')),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- 幂等迁移：老库已通过 CREATE TABLE 建好的表补上该列
+ALTER TABLE gate_candidate_knowledge
+    ADD COLUMN IF NOT EXISTS schema_valid BOOLEAN NOT NULL DEFAULT FALSE;
 COMMENT ON TABLE gate_candidate_knowledge IS '跨文档融合后的门禁候选知识（§9.3），位于 knowledge_candidates 与 active graph 之间';
 CREATE INDEX IF NOT EXISTS idx_gck_type ON gate_candidate_knowledge (knowledge_type);
 CREATE INDEX IF NOT EXISTS idx_gck_status ON gate_candidate_knowledge (gate_status);

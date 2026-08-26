@@ -10,7 +10,6 @@ from typing import Any
 
 from engine.core.db import DB
 from engine.extraction.evidence_parsing import merge_spans_to_unit_rows, write_units
-from engine.core.knowledge_service import document_provenance
 
 
 DEFAULT_UNIT_PREFIX = "EU"

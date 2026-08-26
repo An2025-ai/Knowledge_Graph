@@ -19,7 +19,6 @@ from engine.core.knowledge_service import (
     stable_hash,
     upsert_gate_entity,
     upsert_gate_knowledge,
-    document_provenance,
 )
 
 _MENTION_NORM_RE = re.compile(r"[\s，,、。;；：]+")
@@ -105,16 +104,6 @@ def resolve_entities(
 # 候选分组与门禁知识生成
 # ---------------------------------------------------------------------------
 
-def _cand_context(cand: dict) -> dict:
-    prov = document_provenance.__doc__  # noqa
-    return {
-        "evidence_text": cand.get("evidence_text", ""),
-        "evidence_unit_id": cand.get("evidence_unit_id"),
-        "candidate_id": cand.get("candidate_id"),
-        "published_at": cand.get("published_at"),
-    }
-
-
 def _emit_knowledge(
     db: DB,
     group_key: str,
@@ -131,6 +120,14 @@ def _emit_knowledge(
     first = members[0]
     ktype = first["candidate_type"]
     subject = first.get("subject") or {}
+    # Fail-fast（审查 Critical #4）：relation 候选必须带非空 predicate.type，否则写出的
+    # gate 行 predicate_type=None，融合/晋级全部丢失关系语义，且会造成名义上的“关系”却无
+    # 谓词。宁可在这里显式报错，也不要静默写入坏数据。
+    if ktype == "relation" and not (first.get("predicate") or {}).get("type"):
+        raise ValueError(
+            f"relation candidate {first.get('candidate_id')} has empty predicate.type; "
+            f"won't emit a predicate-less gate row"
+        )
     knowledge_id = f"GK_{profile_id.split('_')[0].upper()}_{stable_hash(group_key)}"
 
     evidence_refs: list[dict] = []
@@ -138,9 +135,12 @@ def _emit_knowledge(
     source_document_ids: list[str] = []
     latest_published = None
     for m in members:
-        uid = m.get("evidence_unit_id")
-        if uid and uid not in source_document_ids:
-            source_document_ids.append(uid)
+        # 溯源语义：source_document_ids=来源 document（候选的 document_id/document_uuid，
+        # 审查 Critical #5）。evidence_unit_id 只进 evidence_refs，绝不混入 document 列表，
+        # 否则「文档溯源」字段被 evidence 单元 id 污染。
+        doc_id = m.get("document_id") or m.get("document_uuid")
+        if doc_id and doc_id not in source_document_ids:
+            source_document_ids.append(doc_id)
         if m.get("candidate_id") not in source_candidate_ids:
             source_candidate_ids.append(m["candidate_id"])
         if m.get("evidence_text"):
@@ -179,6 +179,10 @@ def _emit_knowledge(
         "source_document_ids": source_document_ids,
         "latest_published_at": latest_published,
         "confidence": max((m.get("confidence", 0.0) for m in members), default=0.5),
+        # schema_valid：从候选透传（build_candidate_rows 抽取时显式赋值）。
+        # 缺省 False —— 未标注 schema_valid 的聚合行在 promotion gate_schema 被挡下，
+        # 而非静默通过（审查 High #7）。
+        "schema_valid": bool(first.get("schema_valid", False)),
         "gate_status": "pending",
     }
     upsert_gate_knowledge(db, row)
@@ -208,7 +212,11 @@ def group_and_emit(
     for cand in candidates:
         subject = cand.get("subject") or {}
         name = subject.get("name")
-        etype = subject.get("entity_type", "organization")
+        # Normalize exactly like resolve_entities: a JSONB `null` entity_type must
+        # fall back to the default type here too, otherwise the group key uses
+        # "None::name" while the resolved-entity map uses "organization::name" and
+        # the gate row never links to the gate entity it was resolved to.
+        etype = subject.get("entity_type") or "organization"
         # 把候选 subject 关联到已消解的门禁实体 id
         key = f"{etype}::{_norm_name(name)}"
         gate_ent = entities.get(key, {})
@@ -217,6 +225,12 @@ def group_and_emit(
         cand["subject"] = subject
 
         ctype = cand["candidate_type"]
+        # 无锚点：候选的主语没有消解到 gate_candidate_entity（例如纯数值/日期规则抽取无
+        # 名称，或名称类型不在 L1 本体 allowed 内）。写入 gate_candidate_knowledge 会以
+        # 空串或原样 name 引用 subject_entity_id ≡ 无效外键（真实 Postgres 直接报错），
+        # 且 promote 也找不到主体实体而无法晋级。直接丢弃这类无法落地的候选。
+        if not gate_ent:
+            continue
         if ctype == "relation":
             # 分组键：同 subject+predicate 归为一组（§8 冲突判定前提）；object 参与
             # 组内冲突判定而不进分组键，否则不同 object 的候选永远分不到一组。

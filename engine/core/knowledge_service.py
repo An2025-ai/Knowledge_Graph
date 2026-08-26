@@ -209,6 +209,8 @@ def upsert_gate_knowledge(db: DB, row: dict) -> str:
         "latest_published_at": row.get("latest_published_at"),
         "confidence": row.get("confidence", 0.0),
         "embedding_id": row.get("embedding_id"),
+        # schema 校验标记（High #7）：落库显式赋值，promotion 据此放行 gate_schema
+        "schema_valid": bool(row.get("schema_valid", False)),
         "gate_status": row.get("gate_status", "pending"),
     }
     db.upsert("gate_candidate_knowledge", entry, "knowledge_id")

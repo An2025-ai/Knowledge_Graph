@@ -35,11 +35,13 @@ def run(db: DB, args) -> dict[str, Any]:
         return {"pipeline": "candidate_vectorization", "vectorized_count": 0}
 
     from engine.clients.embeddings import get_embedding_client
-    from engine.core.knowledge_service import stable_hash
+
+    # 只创建一次 client，循环内复用（审查 Low #13），避免每个候选重复构造客户端。
+    client = get_embedding_client()
 
     def _embed_one(candidate_id: str, text: str) -> list[float] | None:
         try:
-            return get_embedding_client().embed_one(text)
+            return client.embed_one(text)
         except Exception as exc:  # noqa: BLE001 - optional vector layer
             print(f"[candidate_vectorization] embed skip for {candidate_id}: {exc}")
             return None
@@ -57,7 +59,8 @@ def run(db: DB, args) -> dict[str, Any]:
         if getattr(args, "dry_run", False):
             count += 1
             continue
-        embedding_id = f"emb_{stable_hash(cand['candidate_id'])}"
+        # candidate_embedding 以 candidate_id 为主键；embedding_id 标记应指向该候选自身
+        # 的 embedding 行（candidate_id 即其外键），避免写入一个不存在的 "emb_..." 幻影 id。
         db.execute(
             "INSERT INTO candidate_embedding (candidate_id, tenant_id, embedding_model, "
             " embedding, embedded_text) VALUES (%s, %s, %s, %s, %s) "
@@ -68,7 +71,7 @@ def run(db: DB, args) -> dict[str, Any]:
         )
         db.execute(
             "UPDATE knowledge_candidates SET embedding_id=%s WHERE candidate_id=%s",
-            (embedding_id, cand["candidate_id"]),
+            (cand["candidate_id"], cand["candidate_id"]),
         )
         count += 1
 

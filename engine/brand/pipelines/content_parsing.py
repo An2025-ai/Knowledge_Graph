@@ -12,7 +12,6 @@ from typing import Any
 
 from engine.core.db import DB
 from engine.extraction.evidence_parsing import parse_to_span_rows, write_spans
-from engine.core.knowledge_service import document_provenance
 
 
 def _resolve_document_uuid(db: DB, args) -> Any:

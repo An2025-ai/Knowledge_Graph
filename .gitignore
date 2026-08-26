@@ -28,9 +28,9 @@ Thumbs.db
 .env.*.local
 
 # Runtime local secrets/config
-runtime/config/llm-config.local.json
-runtime/config/model-config.local.json
-runtime/.env
+engine/config/llm-config.local.json
+engine/config/model-config.local.json
+engine/.env
 
 # Build artifacts
 dist/
@@ -47,9 +47,9 @@ temp/
 *.tmp
 
 # Generated runtime outputs
-runtime/common/output/
-runtime/industry/output/
-runtime/visualize/output/
+engine/common/output/
+engine/industry/output/
+engine/visualize/output/
 
 # Generated reports / research packages
 source_candidates_*.json

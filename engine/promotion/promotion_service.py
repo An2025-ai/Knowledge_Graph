@@ -77,8 +77,9 @@ def evaluate_instance(
     results: list[dict] = []
     threshold = policy.confidence_threshold
 
-    # gate_schema：候选已通过 schema_valid（抽取时校验），此处复核
-    schema_ok = bool(k.get("schema_valid", True))
+    # gate_schema：候选须显式标记 schema_valid=True（抽取/融合时校验并落库，审查 High #7）。
+    # 默认 False —— 未校验候选在门禁阶段被挡下，而不是静默通过。
+    schema_ok = bool(k.get("schema_valid", False))
     results.append(_result("gate_schema", schema_ok, f"schema_valid={schema_ok}"))
 
     # gate_ontology：实体/关系类型必须属于 L1 ontology（§10.1）
@@ -221,43 +222,6 @@ def disposition(results: list[dict]) -> tuple[str, dict | None]:
 # ---------------------------------------------------------------------------
 # 晋级写入 active graph
 # ---------------------------------------------------------------------------
-
-def _resolve_or_create_entity(
-    db: DB, gate: dict, *, profile_id: str, tenant_id: Any | None
-) -> str:
-    """Map a gate_candidate_entity into the active `entity` table (entity_id unique)."""
-    entity_id = gate.get("entity_id") or gate.get("name")
-    existing = db.query("SELECT id FROM entity WHERE entity_id=%s", (entity_id,))
-    if existing:
-        return existing[0]["id"]
-    row = db.query(
-        "SELECT * FROM gate_candidate_entities WHERE entity_id=%s AND profile_id=%s",
-        (entity_id, profile_id),
-    )
-    g = row[0] if row else gate
-    slug = "".join(c for c in str(g.get("name", entity_id)).lower() if c.isalnum())[:40] or "unnamed"
-    eid = db.insert_returning_id(
-        "INSERT INTO entity (id, tenant_id, brand_id, entity_id, entity_type, "
-        " canonical_name, scope, status, version, source_refs, confidence) "
-        "VALUES (uuid_generate_v4(), %s, %s, %s, %s, %s, 'shared', 'active', '1.0.0', %s::jsonb, %s) "
-        "RETURNING id",
-        (
-            tenant_id, None, entity_id, g.get("entity_type"),
-            g.get("name") or str(entity_id),
-            json.dumps({"gate_source_candidate_ids": g.get("source_candidate_ids", [])},
-                       ensure_ascii=False),
-            g.get("confidence"),
-        ),
-    )
-    for alias in _as_list(g.get("aliases")) or []:
-        db.execute(
-            "INSERT INTO entity_alias (id, entity_id, alias_name, alias_type, is_preferred) "
-            "VALUES (uuid_generate_v4(), %s, %s, 'alt_label', FALSE) "
-            "ON CONFLICT (entity_id, alias_name) DO NOTHING",
-            (eid, alias),
-        )
-    return eid
-
 
 def _entity_pk(db: DB, entity_id: str) -> Any | None:
     rows = db.query("SELECT id FROM entity WHERE entity_id=%s", (entity_id,))

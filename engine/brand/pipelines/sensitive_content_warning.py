@@ -83,14 +83,19 @@ def run(db: DB, args) -> dict[str, Any]:
 
     if not dry_run and warnings:
         for i, w in enumerate(warnings):
+            # content_inventory 列集（database/l2_l3_schema.sql §11）：无 attributes 列、
+            # brand_id NOT NULL。结构化警告载荷放入唯一 JSONB 容器 l2_topics_covered，
+            # 其余 NOT NULL 列补齐避免写入即报错。
             db.execute(
                 "INSERT INTO content_inventory "
-                "(id, tenant_id, document_id, content_type, attributes, status) "
-                "VALUES (uuid_generate_v4(), %s, %s, 'sensitive_warning', %s::jsonb, 'active') "
+                "(id, tenant_id, brand_id, document_id, content_type, title, "
+                " l2_topics_covered, status) "
+                "VALUES (uuid_generate_v4(), %s, %s, %s, 'sensitive_warning', %s, %s::jsonb, 'active') "
                 "ON CONFLICT DO NOTHING",
                 (
-                    ctx["tenant_id"], getattr(args, "document_id", None),
-                    {
+                    ctx["tenant_id"], ctx["brand_id"], getattr(args, "document_id", None),
+                    f"{w['warning_type']} [{_render_action(w['severity'])}]",
+                    [{
                         "warning_id": f"warn_{ctx['brand_key']}_{i}_{_render_action(w['severity'])}",
                         "warning_type": w["warning_type"],
                         "severity": w["severity"],
@@ -98,7 +103,7 @@ def run(db: DB, args) -> dict[str, Any]:
                         "matched": w["matched"],
                         "public_quote_risk": 1 if w["severity"] >= 2 else 0,
                         "user_notice_required": 1 if w["severity"] >= 2 else 0,
-                    },
+                    }],
                 ),
             )
 

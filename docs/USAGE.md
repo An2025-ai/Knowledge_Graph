@@ -44,8 +44,9 @@ python -m engine.migrations --check          # 仅列出迁移，不执行
 发布 L1 注册库（common_knowledge/ YAML → PG）：
 
 ```bash
-python -m database.publish           # 对应表完整发布（发布器）
-python -m database.publish_l1        # L1 注册库发布
+python -m database.publish_l1                 # 校验并打印 L1 注册库
+python -m database.publish_l1 --out <path>    # 导出注册库 JSON 快照
+python -m database.publish_l1 --seed          # UPSERT 进 PG entity_type/relation_type（L2/L3 写库前置）
 ```
 
 ## 3. L2 行业知识构建

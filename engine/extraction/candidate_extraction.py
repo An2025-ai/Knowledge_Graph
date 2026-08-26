@@ -80,7 +80,10 @@ def relation_trigger_candidates(text: str) -> list[dict]:
         if re.search(rf"({pattern})", text):
             out.append({
                 "candidate_type": "relation",
-                "candidate_payload": {"trigger": rel},
+                # trigger + type 双键：`build_candidate_rows` 读 payload.get("type") 构造
+                # predicate.type（knowledge_candidates.predicate），缺 type 会让融合/晋级
+                # 的关系谓词全部为 None（审查 Critical #4）。
+                "candidate_payload": {"trigger": rel, "type": rel},
                 "confidence": 0.6,
                 "generator": f"regex:trigger:{rel}",
             })

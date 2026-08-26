@@ -507,6 +507,41 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertEqual(stats["fused"], 1)  # 1 extra merged
         self.assertEqual(stats["emitted"], 1)
 
+    def test_fusion_drops_subjectless_candidates_and_uses_gate_entity_key(self):
+        """Bug 3 guard: candidates without a resolvable subject must not produce a
+        gate row with empty ``subject_entity_id`` (would violate the FK to
+        gate_candidate_entities on real Postgres), and named candidates must link
+        to their resolved gate entity id regardless of a JSONB-null entity_type."""
+        db = RecordingDB()
+        candidates = [
+            # subjectless rule metric (no name) — must be dropped, never emitted
+            {"candidate_id": "KC_metric", "candidate_type": "metric",
+             "subject": {"entity_type": None, "name": None},
+             "metric": {"value": "12亿元", "type": "numeric_metric"},
+             "predicate": None, "object": {}, "statement": None, "event": None,
+             "confidence": 0.85, "evidence_text": "支撑 12 亿元营收",
+             "evidence_unit_id": "EU1", "published_at": None},
+            # named candidate with JSONB-null entity_type — must resolve to the
+            # "organization" gate entity and emit a valid ENT_... subject id
+            {"candidate_id": "KC_cert", "candidate_type": "statement",
+             "subject": {"entity_type": None, "name": "ISO 27001"},
+             "statement": {"text": "获得 ISO 27001 认证"},
+             "predicate": None, "object": {}, "metric": None, "event": None,
+             "confidence": 0.9, "evidence_text": "获得 ISO 27001 认证",
+             "evidence_unit_id": "EU2", "published_at": None},
+        ]
+        entities = resolve_entities(db, candidates, profile_id="l2_industry",
+                                    layer="l2_industry", tenant_id=None)
+        stats = group_and_emit(db, candidates, entities, profile_id="l2_industry",
+                               layer="l2_industry", tenant_id=None)
+        self.assertEqual(stats["emitted"], 1)  # only the named one survives
+        emitted = [row for table, row in db.inserts if table == "gate_candidate_knowledge"]
+        self.assertEqual(len(emitted), 1)
+        subj = emitted[0]["subject_entity_id"]
+        self.assertTrue(subj and subj.startswith("ENT_"),
+                        f"subject_entity_id must be a real gate entity id, got {subj!r}")
+        self.assertEqual(emitted[0]["knowledge_type"], "statement")
+
     def test_load_candidates_queries_by_profile(self):
         db = RecordingDB(query_results=[[]])
         load_candidates(db, "l3_brand")
@@ -572,6 +607,8 @@ class RuntimeRegressionTests(unittest.TestCase):
         k = {
             "knowledge_id": "GK1", "knowledge_type": "statement",
             "subject_entity_id": "ent_brand_acme", "confidence": 0.95,
+            # 显式 schema_valid=True：未标注的候选会在 gate_schema 被挡下（审查 High #7）
+            "schema_valid": True,
             "evidence_refs": [{"access_status": "ok",
                                "support_status": "directly_supports"}],
         }
@@ -636,6 +673,60 @@ class RuntimeRegressionTests(unittest.TestCase):
         from engine.brand.pipelines.sensitive_content_warning import _render_action
         self.assertEqual(_render_action(2), "review_before_publication")
         self.assertEqual(_render_action(1), "flag_for_disclosure")
+
+    def test_sensitive_content_warning_inserts_valid_content_inventory_columns(self):
+        """Bug 4 guard: the content_inventory insert must reference only real schema
+        columns (no phantom ``attributes``) and must supply the NOT NULL
+        ``brand_id``; otherwise the pipeline crashes on a real Postgres behind the
+        RecordingDB mock (which does not enforce constraints)."""
+        from types import SimpleNamespace
+        from engine.brand.pipelines.sensitive_content_warning import run as run_sensitive
+
+        db = RecordingDB()
+        args = SimpleNamespace(
+            brand="Acme",
+            tenant="default",
+            text="本项目是行业唯一，获得 ISO 27001 认证，ROI 提升 30%。",
+            document_id="doc-1",
+            dry_run=False,
+        )
+        result = run_sensitive(db, args)
+        self.assertEqual(result["blocked"], False)
+        self.assertEqual(result["warning_count"], 3)
+
+        inserts = [sql for sql, _params in db.executions if "content_inventory" in sql]
+        self.assertEqual(len(inserts), 3, "one content_inventory insert per warning")
+
+        # parsed column list must exactly match the schema (database/l2_l3_schema.sql
+        # §11) — no `attributes`, and contain the NOT NULL brand_id
+        import re as _re
+
+        for sql in inserts:
+            cols_src = sql.split("INSERT INTO content_inventory", 1)[1]
+            cols_src = cols_src.split("VALUES", 1)[0]
+            cols = {c.strip().strip('"') for c in _re.findall(r"\(([^)]*)\)", cols_src)[0].split(",")}
+            self.assertIn("brand_id", cols)
+            self.assertNotIn("attributes", cols)
+
+        # the insert params must actually carry a brand_id value in position 2
+        for sql, params in db.executions:
+            if "content_inventory" in sql and params:
+                self.assertTrue(params[1], "brand_id param must be non-empty")
+
+    def test_sensitive_content_warning_skips_insert_on_dry_run(self):
+        from types import SimpleNamespace
+        from engine.brand.pipelines.sensitive_content_warning import run as run_sensitive
+
+        db = RecordingDB()
+        args = SimpleNamespace(
+            brand="Acme", tenant="default",
+            text="行业唯一，ISO 27001 认证", document_id="doc-1", dry_run=True,
+        )
+        run_sensitive(db, args)
+        self.assertFalse(
+            any("content_inventory" in sql for sql, _ in db.executions),
+            "dry run must not perform content_inventory inserts",
+        )
 
 
 if __name__ == "__main__":

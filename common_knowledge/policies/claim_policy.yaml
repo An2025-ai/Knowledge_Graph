@@ -213,7 +213,7 @@ l3_assertion_kind_mapping:
       statement_class: fact
       public_output: true
     - assertion_kind: product_spec
-      statement_class: fact_conditional
+      statement_class: fact
       public_output: per_document_permission
     - assertion_kind: self_claim
       statement_class: claim
@@ -225,7 +225,7 @@ l3_assertion_kind_mapping:
       statement_class: fact
       public_output: per_source_license
     - assertion_kind: internal_fact
-      statement_class: fact_conditional
+      statement_class: fact
       public_output: false_by_default
     - assertion_kind: draft_claim
       statement_class: claim

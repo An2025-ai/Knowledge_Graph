@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-DEFAULT_MODEL_CONFIG = Path(__file__).resolve().parent / "config" / "model-config.local.json"
+DEFAULT_MODEL_CONFIG = Path(__file__).resolve().parents[1] / "config" / "model-config.local.json"
 
 # Default HuggingFace mirror. huggingface.co is unreachable on many CN networks;
 # hf-mirror.com is a reachable mirror. Users can override via HF_ENDPOINT.
