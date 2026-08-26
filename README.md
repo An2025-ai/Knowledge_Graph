@@ -1,15 +1,9 @@
 # Brand Atlas Knowledge Graph
 
 > **版本**: 1.2.0
-> **状态**: L1 发布、L2/L3 执行器、PostgreSQL migration、Neo4j 投影和可视化均已有实现；真实数据端到端与治理门禁仍需集成验收
+> **创建日期**: 2026-08-07 · **更新日期**: 2026-08-26
 
-详细的实际数据流、逐层输入输出、运行命令和成熟度判断见 [DATA_FLOW_AND_USAGE.md](DATA_FLOW_AND_USAGE.md)。
-> **创建日期**: 2026-08-07  
-> **更新日期**: 2026-08-11  
-
-## 概述
-
-Brand Atlas 知识图谱是一个多层知识工程系统，用于持续构建、校验、检索和更新结构化知识，
+Brand Atlas 知识图谱是一个**多层知识工程系统**，用于持续构建、校验、检索和更新结构化知识，
 并为 L2/L3 的知识构建、治理、检索和持续更新提供统一约束。
 
 当前已形成三层技术基线：
@@ -17,59 +11,72 @@ Brand Atlas 知识图谱是一个多层知识工程系统，用于持续构建�
 - **L2 行业知识层**（v1.0.0）：行业市场坐标系，定义数据域、Pipeline、Schema 和策略
 - **L3 品牌认知层**（v1.0.1）：多租户品牌实例、产品版本、能力映射、证据链和图谱投影规范
 
-第一层不是行业百科，也不是客户品牌知识库，而是：
-- 统一知识对象定义
-- 统一关系表达
-- 统一任务输出规范
-- 统一证据规则
+L1 不是行业百科，也不是客户品牌知识库，而是：统一知识对象定义、统一关系表达、统一任务输出规范、统一证据规则。
+
+> 详细架构设计见 [docs/DESIGN.md](docs/DESIGN.md)，逐层输入输出、运行命令与成熟度判断见 [docs/USAGE.md](docs/USAGE.md)。
 
 ## 四层知识架构
 
 | 层级 | 内容 | 位置 |
 |------|------|------|
-| **L1 通用知识层** | 本体、陈述、上下文、来源、治理、更新和检索协议 | 本目录 |
-| L2 行业/品类层 | 行业实体、市场主题、行业趋势、竞品公共信息 | industry_knowledge/ |
-| **L3 品牌认知层** | 品牌产品、能力、定位、案例、内部文档 | brand_knowledge/ |
+| **L1 通用知识层** | 本体、陈述、上下文、来源、治理、更新和检索协议 | common_knowledge/ |
+| **L2 行业/品类知识层** | 行业实体、市场主题、行业趋势、竞品公共信息 | runtime/industry/ + database/ |
+| **L3 品牌认知层** | 品牌产品、能力、定位、案例、内部文档 | runtime/brand/ + database/ |
 | L4 动态反馈层 | 查询反馈、校验结果、采纳/拒绝和知识更新反馈 | 后续实现 |
 
 ## 目录结构
 
 ```
 Knowledge_Graph/
-├── README.md
-├── common_knowledge/              # L1 通用知识层
+├── requirements.txt               # 统一 Python 依赖（含可选本地模型组）
+├── common_knowledge/              # L1 通用知识层（registry 唯一数据源）
 │   ├── ontology/                  # L2 行业、L3 品牌两套独立本体
-│   ├── sources/                   # 13 来源类型 + 20 质量规则
-│   ├── tasks/                     # 4 个知识构建/治理任务
-│   ├── policies/                  # 6 策略文件 (+3 v1.1.0)
+│   ├── sources/                   # 来源类型 + 质量/权威规则
+│   ├── tasks/                     # 知识构建/刷新/晋升/发现任务
+│   ├── policies/                  # 证据、冲突、上下文、晋升、报告、发现策略
 │   ├── contracts/                 # 治理、运行协议等通用契约
 │   └── schema_profiles/           # 抽取规则和 L2/L3 独立 profile
-├── industry_knowledge/            # L2 行业知识层
-│   ├── README.md                  # L2 技术文档 (1916 行)
-│   ├── scopes/                    # 行业范围定义
-│   ├── requirements/              # 研究需求文件
-│   ├── schemas/                   # 8 个 JSON Schema
-│   ├── taxonomies/                # L2 行业分类和能力参考模板
-│   ├── pipelines/                 # 6 个数据处理流水线
-│   ├── policies/                  # 3 个 L2 策略
-│   └── examples/crm/              # CRM 试点示例
-├── brand_knowledge/               # L3 品牌认知层
-│   ├── README.md                  # L3 技术文档 (1069 行)
-│   ├── INPUT_OUTPUT.md            # L2/L3 输入资料和输出数据简版说明
-│   ├── scopes/                    # 品牌接入范围 + 多租户配置
-│   ├── sources/                   # 品牌来源策略和权限
-│   ├── domains/                   # 11 数据域 + 抽取 Profile
-│   ├── ontology/                  # L3 实体/关系/assertion_kind
-│   ├── schemas/                   # 9 个 JSON Schema
-│   ├── pipelines/                 # 10 个品牌处理流水线
-│   ├── policies/                  # 6 个 L3 策略
-│   ├── database/                  # L3 迁移 SQL (11 表 + RLS)
-│   ├── examples/                  # DeepCleer 试点数据
-│   └── skills/                    # 12 个逻辑 Skills
-└── database/                      # 数据库层
-    ├── schema.sql                 # PostgreSQL 10 表（9 核心 + 1 辅助）
-    ├── publish.py                 # YAML → DB 发布
-    └── README.md
+├── database/                      # 统一数据库 Schema 层（单一事实源）
+│   ├── schema.sql                 # L1 核心表（entity_type/relation_type/…）
+│   ├── l2_l3_schema.sql           # L2/L3 证据→候选→门禁→主图统一建表
+│   └── publish_l1.py              # L1 注册库发布（JSON snapshot）
+├── runtime/                       # 可执行代码（按执行层级/阶段分目录）
+│   ├── core/                      # ① 基础设施层：db / knowledge_service / metrics
+│   ├── clients/                   # ② 外部模型适配器：embeddings / ner_client
+│   ├── ontology/                  # ③ L1 本体校验（读 common_knowledge/）
+│   ├── extraction/                # ④ 证据→候选：evidence_parsing / candidate_extraction
+│   ├── fusion/                    # ⑤ 跨文档融合：fusion_service
+│   ├── promotion/                 # ⑥ 门禁晋级：promotion_service
+│   ├── common/                    # L1 registry / policy_engine（读 common_knowledge/）
+│   ├── industry/                  # L2 八条 Pipeline（executor.py + pipelines/）
+│   ├── brand/                     # L3 九条 Pipeline（executor.py + pipelines/）
+│   ├── migrations/                # 迁移执行器（指向 database/*.sql）
+│   ├── neo4j/                     # 图投影服务 + 一致性校验
+│   ├── visualize/                 # Jupyter + pyvis 交互式图谱查看（assets/ 本地库）
+│   ├── config/                    # LLM/模型配置示例（*.local.json 已 gitignore）
+│   └── docker-compose.yml         # PostgreSQL(pgvector) + Neo4j
+├── scripts/                       # 一次性/运维脚本（图谱渲染、HTML 修复）
+└── docs/                          # 文档：DESIGN.md / USAGE.md (+ examples/)
+```
+
+## 快速上手
+
+```bash
+# 1. 安装依赖（含可选本地模型组）
+pip install -r requirements.txt
+
+# 2. 启动 PostgreSQL(pgvector) 与 Neo4j
+cd runtime && docker compose up -d && cd ..
+
+# 3. 初始化数据库迁移
+python -m runtime.migrations --only l1
+python -m runtime.migrations --only l2_l3
+
+# 4. 构建 L2 行业知识（单文档）
+python -m runtime.industry.executor --all --file <doc.md>
+
+# 5. 构建 L3 品牌知识（单文档，需指定品牌）
+python -m runtime.brand.executor --all --file <doc.md> --brand <brand_id>
 ```
 
 ## 当前实现状态
@@ -78,94 +85,17 @@ Knowledge_Graph/
 |------|----------|
 | L1 YAML/Schema/策略定义 | 已完成，可执行全项目校验 |
 | L1 PostgreSQL 注册库 | 已有 Schema 和发布器，需外部 PostgreSQL 实例 |
-| L2 行业数据处理 | 六步执行器、10 道真实门禁、步骤级事务和幂等重跑已实现；语义近似去重和文本冲突仍需增强 |
-| L3 品牌数据处理 | 十步执行器、L3 migration、RLS 和快照已实现；需真实品牌资料集成验收 |
+| L2 行业数据处理 | 八步消息链（证据→候选→门禁→主图）、步骤级事务和幂等重跑已实现 |
+| L3 品牌数据处理 | 九步消息链（应证→候选→门禁→主图）+ 敏感内容提醒已实现 |
 | Neo4j 图谱投影 | 全量重建、outbox 增量、Cypher 初始化和一致性检查已实现 |
 | L4 动态观测 | 仅定义对象，未实现 |
 
-因此，本仓库已经进入“可生成 PostgreSQL 知识实例并投影到 Neo4j”的工程阶段，但尚不能视为经过生产环境验证的完整图谱产品。
+本仓库已进入"可生成 PostgreSQL 知识实例并投影到 Neo4j"的工程阶段，但尚不能视为经过生产环境验证的完整图谱产品。
 
-## MVP 范围
+## 版本规范与维护
 
-### L1 通用知识层 v1.4.0
-
-| 维度 | 当前数量 | 说明 |
-|------|---------:|------|
-| 构图实体类型 | 20 | 只保留业务概念节点；来源、陈述、观测和单条提问由独立协议管理 |
-| 构图关系类型 | 27 | 只连接构图实体，不连接运行时证据记录 |
-| 意图类型 | 13 | 作为查询语义字典 |
-| 决策阶段 | 7 | 作为意图阶段字典 |
-| 来源类型 | 13 | 作为证据元数据枚举，不是构图实体 |
-| 任务模板 | 4 | 仅保留知识构建与治理流程 |
-| 策略文件 | 6 | 证据、冲突、上下文、发现和晋升策略 |
-| 质量规则 | 20 | 知识治理质量规则 |
-| 评测案例 | 预留 | 当前不随 L1 发布 |
-
-### L2 行业知识层 v1.0.0
-
-| 维度 | 数量 |
-|------|------|
-| JSON Schema | 8 |
-| 数据域 | 9 |
-| Pipeline 定义 | 6 |
-| L2 策略文件 | 3 |
-| 分类模板 | L2 行业分类和能力参考模板 |
-| L2 技能定义 | 14 |
-| L2 工具定义 | ~50 |
-
-### L3 品牌认知层 v1.0.1
-
-| 维度 | 数量 |
-|------|------|
-| 数据域 | 11 |
-| Pipeline 定义 | 10 |
-| L3 策略文件 | 6 |
-| JSON Schema | 9 |
-| 抽取 Profile | 7 |
-| 逻辑 Skills | 12 |
-| 信息来源类型 | 9 |
-| 数据库迁移表 | 11 + RLS |
-
-## 版本规范
-
-使用语义化版本（Semantic Versioning）：
-
-- **主版本（MAJOR）**：实体或关系发生不兼容变化
-- **次版本（MINOR）**：新增类型、意图或任务模板
-- **修订版本（PATCH）**：文字、示例和描述修正
-
-## 维护频率
-
-| 内容 | 频率 |
-|------|------|
-| 实体和关系定义 | 每月或按需求评审 |
-| 意图分类 | 每季度评审 |
-| 任务模板 | 出现失败案例后更新 |
-| 来源等级 | 每季度复核 |
-| 规则策略 | 每月复盘 |
-| 正反例 | 持续增加 |
-| 外部标准 | 有版本更新时评估 |
-
-## 变更流程
-
-```
-发现新规范或问题
-  → 创建变更提案
-  → 评估是否影响现有任务
-  → 更新定义/规则/模板
-  → 运行回归样例
-  → 小范围灰度
-  → 发布新版本
-  → 记录变更说明
-```
-
-## 核心原则
-
-- **稳定规则结构化**：规则和模板以结构化 YAML 定义，版本化管理
-- **方法知识文档化**：所有方法、流程和判断标准在文档中明确
-- **任务流程化**：每个知识治理任务有明确输入、输出和质量检查
-- **品牌事实不进入第一层**：L1 只包含通用规则，具体数据在 L2-L4
-- **所有定义必须有版本、来源和变更记录**
+- **语义化版本**：主版本=实体/关系不兼容变化；次版本=新增类型/意图/任务模板；修订=文字/示例/描述修正。
+- 实体/关系、意图分类、来源等级、规则策略、正反例、外部标准均按各自评审节奏维护（详见 L1 定义）。
 
 ## 参考标准
 
@@ -173,8 +103,3 @@ Knowledge_Graph/
 - [W3C SKOS](https://www.w3.org/TR/skos-reference/)
 - [Wikidata](https://www.wikidata.org/)
 - [Graph RAG](https://arxiv.org/abs/2404.16130)
-- [Graph RAG](https://arxiv.org/abs/2404.16130)
-
-## 关联项目
-
-- L1 设计与使用说明见 [L1_DESIGN_AND_USAGE.md](L1_DESIGN_AND_USAGE.md)
