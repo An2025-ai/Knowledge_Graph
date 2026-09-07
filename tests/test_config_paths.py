@@ -1,7 +1,7 @@
 """Embedding/NER config path guard (审查 Action Plan High #8, “新增内容”).
 
-Code used to point at ``engine/clients/config/`` while the real config directory
-is ``engine/config/`` (see engine/config/model-config.example.json). These tests
+Code used to point at ``legacy/clients/config/`` while the real config directory
+is ``legacy/config/`` (see legacy/config/model-config.example.json). These tests
 pin DOWN the resolved path so a future regression moves it back.
 
 Also checks that a config file placed at the CORRECT path parses into
@@ -17,12 +17,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from engine.clients.embeddings import (
+from legacy.clients.embeddings import (
     DEFAULT_MODEL_CONFIG as EMB_DEFAULT_CONFIG,
     EmbeddingClient,
     EmbeddingConfig,
 )
-from engine.clients.ner_client import (
+from legacy.clients.ner_client import (
     DEFAULT_MODEL_CONFIG as NER_DEFAULT_CONFIG,
     NERConfig,
 )
@@ -31,14 +31,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class ConfigPathTests(unittest.TestCase):
-    def test_default_model_config_points_at_engine_config(self):
-        """High #8: both clients must resolve the config under ``engine/config/``,
-        NOT ``engine/clients/config/`` (which does not exist)."""
-        expected_dir = PROJECT_ROOT / "engine" / "config"
+    def test_default_model_config_points_at_legacy_config(self):
+        """High #8: both clients must resolve the config under ``legacy/config/``,
+        NOT ``legacy/clients/config/`` (which does not exist)."""
+        expected_dir = PROJECT_ROOT / "legacy" / "config"
         for name, path in (("embedding", EMB_DEFAULT_CONFIG), ("ner", NER_DEFAULT_CONFIG)):
             self.assertEqual(
                 path.parent, expected_dir,
-                f"{name} DEFAULT_MODEL_CONFIG must live in engine/config/",
+                f"{name} DEFAULT_MODEL_CONFIG must live in legacy/config/",
             )
         self.assertEqual(EMB_DEFAULT_CONFIG, NER_DEFAULT_CONFIG,
                          "both clients share the same model config file")
@@ -51,8 +51,8 @@ class ConfigPathTests(unittest.TestCase):
         self.assertEqual(emb.provider, "api")
         self.assertEqual(ner.provider, "local")
 
-    def test_config_parses_from_engine_config_location(self):
-        """Drop a config at engine/config/model-config.local.json (the location the
+    def test_config_parses_from_legacy_config_location(self):
+        """Drop a config at legacy/config/model-config.local.json (the location the
         fixed path resolves to) and confirm both clients read it."""
         payload = {
             "embedding": {"provider": "api", "model": "bge-m3", "dimension": 1024,
@@ -100,7 +100,7 @@ class ConfigPathTests(unittest.TestCase):
                 sent["body"] = req.data
                 return _Resp()
 
-            with patch("engine.clients.embeddings.urllib.request.urlopen", fake_urlopen):
+            with patch("legacy.clients.embeddings.urllib.request.urlopen", fake_urlopen):
                 vec = client.embed(["x"])
             self.assertEqual(sent["url"], actual_url)
             self.assertEqual(sent["headers"].get("Authorization"), "Bearer sk-secret")

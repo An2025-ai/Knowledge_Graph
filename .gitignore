@@ -28,14 +28,15 @@ Thumbs.db
 .env.*.local
 
 # Runtime local secrets/config
-engine/config/llm-config.local.json
-engine/config/model-config.local.json
-engine/.env
+legacy/config/llm-config.local.json
+legacy/config/model-config.local.json
+legacy/.env
 
 # Build artifacts
 dist/
 build/
 *.egg
+knowledge-engine.spec
 
 # Logs
 *.log
@@ -47,9 +48,9 @@ temp/
 *.tmp
 
 # Generated runtime outputs
-engine/common/output/
-engine/industry/output/
-engine/visualize/output/
+shared/knowledge/output/
+legacy/industry/output/
+legacy/visualize/output/
 
 # Generated reports / research packages
 source_candidates_*.json
@@ -57,6 +58,10 @@ research_package_*/
 
 # Node (if used for tooling)
 node_modules/
+desktop/src-tauri/binaries/
+desktop/src-tauri/icons/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
 
 # Docker
 docker-compose.override.yml
