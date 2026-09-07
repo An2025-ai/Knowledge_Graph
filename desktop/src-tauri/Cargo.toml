@@ -1,0 +1,19 @@
+[package]
+name = "brand-atlas-desktop"
+version = "1.0.0"
+description = "Brand Atlas local-first knowledge workspace"
+authors = ["Brand Atlas"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+uuid = { version = "1", features = ["v4"] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+

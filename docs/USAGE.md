@@ -15,10 +15,10 @@ pip install -r requirements.txt
 ### 1.2 启动数据库与图数据库
 
 ```bash
-cd engine && docker compose up -d
+cd legacy && docker compose up -d
 ```
 
-docker-compose（`engine/docker-compose.yml`）拉起 PostgreSQL(pgvector) 与 Neo4j。默认端口与账号见 compose 文件 / 环境变量（以下可用 env 覆盖）：
+docker-compose（`legacy/docker-compose.yml`）拉起 PostgreSQL(pgvector) 与 Neo4j。默认端口与账号见 compose 文件 / 环境变量（以下可用 env 覆盖）：
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
@@ -28,25 +28,25 @@ docker-compose（`engine/docker-compose.yml`）拉起 PostgreSQL(pgvector) 与 N
 
 ### 1.3 运行时配置
 
-私有运行配置放 `engine/config/*.local.json`（已 gitignore）。参考模板：
+私有运行配置放 `legacy/config/*.local.json`（已 gitignore）。参考模板：
 
-- `engine/config/llm-config.example.json` — LLM 模型/密钥
-- `engine/config/model-config.example.json` — embedding / NER 模型配置
+- `legacy/config/llm-config.example.json` — LLM 模型/密钥
+- `legacy/config/model-config.example.json` — embedding / NER 模型配置
 
 ## 2. 数据库迁移
 
 ```bash
-python -m engine.migrations --only l1        # 应用 database/schema.sql（L1 核心表）
-python -m engine.migrations --only l2_l3     # 应用 database/l2_l3_schema.sql（L2/L3 建表）
-python -m engine.migrations --check          # 仅列出迁移，不执行
+python -m legacy.migrations --only l1        # 应用 legacy/database/schema.sql（L1 核心表）
+python -m legacy.migrations --only l2_l3     # 应用 legacy/database/l2_l3_schema.sql（L2/L3 建表）
+python -m legacy.migrations --check          # 仅列出迁移，不执行
 ```
 
 发布 L1 注册库（common_knowledge/ YAML → PG）：
 
 ```bash
-python -m database.publish_l1                 # 校验并打印 L1 注册库
-python -m database.publish_l1 --out <path>    # 导出注册库 JSON 快照
-python -m database.publish_l1 --seed          # UPSERT 进 PG entity_type/relation_type（L2/L3 写库前置）
+python -m legacy.database.publish_l1                 # 校验并打印 L1 注册库
+python -m legacy.database.publish_l1 --out <path>    # 导出注册库 JSON 快照
+python -m legacy.database.publish_l1 --seed          # UPSERT 进 PG entity_type/relation_type（L2/L3 写库前置）
 ```
 
 ## 3. L2 行业知识构建
@@ -55,11 +55,11 @@ python -m database.publish_l1 --seed          # UPSERT 进 PG entity_type/relati
 
 ```bash
 # 端到端八步（article_registration → … → promotion）
-python -m engine.industry.executor --all --file <doc.md>
+python -m legacy.industry.executor --all --file <doc.md>
 
 # 只跑单步 / 指定参数
-python -m engine.industry.executor --pipeline knowledge_fusion --file <doc.md>
-python -m engine.industry.executor --all --file <doc.md> --skip-ner --confidence-threshold 0.75
+python -m legacy.industry.executor --pipeline knowledge_fusion --file <doc.md>
+python -m legacy.industry.executor --all --file <doc.md> --skip-ner --confidence-threshold 0.75
 ```
 
 常用参数：
@@ -82,11 +82,11 @@ python -m engine.industry.executor --all --file <doc.md> --skip-ner --confidence
 
 ```bash
 # 端到端九步（document_registration → … → promotion），品牌必填
-python -m engine.brand.executor --all --file <doc.md> --brand <brand_id>
+python -m legacy.brand.executor --all --file <doc.md> --brand <brand_id>
 
 # 只跑单步 / 不写库
-python -m engine.brand.executor --pipeline promotion --file <doc.md> --brand <brand_id>
-python -m engine.brand.executor --all --file <doc.md> --brand <brand_id> --dry-run
+python -m legacy.brand.executor --pipeline promotion --file <doc.md> --brand <brand_id>
+python -m legacy.brand.executor --all --file <doc.md> --brand <brand_id> --dry-run
 ```
 
 常用参数：
@@ -105,41 +105,41 @@ python -m engine.brand.executor --all --file <doc.md> --brand <brand_id> --dry-r
 ## 5. Neo4j 图投影
 
 ```bash
-python -m engine.neo4j.projection --init            # 应用 cypher_init.cypher
-python -m engine.neo4j.projection --full            # 全量重建
-python -m engine.neo4j.projection --process-outbox  # 增量同步 graph_outbox
-python -m engine.neo4j.projection --check           # 连通性检查
+python -m legacy.neo4j.projection --init            # 应用 cypher_init.cypher
+python -m legacy.neo4j.projection --full            # 全量重建
+python -m legacy.neo4j.projection --process-outbox  # 增量同步 graph_outbox
+python -m legacy.neo4j.projection --check           # 连通性检查
 ```
 
 ## 6. 运维健康指标
 
 ```bash
-python -m engine.core.metrics                 # 输出健康指标
-python -m engine.core.metrics --json          # 原始 JSON 输出
-python -m engine.core.metrics --db-check      # 先检查 DB 连通再出指标
+python -m legacy.core.metrics                 # 输出健康指标
+python -m legacy.core.metrics --json          # 原始 JSON 输出
+python -m legacy.core.metrics --db-check      # 先检查 DB 连通再出指标
 ```
 
 ## 7. 图谱可视化
 
-可视化依赖 `engine/visualize/assets/` 下的本地前端库（vis-network 等），支持**离线打开**，不需要 CDN。
+可视化依赖 `legacy/visualize/assets/` 下的本地前端库（vis-network 等），支持**离线打开**，不需要 CDN。
 
 ### 7.1 交互式 Notebook
 
-`engine/visualize/knowledge_graph.ipynb`：在 Notebook 中加载 PG/Neo4j 数据，交互式查看图谱。
+`legacy/visualize/knowledge_graph.ipynb`：在 Notebook 中加载 PG/Neo4j 数据，交互式查看图谱。
 
 ### 7.2 导出分层 2D 图（单文件 HTML）
 
 ```bash
-python -m engine.visualize.export --layer L1
-python -m engine.visualize.export --layer L2
-python -m engine.visualize.export --layer L3
+python -m legacy.visualize.export --layer L1
+python -m legacy.visualize.export --layer L2
+python -m legacy.visualize.export --layer L3
 ```
 
-产出 `engine/visualize/output/{l1,l2,l3}_graph.json`。然后构建单文件分层 2D 图（数据内联、vis-network 走本地 assets，可直接 `file://` 打开）：
+产出 `legacy/visualize/output/{l1,l2,l3}_graph.json`。然后构建单文件分层 2D 图（数据内联、vis-network 走本地 assets，可直接 `file://` 打开）：
 
 ```bash
 python scripts/build_layered_prototype.py
-# → engine/visualize/output/layered_2d.html
+# → legacy/visualize/output/layered_2d.html
 ```
 
 `layered_2d.html` 提供 L1/L2/L3 页签、按实体类型着色、节点点击详情、搜索过滤。
@@ -180,4 +180,4 @@ PYTHONIOENCODING=utf-8 python -m unittest discover -s tests -v
   → projection              增量/全量 → Neo4j 查询投影
 ```
 
-数据和中间表（evidence / candidate / gate_candidate / active graph）建表唯一定义在 `database/l2_l3_schema.sql`，详见 [DESIGN.md](DESIGN.md)。
+数据和中间表（evidence / candidate / gate_candidate / active graph）建表唯一定义在 `legacy/database/l2_l3_schema.sql`，详见 [DESIGN.md](DESIGN.md)。

@@ -8,33 +8,33 @@ from pathlib import Path
 from unittest.mock import patch
 from datetime import date
 
-from engine.core.db import DB, json_dumps
-from engine.industry.executor import _propagate_result, ALL_ORDER as L2_ORDER
-from engine.extraction.candidate_extraction import (
+from legacy.core.db import DB, json_dumps
+from legacy.industry.executor import _propagate_result, ALL_ORDER as L2_ORDER
+from shared.extraction.candidate_extraction import (
     pre_extract,
     ner_candidates,
     build_candidate_rows,
     _NER_TYPE_MAP,
 )
-from engine.brand.pipelines._helpers import resolve_brand_context, update_assertion
-from engine.brand.pipelines.sensitive_content_warning import scan_risks
-from engine.clients.ner_client import _clean_span, _map_ner_type, _SCHEMA_ZH
-from engine.migrations.__main__ import main as migration_main
-from engine.neo4j.consistency import count_assertions_pg, count_entity_edges
-from engine.neo4j.projection import ProjectionService
-from engine.common.prompt_builder import build_extraction_prompt
-from engine.common.policy_engine import load_promotion_policy
-from engine.common.registry import get_common_registry
-from engine.ontology.ontology_validator import validate_ontology
-from engine.brand.executor import DEFAULT_PIPELINES as L3_ORDER
-from engine.promotion.promotion_service import (
+from legacy.brand.pipelines._helpers import resolve_brand_context, update_assertion
+from legacy.brand.pipelines.sensitive_content_warning import scan_risks
+from legacy.clients.ner_client import _clean_span, _map_ner_type, _SCHEMA_ZH
+from legacy.migrations.__main__ import main as migration_main
+from legacy.neo4j.consistency import count_assertions_pg, count_entity_edges
+from legacy.neo4j.projection import ProjectionService
+from shared.knowledge.prompt_builder import build_extraction_prompt
+from shared.knowledge.policy_engine import load_promotion_policy
+from shared.knowledge.registry import get_common_registry
+from shared.ontology.ontology_validator import validate_ontology
+from legacy.brand.executor import DEFAULT_PIPELINES as L3_ORDER
+from legacy.promotion.promotion_service import (
     evaluate_instance,
     disposition,
     NEAR_DUPLICATE_THRESHOLD,
 )
-from engine.industry.pipelines import promotion as l2_promotion_run
-from engine.fusion.fusion_service import group_and_emit, resolve_entities, load_candidates
-from engine.visualize.export import _relations_for_entity_ids, export_all, export_layer
+from legacy.industry.pipelines import promotion as l2_promotion_run
+from legacy.fusion.fusion_service import group_and_emit, resolve_entities, load_candidates
+from legacy.visualize.export import _relations_for_entity_ids, export_all, export_layer
 
 
 class RecordingDB:
@@ -160,7 +160,7 @@ class RuntimeRegressionTests(unittest.TestCase):
 
     def test_export_all_does_not_read_cross_layer_mappings(self):
         db = RecordingDB(query_results=[[], [], [], []])
-        with patch("engine.visualize.export.write_output", side_effect=lambda graph, out_path=None: graph):
+        with patch("legacy.visualize.export.write_output", side_effect=lambda graph, out_path=None: graph):
             export_all(db, out_path=None)
         sql = " ".join(query[0] for query in db.queries)
         self.assertNotIn("FROM brand_mapping", sql)
@@ -172,7 +172,7 @@ class RuntimeRegressionTests(unittest.TestCase):
             [{"id": "offers", "entity_id": "offers", "canonical_name": "offers",
               "entity_type": "relation_type", "status": "active", "scope": "definition"}],
         ])
-        with patch("engine.visualize.export.write_output", side_effect=lambda graph, out_path=None: graph):
+        with patch("legacy.visualize.export.write_output", side_effect=lambda graph, out_path=None: graph):
             graph = export_layer(db, "L1", out_path=None)
         self.assertEqual(graph["stats"]["nodes"], 2)
         self.assertTrue(all(node["layer"] == "L1" for node in graph["nodes"]))
@@ -232,7 +232,7 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertEqual(calls[1][1], {"id": "relation-1"})
 
     def test_migration_module_entrypoint_is_importable(self):
-        with patch("sys.argv", ["engine.migrations", "--check"]):
+        with patch("sys.argv", ["legacy.migrations", "--check"]):
             self.assertEqual(migration_main(), 0)
 
     def test_l1_unknown_profile_fails_fast_not_global_fallback(self):
@@ -670,7 +670,7 @@ class RuntimeRegressionTests(unittest.TestCase):
     def test_sensitive_content_warning_marks_blocked_false(self):
         # 只提醒不阻断（§10.2）
         self.assertEqual(scan_risks("普通产品介绍。"), [])
-        from engine.brand.pipelines.sensitive_content_warning import _render_action
+        from legacy.brand.pipelines.sensitive_content_warning import _render_action
         self.assertEqual(_render_action(2), "review_before_publication")
         self.assertEqual(_render_action(1), "flag_for_disclosure")
 
@@ -680,7 +680,7 @@ class RuntimeRegressionTests(unittest.TestCase):
         ``brand_id``; otherwise the pipeline crashes on a real Postgres behind the
         RecordingDB mock (which does not enforce constraints)."""
         from types import SimpleNamespace
-        from engine.brand.pipelines.sensitive_content_warning import run as run_sensitive
+        from legacy.brand.pipelines.sensitive_content_warning import run as run_sensitive
 
         db = RecordingDB()
         args = SimpleNamespace(
@@ -697,7 +697,7 @@ class RuntimeRegressionTests(unittest.TestCase):
         inserts = [sql for sql, _params in db.executions if "content_inventory" in sql]
         self.assertEqual(len(inserts), 3, "one content_inventory insert per warning")
 
-        # parsed column list must exactly match the schema (database/l2_l3_schema.sql
+        # parsed column list must exactly match the schema (legacy/database/l2_l3_schema.sql
         # §11) — no `attributes`, and contain the NOT NULL brand_id
         import re as _re
 
@@ -715,7 +715,7 @@ class RuntimeRegressionTests(unittest.TestCase):
 
     def test_sensitive_content_warning_skips_insert_on_dry_run(self):
         from types import SimpleNamespace
-        from engine.brand.pipelines.sensitive_content_warning import run as run_sensitive
+        from legacy.brand.pipelines.sensitive_content_warning import run as run_sensitive
 
         db = RecordingDB()
         args = SimpleNamespace(

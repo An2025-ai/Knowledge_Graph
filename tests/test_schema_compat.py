@@ -1,6 +1,6 @@
 """X-Zone schema compatibility guard (审查 Action Plan “新增内容”).
 
-Parse ``database/l2_l3_schema.sql`` so the tests know the *real* column set of the
+Parse ``legacy/database/l2_l3_schema.sql`` so the tests know the *real* column set of the
 tables the pipelines write, then assert each pipeline's INSERT column list only
 mentions real columns and supplies every NOT NULL (no-default) column. This is a
 dumb SQL-text parser (enough for this case); it does not execute against PG.
@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SCHEMA = PROJECT_ROOT / "database" / "l2_l3_schema.sql"
+SCHEMA = PROJECT_ROOT / "legacy" / "database" / "l2_l3_schema.sql"
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ class SchemaCompatTests(unittest.TestCase):
     def test_content_inventory_insert_columns_match_schema(self):
         """Critical #1: sensitive_content_warning INSERT must not use a phantom
         ``attributes`` column and must supply NOT NULL ``brand_id``."""
-        from engine.brand.pipelines.sensitive_content_warning import run as run_sensitive
+        from legacy.brand.pipelines.sensitive_content_warning import run as run_sensitive
         from types import SimpleNamespace
 
         from tests.test_runtime_regressions import RecordingDB
@@ -122,7 +122,7 @@ class SchemaCompatTests(unittest.TestCase):
         self.assertIn("false", cols_spec["schema_valid"]["default"].lower())
 
         # fusion write path carries schema_valid through the upsert row
-        from engine.fusion.fusion_service import group_and_emit, resolve_entities
+        from legacy.fusion.fusion_service import group_and_emit, resolve_entities
         from tests.test_runtime_regressions import RecordingDB
 
         db = RecordingDB()
@@ -146,7 +146,7 @@ class SchemaCompatTests(unittest.TestCase):
         """build_candidate_rows rows map onto real knowledge_candidates columns,
         and schema_valid is a real, defaulted column."""
         cols_spec = _table_columns(self.schema_text, "knowledge_candidates")
-        from engine.extraction.candidate_extraction import build_candidate_rows
+        from shared.extraction.candidate_extraction import build_candidate_rows
 
         context = {"document_uuid": "duuid", "document_id": "doc1",
                    "profile_id": "l3_brand", "layer": "l3_brand"}

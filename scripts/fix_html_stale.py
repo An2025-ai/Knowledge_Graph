@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parents[1] / "engine" / "visualize" / "output"
+OUT = Path(__file__).resolve().parents[1] / "legacy" / "visualize" / "output"
 LIB = OUT / "assets"
 
 
