@@ -1,6 +1,6 @@
 [package]
 name = "brand-atlas-desktop"
-version = "1.0.0"
+version = "0.1.0"
 description = "Brand Atlas local-first knowledge workspace"
 authors = ["Brand Atlas"]
 edition = "2021"
@@ -16,4 +16,3 @@ uuid = { version = "1", features = ["v4"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
-

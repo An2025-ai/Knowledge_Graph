@@ -39,7 +39,7 @@ def create_app(
 
     app = FastAPI(
         title="Brand Atlas Local API",
-        version="1.0.0",
+        version="0.1.0",
         description="Local-first knowledge graph and agent runtime.",
         lifespan=lifespan,
     )

@@ -12,7 +12,7 @@ if ($Clean) {
 
 Push-Location $repo
 try {
-  python -m PyInstaller --noconfirm --clean --onedir --noconsole `
+  python -m PyInstaller --noconfirm --clean --onefile --noconsole `
     --name knowledge-engine `
     --exclude-module PyQt5 `
     --exclude-module PySide6 `
@@ -22,9 +22,9 @@ try {
     --add-data "$repo\common_knowledge;common_knowledge" `
     "$repo\backend\main.py"
   if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
-  if (-not (Test-Path -LiteralPath "$repo\dist\knowledge-engine\knowledge-engine.exe")) {
+  if (-not (Test-Path -LiteralPath "$repo\dist\knowledge-engine.exe")) {
     throw "PyInstaller did not produce the sidecar executable."
   }
-  Write-Host "Sidecar ready: $repo\dist\knowledge-engine\knowledge-engine.exe"
+  Write-Host "Sidecar ready: $repo\dist\knowledge-engine.exe"
 }
 finally { Pop-Location }
