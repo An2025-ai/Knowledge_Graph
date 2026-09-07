@@ -97,6 +97,63 @@ class LocalAppSmokeTests(unittest.TestCase):
             self.assertGreaterEqual(repository.graph()["stats"]["nodes"], 1)
             self.assertEqual(repository.stats()["documents"], 1)
 
+    def test_import_deduplicates_repeated_candidate_matches(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = AppPaths(
+                root, root / "database" / "knowledge.db", root / "documents",
+                root / "vectors", root / "cache", root / "logs", root / "backups",
+                root / "config",
+            )
+            paths.ensure()
+            db = LocalDatabase(paths.database)
+            db.initialize(Path(__file__).parents[1] / "backend" / "app" / "schema.sql")
+            repository = KnowledgeRepository(db)
+            service = DocumentIngestionService(repository)
+
+            result = service.import_document(
+                title="重复候选测试", content=(
+                    "Acme 公司获得 ISO 27001 认证。"
+                    "Acme 公司获得 ISO 27001 认证。"
+                ), file_path=None, source_type="test", layer="l3_brand",
+                brand_id="Acme", tenant_id="local",
+            )
+
+            self.assertFalse(result["duplicate"])
+            self.assertEqual(result["candidate_count"], 2)
+            self.assertEqual(repository.stats()["candidates"], 2)
+
+    def test_import_rebuilds_old_style_entity_fusion_without_legacy_runtime(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = AppPaths(
+                root, root / "database" / "knowledge.db", root / "documents",
+                root / "vectors", root / "cache", root / "logs", root / "backups",
+                root / "config",
+            )
+            paths.ensure()
+            db = LocalDatabase(paths.database)
+            db.initialize(Path(__file__).parents[1] / "backend" / "app" / "schema.sql")
+            repository = KnowledgeRepository(db)
+            service = DocumentIngestionService(repository)
+
+            result = service.import_document(
+                title="融合测试", content=(
+                    "Acme 公司提供 CRM 平台，支持自动对账，面向中小企业客户。"
+                    "获得 ISO 27001 认证。"
+                ), file_path=None, source_type="test", layer="l3_brand",
+                brand_id="Acme", tenant_id="local",
+            )
+
+            graph = repository.graph()
+            node_keys = {(node["type"], node["name"]) for node in graph["nodes"]}
+            edge_types = {edge["type"] for edge in graph["edges"]}
+            self.assertTrue(result["entity_count"] >= 5)
+            self.assertIn(("brand", "Acme"), node_keys)
+            self.assertIn(("product", "CRM 平台"), node_keys)
+            self.assertIn("offers", edge_types)
+            self.assertNotIn(("organization", "ISO 27001"), node_keys)
+
 
 if __name__ == "__main__":
     unittest.main()

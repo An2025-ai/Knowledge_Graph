@@ -108,14 +108,15 @@ class KnowledgeRepository:
                 conn.execute(
                     """INSERT INTO knowledge_candidates
                     (id,document_id,candidate_type,subject_json,predicate_type,object_json,
-                     metric_json,statement_json,evidence_text,confidence,
+                     metric_json,statement_json,evidence_text,evidence_refs_json,confidence,
                      extraction_method_json,status,created_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         candidate["id"], document["id"], candidate["candidate_type"],
                         self.db.json(candidate.get("subject", {})), candidate.get("predicate_type"),
                         self.db.json(candidate.get("object", {})), self.db.json(candidate.get("metric", {})),
                         self.db.json(candidate.get("statement", {})), candidate["evidence_text"],
+                        self.db.json(candidate.get("evidence_refs", [])),
                         candidate.get("confidence", 0.5), self.db.json(candidate.get("extraction_method", [])),
                         candidate.get("status", "pending"), now,
                     ),

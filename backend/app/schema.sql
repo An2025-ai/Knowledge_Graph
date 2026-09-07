@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS knowledge_candidates (
     metric_json TEXT NOT NULL DEFAULT '{}',
     statement_json TEXT NOT NULL DEFAULT '{}',
     evidence_text TEXT NOT NULL,
+    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
     confidence REAL NOT NULL DEFAULT 0.5,
     extraction_method_json TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'pending',

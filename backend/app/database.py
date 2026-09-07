@@ -49,6 +49,7 @@ class LocalDatabase:
             for table, column, definition in (
                 ("entities", "status", "TEXT NOT NULL DEFAULT 'active'"),
                 ("pipeline_jobs", "payload_json", "TEXT NOT NULL DEFAULT '{}'"),
+                ("knowledge_candidates", "evidence_refs_json", "TEXT NOT NULL DEFAULT '[]'"),
             ):
                 existing = {
                     row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()

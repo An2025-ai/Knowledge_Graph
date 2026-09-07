@@ -1,5 +1,10 @@
 # Brand Atlas 知识图谱 · 使用说明
 
+## 文档状态：历史运行手册（已停用）
+
+> 本文档记录的是已停用的 `legacy/` PostgreSQL/Neo4j 运行时，仅供迁移核对，不是当前产品的启动方式。
+> 当前请使用独立桌面版，见 [LOCAL_APP.md](LOCAL_APP.md)。新的桌面版知识构建已在 `backend/` 和 `shared/` 中重新实现，运行时不再调用本文档中的旧命令。
+
 > 合并自原 DATA_FLOW_AND_USAGE / USAGE / LAYERED_GRAPH_USAGE 与 runtime、visualize README。
 
 ## 1. 环境准备

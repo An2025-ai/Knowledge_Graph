@@ -1,8 +1,8 @@
 """Local application configuration and user-data paths.
 
-Program files and user data are deliberately separated.  The default data
-directory is under ``LOCALAPPDATA`` on Windows and can be overridden with
-``BRAND_ATLAS_DATA_DIR`` for development or managed deployments.
+The SQLite database is kept in the repository/application directory so it is
+easy to inspect and back up. Other runtime data remains under ``LOCALAPPDATA``
+by default and can be overridden with ``BRAND_ATLAS_DATA_DIR``.
 """
 
 from __future__ import annotations
@@ -25,6 +25,21 @@ def default_data_dir() -> Path:
     return Path.home() / ".local" / "share" / "BrandAtlas"
 
 
+def project_root() -> Path:
+    """Return the application/repository root containing ``backend``."""
+    return Path(__file__).resolve().parents[2]
+
+
+def default_database_path(data_root: Path) -> Path:
+    """Use a project-local DB by default, while preserving managed overrides."""
+    configured = os.getenv("BRAND_ATLAS_DATABASE_PATH")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    if os.getenv("BRAND_ATLAS_DATA_DIR"):
+        return data_root / "database" / "knowledge.db"
+    return project_root() / "database" / "knowledge.db"
+
+
 @dataclass(frozen=True)
 class AppPaths:
     root: Path
@@ -41,7 +56,7 @@ class AppPaths:
         root = default_data_dir()
         return cls(
             root=root,
-            database=root / "database" / "knowledge.db",
+            database=default_database_path(root),
             documents=root / "documents",
             vectors=root / "vectors",
             cache=root / "cache",
