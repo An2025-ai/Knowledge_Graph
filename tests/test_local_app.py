@@ -12,13 +12,13 @@ from fastapi.testclient import TestClient
 
 from backend.app.config import AppPaths
 from backend.app.config import RuntimeSettings
-from backend.app.database import LocalDatabase
+from backend.app.infrastructure.database import LocalDatabase
 from backend.app.factory import create_app
-from backend.app.repositories import KnowledgeRepository
+from backend.app.infrastructure.repositories import KnowledgeRepository
 from backend.app.runtime_settings import SettingsStore
-from backend.app.services.ingestion import DocumentIngestionService
-from backend.app.services.knowledge_pipeline import KnowledgeBuildPipeline
-from backend.app.services.llm import OpenAICompatibleClient
+from backend.app.application.services.ingestion import DocumentIngestionService
+from backend.app.application.services.knowledge_pipeline import KnowledgeBuildPipeline
+from backend.app.infrastructure.providers.llm import OpenAICompatibleClient
 
 
 class LocalAppSmokeTests(unittest.TestCase):
@@ -120,7 +120,7 @@ class LocalAppSmokeTests(unittest.TestCase):
                 with patch.object(
                     KnowledgeBuildPipeline, "_llm_extract", return_value=llm_candidates
                 ) as extract, patch(
-                    "backend.app.services.embedding.ExternalEmbeddingClient"
+                    "backend.app.infrastructure.providers.embedding.ExternalEmbeddingClient"
                 ) as embedding_client:
                     embedding_client.return_value.embed.return_value = [[0.1, 0.2]]
                     result = app.state.ingestion.import_document(
@@ -135,7 +135,7 @@ class LocalAppSmokeTests(unittest.TestCase):
                 embedding_settings = embedding_client.call_args.args[0]
                 self.assertEqual(embedding_settings.embedding_model, "hot-embedding")
 
-                with patch("backend.app.services.agent.OpenAICompatibleClient") as llm_client:
+                with patch("backend.app.application.services.agent.OpenAICompatibleClient") as llm_client:
                     llm_client.return_value.chat.return_value = "模型回答"
                     answer = app.state.agent.answer("请总结")
                 self.assertEqual(answer["mode"], "external_llm")

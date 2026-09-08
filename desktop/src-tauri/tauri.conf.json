@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.brandatlas.desktop",
   "build": {
-    "beforeDevCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/dev-desktop.ps1",
+    "beforeDevCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/dev/dev-desktop.ps1",
     "beforeBuildCommand": "npm --prefix ../frontend run build",
     "devUrl": "http://127.0.0.1:5173",
     "frontendDist": "../../frontend/dist"

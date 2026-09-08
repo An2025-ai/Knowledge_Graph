@@ -32,7 +32,7 @@ Task 01 的原始记录保留在下文；后续任务已经更新了运行路径
 基线建立时工作区并非完全干净，以下两项是任务开始前已经存在的用户改动，本任务未处理：
 
 - 删除：`docs_AUDIT_ACTION_PLAN.md`
-- 新增但未跟踪：`Brand_Atlas_Phase1_AI_Task_Plan.md`
+- 新增但未跟踪（当时）：`Brand_Atlas_Phase1_AI_Task_Plan.md`；当前任务书已归档到 `docs/migration/Brand_Atlas_Phase1_AI_Task_Plan.md`
 
 本任务只新增本文件。
 
@@ -172,14 +172,14 @@ npm --prefix desktop run dev
 ```text
 npm --prefix desktop run dev
     → Tauri CLI
-        → scripts/dev-desktop.ps1
+        → scripts/dev/dev-desktop.ps1
             → 启动 frontend Vite
         → desktop/src-tauri/src/main.rs
             → 启动 backend.main Python 进程
             → 打开 Tauri 窗口
 ```
 
-开发模式下由 Tauri 进程持有 Python 后端生命周期，关闭窗口时会停止后端并释放 SQLite。`scripts/dev-local.ps1` 仍可用于浏览器模式的前端调试，但不是产品桌面启动路径。
+开发模式下由 Tauri 进程持有 Python 后端生命周期，关闭窗口时会停止后端并释放 SQLite。`scripts/dev/dev-local.ps1` 仍可用于浏览器模式的前端调试，但不是产品桌面启动路径。
 
 ## 当前打包链路
 
@@ -187,7 +187,7 @@ Windows 安装包文档路径为：
 
 ```powershell
 pip install -r requirements-desktop.txt
-./scripts/prepare-tauri-sidecar.ps1
+./scripts/build/prepare-tauri-sidecar.ps1
 npm --prefix frontend install
 npm --prefix desktop install
 npm --prefix desktop run build
@@ -195,7 +195,7 @@ npm --prefix desktop run build
 
 其中：
 
-1. `scripts/prepare-tauri-sidecar.ps1` 调用 `scripts/build-sidecar.ps1`
+1. `scripts/build/prepare-tauri-sidecar.ps1` 调用 `scripts/build/build-sidecar.ps1`
 2. `build-sidecar.ps1` 使用 PyInstaller 将 `backend/main.py` 打包为 one-file、no-console 的 `knowledge-engine.exe`
 3. 打包时嵌入 `backend/app/schema.sql`、`backend/app/migrations/` 和 `common_knowledge/`
 4. `prepare-tauri-sidecar.ps1` 根据 Rust target triple 将 sidecar 放入 `desktop/src-tauri/binaries/`

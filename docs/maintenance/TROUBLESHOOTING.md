@@ -13,7 +13,7 @@ python scripts/maintenance/show_runtime_paths.py
 按以下顺序检查：
 
 1. 直接运行 `python -m unittest discover -s tests -p "test_*.py"`。
-2. 确认 `backend/app/migrations/` 已随 Sidecar 打包；重新执行 `scripts/prepare-tauri-sidecar.ps1`。
+2. 确认 `backend/app/migrations/` 已随 Sidecar 打包；重新执行 `scripts/build/prepare-tauri-sidecar.ps1`。
 3. 检查 Python/Sidecar 输出中的迁移错误。迁移失败会阻止启动，不会自动删除数据库。
 4. 检查数据库：
 

@@ -22,7 +22,7 @@ for UI work.
 
 ```powershell
 pip install -r requirements-desktop.txt
-./scripts/prepare-tauri-sidecar.ps1
+./scripts/build/prepare-tauri-sidecar.ps1
 npm --prefix frontend install
 npm --prefix desktop install
 npm --prefix desktop run build

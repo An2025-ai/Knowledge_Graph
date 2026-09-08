@@ -7,7 +7,7 @@ entry point.
 
 ```powershell
 pip install -r requirements-desktop.txt
-./scripts/build-sidecar.ps1 -Clean
+./scripts/build/build-sidecar.ps1 -Clean
 ```
 
 The sidecar is built with PyInstaller `--onefile`, so the output is
@@ -19,7 +19,7 @@ directory never becomes the database directory.
 To stage the Tauri sidecar and build the installer:
 
 ```powershell
-./scripts/prepare-tauri-sidecar.ps1
+./scripts/build/prepare-tauri-sidecar.ps1
 npm --prefix desktop install
 npm --prefix desktop run build
 ```

@@ -24,7 +24,7 @@ The API is intentionally independent from the retired PostgreSQL/Neo4j
 implementation under `legacy/`. It imports only dependency-light domain
 primitives from `shared/`; this package is the embedded desktop runtime.
 
-Document ingestion is implemented by `app/services/knowledge_pipeline.py`:
+Document ingestion is implemented by `app/application/services/knowledge_pipeline.py`:
 evidence units are turned into rule/optional-LLM candidates, normalized, fused,
 resolved into entities, and persisted as SQLite graph rows. The module is a
 fresh implementation and does not import the retired runtime.

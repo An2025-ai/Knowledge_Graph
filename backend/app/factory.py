@@ -10,14 +10,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import AppPaths, RuntimeSettings, load_settings
-from .database import LocalDatabase
-from .jobs import JobManager
-from .repositories import JobRepository, KnowledgeRepository
+from .infrastructure.database import LocalDatabase
+from .application.jobs import JobManager
+from .infrastructure.repositories import JobRepository, KnowledgeRepository
 from .routes import agent, documents, graph, system
 from .runtime_settings import SettingsStore
-from .services.agent import AgentService
-from .services.embedding import EmbeddingService
-from .services.ingestion import DocumentIngestionService
+from .application.services.agent import AgentService
+from .infrastructure.providers.embedding import EmbeddingService
+from .application.services.ingestion import DocumentIngestionService
 
 
 def create_app(

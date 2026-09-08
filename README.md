@@ -30,17 +30,18 @@ Knowledge_Graph/
 │   └── app/
 │       ├── factory.py               # 应用组装、本地鉴权、CORS
 │       ├── config.py                # 本地路径和运行配置
-│       ├── database.py              # SQLite 连接和初始化
-│       ├── repositories.py          # 数据访问层
-│       ├── jobs.py                  # 导入任务管理
 │       ├── routes/                  # HTTP API：对话、文档、图谱、系统
-│       └── services/                # Agent、导入、知识构建、LLM、Embedding 用例
+│       ├── application/             # Job、Agent、导入和知识构建用例
+│       │   └── services/
+│       ├── infrastructure/          # SQLite、Repository 和模型 Provider
+│       │   └── providers/
+│       └── migrations/              # SQLite 版本迁移
 ├── frontend/                        # React + TypeScript + Vite UI
 │   └── src/
-│       ├── App.tsx                  # 主工作台和对话状态
-│       ├── api.ts                   # 后端 API 客户端
-│       ├── runtime.ts               # Tauri 本地运行时发现
-│       └── components/              # 图谱、导入、设置等模块
+│       ├── app/                      # 主工作台和运行时发现
+│       ├── api/                      # 后端 API 客户端和 DTO
+│       ├── features/                 # 对话、导入、图谱、设置功能
+│       └── styles/                   # 全局样式
 ├── desktop/                         # Tauri 2 独立桌面壳
 │   └── src-tauri/
 │       ├── src/main.rs              # 窗口、Sidecar 和生命周期
@@ -68,9 +69,15 @@ Knowledge_Graph/
 │   ├── visualize/                   # 旧 PG/Neo4j 可视化导出
 │   └── docker-compose.yml           # 旧 PG + Neo4j 服务
 ├── tests/                           # 桌面版和 shared 运行时测试
-├── scripts/                         # 桌面开发、Sidecar、构建和维护脚本
-│   └── maintenance/                 # 数据库备份、校验和路径检查
-├── docs/                            # 架构、启动和本地应用说明
+├── scripts/                         # 开发、构建和维护脚本
+│   ├── dev/                          # 桌面和浏览器开发启动
+│   ├── build/                        # Sidecar、图谱和安装包构建
+│   └── maintenance/                 # 数据库和生成物维护
+├── docs/                            # 架构、迁移和运维说明
+│   ├── architecture/
+│   ├── migration/
+│   ├── maintenance/
+│   └── decisions/
 ├── requirements-desktop.txt         # 桌面版依赖
 └── requirements.txt                 # 历史依赖清单，不用于桌面版
 ```
@@ -78,9 +85,9 @@ Knowledge_Graph/
 ## 依赖方向
 
 ```text
-frontend → backend routes → backend services → repositories → SQLite
-                                      │
-                                      └── shared（纯规则/抽取）
+frontend → backend api → application → infrastructure → SQLite / Model API
+                              │
+                              └── shared（纯规则/抽取）
 
 shared extraction → backend knowledge pipeline → SQLite
 ```
@@ -100,8 +107,8 @@ shared extraction → backend knowledge pipeline → SQLite
 
 - `shared/extraction/entity_rules.py`：依赖无关的实体与关系规则。
 - `shared/extraction/normalization.py`：名称归一化、候选稳定键和证据融合。
-- `backend/app/services/knowledge_pipeline.py`：桌面版知识构建编排，可选调用 LLM。
-- `backend/app/services/ingestion.py`：负责文档导入、幂等和事务化落库。
+- `backend/app/application/services/knowledge_pipeline.py`：桌面版知识构建编排，可选调用 LLM。
+- `backend/app/application/services/ingestion.py`：负责文档导入、幂等和事务化落库。
 
 规则抽取、图谱构建和对话不依赖 Embedding；LLM 和 Embedding 仍可独立配置、独立测试。
 
@@ -129,7 +136,7 @@ SQLite 数据库默认保存在操作系统的用户数据目录：
 
 模型配置在桌面端设置界面中填写。LLM 和 Embedding 有独立的测试按钮；Embedding 未配置时，规则抽取、图谱构建和对话仍可以继续运行。
 
-更详细的桌面开发说明见 [docs/LOCAL_APP.md](docs/LOCAL_APP.md)，打包说明见 [desktop/README.md](desktop/README.md)。
+更详细的桌面开发说明见 [docs/architecture/LOCAL_APP.md](docs/architecture/LOCAL_APP.md)，打包说明见 [desktop/README.md](desktop/README.md)。
 数据备份、数据库校验、故障排查和发布验收见 [docs/maintenance/](docs/maintenance/)。
 
 ## legacy 目录状态

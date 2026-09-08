@@ -9,13 +9,43 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.app.database import LocalDatabase
+from backend.app.infrastructure.database import LocalDatabase
 from scripts.maintenance.backup_database import backup_database
 from scripts.maintenance.show_runtime_paths import runtime_paths
 from scripts.maintenance.verify_database import verify_database
 
 
 class MaintenanceScriptTests(unittest.TestCase):
+    def test_script_layout_uses_classified_directories(self):
+        repository = Path(__file__).resolve().parents[1]
+        expected = (
+            repository / "scripts" / "dev" / "dev-desktop.ps1",
+            repository / "scripts" / "dev" / "dev-local.ps1",
+            repository / "scripts" / "build" / "build-sidecar.ps1",
+            repository / "scripts" / "build" / "prepare-tauri-sidecar.ps1",
+            repository / "scripts" / "build" / "create-tauri-icon.py",
+            repository / "scripts" / "build" / "build_layered_prototype.py",
+            repository / "scripts" / "build" / "render_graph.py",
+            repository / "scripts" / "maintenance" / "fix_html_stale.py",
+            repository / "scripts" / "maintenance" / "fix_html_cdn.py",
+        )
+        for path in expected:
+            self.assertTrue(path.is_file(), path)
+
+        old_paths = (
+            repository / "scripts" / "dev-desktop.ps1",
+            repository / "scripts" / "dev-local.ps1",
+            repository / "scripts" / "build-sidecar.ps1",
+            repository / "scripts" / "prepare-tauri-sidecar.ps1",
+            repository / "scripts" / "create-tauri-icon.py",
+            repository / "scripts" / "build_layered_prototype.py",
+            repository / "scripts" / "render_graph.py",
+            repository / "scripts" / "fix_html_stale.py",
+            repository / "scripts" / "fix_html_cdn.py",
+        )
+        for path in old_paths:
+            self.assertFalse(path.exists(), path)
+
     def test_backup_uses_sqlite_backup_api_and_is_readable(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

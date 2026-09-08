@@ -26,7 +26,7 @@
 - [ ] Sidecar 构建并暂存：
 
   ```powershell
-  ./scripts/prepare-tauri-sidecar.ps1
+  ./scripts/build/prepare-tauri-sidecar.ps1
   ```
 
 - [ ] Tauri/NSIS 打包：

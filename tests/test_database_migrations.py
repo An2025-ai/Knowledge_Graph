@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from backend.app.database import LocalDatabase
+from backend.app.infrastructure.database import LocalDatabase
 from backend.app.migrations.runner import MigrationError, MigrationRunner
 
 

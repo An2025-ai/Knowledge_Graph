@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
 
 if TYPE_CHECKING:
-    from ..database import LocalDatabase
+    from ..infrastructure.database import LocalDatabase
 
 
 LEGACY_SCHEMA_VERSION = "desktop-1.0.0"
