@@ -20,16 +20,17 @@ def chat(payload: ChatRequest, request: Request):
     result = request.app.state.agent.answer(payload.message, history=history)
     now = datetime.now(timezone.utc).isoformat()
     request.app.state.db.execute(
-        "INSERT INTO chat_messages(id,role,content,citations_json,created_at) VALUES (?,?,?,?,?)",
-        (uuid.uuid4().hex, "user", payload.message, "[]", now),
+        "INSERT INTO chat_messages(id,role,content,citations_json,mode,created_at) VALUES (?,?,?,?,?,?)",
+        (uuid.uuid4().hex, "user", payload.message, "[]", "user", now),
     )
     request.app.state.db.execute(
-        "INSERT INTO chat_messages(id,role,content,citations_json,created_at) VALUES (?,?,?,?,?)",
+        "INSERT INTO chat_messages(id,role,content,citations_json,mode,created_at) VALUES (?,?,?,?,?,?)",
         (
             uuid.uuid4().hex,
             "assistant",
             result["answer"],
             json.dumps([source["id"] for source in result.get("sources", []) if source.get("id")]),
+            result.get("mode", "unknown"),
             now,
         ),
     )

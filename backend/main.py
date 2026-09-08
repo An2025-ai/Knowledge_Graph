@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import os
 import socket
+import sys
 
 import uvicorn
 
@@ -35,8 +36,23 @@ def main() -> int:
             port = int(probe.getsockname()[1])
     os.environ["BRAND_ATLAS_PORT"] = str(port)
     app = create_app()
-    print(f"BRAND_ATLAS_BACKEND_READY host={args.host} port={port} token={args.token}", flush=True)
-    uvicorn.run(app, host=args.host, port=port, log_level="info")
+    # PyInstaller's ``--noconsole`` mode sets stdout/stderr to ``None``.
+    # Uvicorn's default formatter calls ``sys.stderr.isatty()`` while loading
+    # its logging config, which prevents the packaged sidecar from starting.
+    headless = sys.stdout is None or sys.stderr is None
+    if not headless:
+        print(
+            f"BRAND_ATLAS_BACKEND_READY host={args.host} port={port} token={args.token}",
+            flush=True,
+        )
+    uvicorn.run(
+        app,
+        host=args.host,
+        port=port,
+        log_level="info",
+        log_config=None if headless else uvicorn.config.LOGGING_CONFIG,
+        access_log=not headless,
+    )
     return 0
 
 

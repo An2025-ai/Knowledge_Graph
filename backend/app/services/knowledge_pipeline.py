@@ -37,6 +37,9 @@ class KnowledgeBuild:
     entities: list[dict[str, Any]]
     relations: list[dict[str, Any]]
     llm_used: bool = False
+    llm_attempted: bool = False
+    llm_fallback_count: int = 0
+    llm_error: str | None = None
 
 
 class KnowledgeBuildPipeline:
@@ -58,33 +61,64 @@ class KnowledgeBuildPipeline:
     ) -> KnowledgeBuild:
         get_common_registry().require_profile(layer)
         raw: list[dict[str, Any]] = []
+        llm_attempted = self._llm_enabled()
+        llm_used = False
+        llm_fallback_count = 0
+        llm_errors: list[str] = []
+        entity_candidates = extract_entity_candidates(
+            "", profile_id=layer, brand_id=brand_id
+        )
 
         for unit in units:
             text = unit.get("text", "")
-            for candidate in pre_extract(text, profile_id=layer):
-                raw.append(self._candidate_from_payload(candidate, unit))
+            if not llm_attempted:
+                raw.extend(
+                    self._candidate_from_payload(candidate, unit)
+                    for candidate in pre_extract(text, profile_id=layer)
+                )
+                continue
 
-        entity_candidates = extract_entity_candidates(
-            content, profile_id=layer, brand_id=brand_id
-        )
+            try:
+                # There is deliberately no per-document LLM budget. Every
+                # evidence unit gets a model request while the configured
+                # endpoint is available; only a failed request falls back to
+                # deterministic extraction for that unit.
+                llm_candidates = self._llm_extract(text, layer)
+            except Exception as exc:
+                llm_candidates = []
+                llm_errors.append(str(exc))
+
+            if llm_candidates:
+                raw.extend(self._candidate_from_payload(candidate, unit) for candidate in llm_candidates)
+                llm_used = True
+            else:
+                # LLM is the primary extractor when configured. Rule output is
+                # explicitly marked as fallback so it cannot be mistaken for a
+                # successful model extraction in the database.
+                llm_fallback_count += 1
+                for candidate in pre_extract(text, profile_id=layer):
+                    fallback = dict(candidate)
+                    fallback["generator"] = f"fallback:{candidate.get('generator', 'rule')}"
+                    raw.append(self._candidate_from_payload(fallback, unit))
+                entity_candidates.extend(
+                    extract_entity_candidates(text, profile_id=layer, brand_id=None)
+                )
+
+        if not llm_attempted:
+            entity_candidates.extend(
+                extract_entity_candidates(content, profile_id=layer, brand_id=None)
+            )
+        entity_candidates = self._dedupe_entity_candidates(entity_candidates)
         first_unit = units[0] if units else {}
         raw.extend(self._candidate_from_payload(candidate, first_unit) for candidate in entity_candidates)
+        relation_candidates = extract_relation_candidates(entity_candidates, profile_id=layer)
+        if llm_attempted and llm_fallback_count:
+            for candidate in relation_candidates:
+                candidate["generator"] = f"fallback:{candidate.get('generator', 'rule')}"
         raw.extend(
             self._candidate_from_payload(candidate, first_unit)
-            for candidate in extract_relation_candidates(entity_candidates, profile_id=layer)
+            for candidate in relation_candidates
         )
-
-        llm_used = False
-        if self._llm_enabled():
-            for unit in units[:20]:
-                try:
-                    llm_candidates = self._llm_extract(unit.get("text", ""), layer)
-                except Exception:
-                    # Import remains usable when the optional external model is
-                    # unavailable. Deterministic candidates are still saved.
-                    continue
-                raw.extend(self._candidate_from_payload(candidate, unit) for candidate in llm_candidates)
-                llm_used = llm_used or bool(llm_candidates)
 
         fused = fuse_candidates(raw)
         entity_rows = self._entities(
@@ -105,7 +139,28 @@ class KnowledgeBuildPipeline:
             entities=entity_rows,
             relations=relations,
             llm_used=llm_used,
+            llm_attempted=llm_attempted,
+            llm_fallback_count=llm_fallback_count,
+            llm_error=llm_errors[0][:500] if llm_errors else None,
         )
+
+    @staticmethod
+    def _dedupe_entity_candidates(
+        candidates: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for candidate in candidates:
+            payload = candidate.get("candidate_payload") or {}
+            key = (
+                str(payload.get("entity_type") or "organization"),
+                normalize_name(payload.get("name")),
+            )
+            if not key[1] or key in seen:
+                continue
+            seen.add(key)
+            result.append(candidate)
+        return result
 
     @staticmethod
     def _candidate_from_payload(candidate: dict[str, Any], unit: dict[str, Any]) -> dict[str, Any]:
@@ -273,10 +328,17 @@ class KnowledgeBuildPipeline:
         allowed_entities = registry.entity_types(profile_id, extractable_only=True)
         allowed_relations = registry.relation_types(profile_id, extractable_only=True)
         candidates: list[dict[str, Any]] = []
+        entity_by_id: dict[str, dict[str, str]] = {}
+        entity_by_name: dict[str, dict[str, str]] = {}
         for item in payload.get("entities") or []:
             entity_type = item.get("type") or item.get("entity_type")
             name = normalize_text(item.get("canonical_name") or item.get("name"))
             if name and entity_type in allowed_entities:
+                entity = {"name": name, "entity_type": str(entity_type)}
+                entity_id = item.get("id") or item.get("entity_id")
+                if entity_id:
+                    entity_by_id[str(entity_id)] = entity
+                entity_by_name[normalize_name(name)] = entity
                 candidates.append({
                     "candidate_type": "entity",
                     "candidate_payload": {"name": name, "entity_type": entity_type},
@@ -285,21 +347,27 @@ class KnowledgeBuildPipeline:
                 })
         for item in payload.get("relations") or []:
             relation = item.get("relation") or item.get("type")
-            subject = item.get("subject") or {}
-            obj = item.get("object") or {}
-            if isinstance(subject, str):
-                subject = {"name": subject}
-            if isinstance(obj, str):
-                obj = {"name": obj}
-            if relation not in allowed_relations or not subject.get("name") or not obj.get("name"):
+            subject_name, subject_type = self._resolve_relation_endpoint(
+                item.get("subject"),
+                item.get("entity_type_subject") or item.get("subject_type"),
+                entity_by_id,
+                entity_by_name,
+            )
+            object_name, object_type = self._resolve_relation_endpoint(
+                item.get("object"),
+                item.get("entity_type_object") or item.get("object_type"),
+                entity_by_id,
+                entity_by_name,
+            )
+            if relation not in allowed_relations or not subject_name or not object_name:
                 continue
             candidates.append({
                 "candidate_type": "relation",
                 "candidate_payload": {
-                    "subject_name": subject.get("name"),
-                    "subject_type": subject.get("type") or subject.get("entity_type"),
-                    "object_name": obj.get("name"),
-                    "object_type": obj.get("type") or obj.get("entity_type"),
+                    "subject_name": subject_name,
+                    "subject_type": subject_type,
+                    "object_name": object_name,
+                    "object_type": object_type,
                     "type": relation,
                 },
                 "confidence": float(item.get("confidence", 0.7)),
@@ -319,6 +387,39 @@ class KnowledgeBuildPipeline:
                     "generator": "llm:structured",
                 })
         return candidates
+
+    @staticmethod
+    def _resolve_relation_endpoint(
+        value: Any,
+        type_hint: Any,
+        entity_by_id: dict[str, dict[str, str]],
+        entity_by_name: dict[str, dict[str, str]],
+    ) -> tuple[str | None, str | None]:
+        """Resolve an LLM relation endpoint to the entity row shape.
+
+        The extraction prompt uses entity IDs in ``subject``/``object`` while
+        some compatible models return names or nested ``{name, type}``
+        objects. Accept all of these forms before the relation promotion
+        stage performs its strict type/name lookup.
+        """
+        raw_name: Any = value
+        raw_type: Any = type_hint
+        if isinstance(value, dict):
+            entity_id = value.get("id") or value.get("entity_id")
+            resolved = entity_by_id.get(str(entity_id)) if entity_id else None
+            raw_name = value.get("canonical_name") or value.get("name") or value.get("entity")
+            raw_type = value.get("type") or value.get("entity_type") or type_hint
+            if resolved:
+                raw_name = raw_name or resolved["name"]
+                raw_type = raw_type or resolved["entity_type"]
+
+        name = normalize_text(str(raw_name)) if raw_name is not None else ""
+        resolved = entity_by_id.get(name) or entity_by_name.get(normalize_name(name))
+        if resolved:
+            name = resolved["name"]
+            raw_type = raw_type or resolved["entity_type"]
+        entity_type = normalize_text(str(raw_type)) if raw_type is not None else ""
+        return (name or None, entity_type or None)
 
     @staticmethod
     def _parse_json(value: str) -> dict[str, Any]:

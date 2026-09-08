@@ -159,6 +159,9 @@ class DocumentIngestionService:
             "candidate_count": len(build.candidates), "entity_count": len(build.entities),
             "relation_count": len(build.relations), "statement_count": len(statements),
             "embedding_count": embedding_count, "llm_used": build.llm_used,
+            "llm_attempted": build.llm_attempted,
+            "llm_fallback_count": build.llm_fallback_count,
+            "llm_error": build.llm_error,
             "layer": layer, "brand_id": brand_id,
         }
 

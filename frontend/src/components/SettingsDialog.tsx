@@ -62,6 +62,7 @@ export default function SettingsDialog({ initial, busy, onClose, onSubmit, onTes
       <label>LLM 提供方<select value={provider} onChange={(event) => setProvider(event.target.value as AppSettings["llm_provider"])}><option value="none">未启用（本地检索模式）</option><option value="openai-compatible">OpenAI-compatible API</option></select></label>
       <div className="form-grid"><label>API Base URL<input value={baseUrl} onChange={(event) => updateLlmBaseUrl(event.target.value)} placeholder="https://api.example.com/v1" /></label><label>模型名称<input value={model} onChange={(event) => updateLlmModel(event.target.value)} placeholder="例如：gpt-4o-mini" /></label></div>
       <label>API Key <span className="muted">（留空表示保留已有 Key）</span><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-…" autoComplete="off" /></label>
+      {provider === "openai-compatible" && initial.llm_api_key_configured === false && <div className="connection-warning">当前没有检测到已保存的 API Key。请重新填写并保存，否则对话和抽取会回退到本地规则。</div>}
       <div className="provider-test-actions"><button className="button outline" disabled={busy || llmTesting || embeddingTesting} onClick={() => void runLlmTest()}>{llmTesting ? "测试 LLM 中…" : "测试 LLM 连接"}</button></div>
       <TestResult label="LLM" result={llmResult} error={llmError} />
 

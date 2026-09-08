@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from ..config import persist_settings
 from ..schemas import ProviderTestRequest, SettingsRequest, TestSettingsRequest
 from ..services.embedding import ExternalEmbeddingClient
-from ..services.llm import OpenAICompatibleClient
+from ..services.llm import OpenAICompatibleClient, configured_api_key
 
 router = APIRouter(tags=["system"])
 
@@ -38,6 +38,7 @@ def settings(request: Request):
         "embedding_provider": current.embedding_provider,
         "embedding_base_url": current.embedding_base_url,
         "embedding_model": current.embedding_model,
+        "llm_api_key_configured": configured_api_key(current.api_key_reference),
         "data_dir": str(request.app.state.paths.root),
     }
 

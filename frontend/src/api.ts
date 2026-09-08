@@ -8,6 +8,7 @@ export type AppSettings = {
   embedding_base_url: string;
   embedding_model: string;
   data_dir?: string;
+  llm_api_key_configured?: boolean;
 };
 
 export type ConnectionTestResult = {
