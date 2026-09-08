@@ -1,5 +1,5 @@
-"""Profile-scoped ontology access and validation."""
+"""Ontology validation backed by the common knowledge registry."""
 
-from shared.ontology.ontology import get_ontology
+from shared.ontology.ontology_validator import OntologyValidator, ValidationResult, validate_ontology
 
-__all__ = ["get_ontology"]
+__all__ = ["OntologyValidator", "ValidationResult", "validate_ontology"]

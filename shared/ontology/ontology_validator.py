@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from shared.ontology.ontology import get_ontology
+from shared.knowledge.registry import get_common_registry
 
 
 @dataclass
@@ -30,20 +30,20 @@ class OntologyValidator:
     def __init__(self, ontology=None, profile_id: str | None = None) -> None:
         if not profile_id:
             raise ValueError("profile_id is required for ontology validation")
-        self.ontology = ontology or get_ontology()
+        self.registry = ontology or get_common_registry()
         self.profile_id = profile_id
 
     def validate_entity(self, entity: dict) -> list[str]:
         errors: list[str] = []
         etype = entity.get("type")
-        if not self.ontology.is_valid_entity_type_for_profile(etype, self.profile_id):
+        if etype not in self.registry.entity_types(self.profile_id):
             errors.append(f"unknown entity type '{etype}'")
         return errors
 
     def validate_relation(self, relation: dict, entity_by_id: dict[str, dict]) -> list[str]:
         errors: list[str] = []
         rtype = relation.get("relation")
-        if not self.ontology.is_valid_relation_type_for_profile(rtype, self.profile_id):
+        if rtype not in self.registry.relation_types(self.profile_id):
             errors.append(f"unknown relation type '{rtype}'")
             return errors
         subj_id = relation.get("subject")
@@ -57,7 +57,7 @@ class OntologyValidator:
         if subj and obj:
             subject_type = subj.get("type")
             object_type = obj.get("type")
-            valid = self.ontology.is_valid_domain_range_for_profile(
+            valid = self.registry.is_valid_relation(
                 rtype, subject_type, object_type, self.profile_id
             )
             if not valid:
@@ -86,9 +86,7 @@ class OntologyValidator:
                 result.add(f"relation {r.get('subject')}-{r.get('relation')}: {err}")
         for s in statements:
             sc = s.get("statement_class")
-            valid_class = self.ontology.is_valid_statement_class_for_profile(
-                sc, self.profile_id
-            )
+            valid_class = sc in self.registry.statement_classes(self.profile_id)
             if sc and not valid_class:
                 result.add(f"statement: invalid statement_class '{sc}'")
         return result

@@ -19,7 +19,6 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from shared.knowledge.registry import get_common_registry
-from shared.knowledge.validate import validate_common
 
 
 def build_snapshot() -> dict:
@@ -121,7 +120,8 @@ def main() -> int:
                         help="UPSERT the L1 registry into entity_type/relation_type "
                              "(required before any L2/L3 write — see schema.sql FKs)")
     args = parser.parse_args()
-    errors = validate_common()
+    registry = get_common_registry()
+    errors = registry.validate_profiles() + registry.validate_common_contracts()
     if errors:
         print(json.dumps({"ok": False, "errors": errors}, ensure_ascii=False, indent=2))
         return 1

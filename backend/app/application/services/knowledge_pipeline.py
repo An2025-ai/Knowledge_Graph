@@ -25,6 +25,7 @@ from shared.extraction.entity_rules import (
 from shared.extraction.normalization import fuse_candidates, normalize_name, normalize_text
 from shared.knowledge.prompt_builder import build_extraction_prompt
 from shared.knowledge.registry import get_common_registry
+from shared.ontology.ontology_validator import validate_ontology
 
 from ...config import RuntimeSettings
 from ...infrastructure.repositories import stable_id
@@ -338,6 +339,10 @@ class KnowledgeBuildPipeline:
             },
         ])
         payload = self._parse_json(response)
+        validation = validate_ontology(payload, profile_id=profile_id)
+        if not validation.ok:
+            detail = "; ".join(validation.errors[:8])
+            raise ValueError(f"LLM ontology validation failed: {detail}")
         registry = get_common_registry()
         allowed_entities = registry.entity_types(profile_id, extractable_only=True)
         allowed_relations = registry.relation_types(profile_id, extractable_only=True)

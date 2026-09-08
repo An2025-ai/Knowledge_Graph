@@ -2,16 +2,15 @@ import unittest
 
 from shared.knowledge.change_proposals import validate_change_proposal
 from shared.knowledge.registry import get_common_registry
-from shared.knowledge.operations import list_operation_roles, get_role, write_mode_for
 from shared.knowledge.retrieval import build_context_package, validate_context_package
-from shared.knowledge.validate import validate_common
-from shared.knowledge.profiles import list_profiles
-from shared.knowledge.policies import list_policies
 
 
 class L1ContractTests(unittest.TestCase):
     def test_l1_contracts_are_valid(self):
-        self.assertEqual(validate_common(), [])
+        registry = get_common_registry()
+        self.assertEqual(
+            registry.validate_profiles() + registry.validate_common_contracts(), []
+        )
 
     def test_registry_exposes_independent_contracts(self):
         registry = get_common_registry()
@@ -36,9 +35,11 @@ class L1ContractTests(unittest.TestCase):
         self.assertEqual(registry.write_mode_for_role("consumer"), "read_only")
         self.assertEqual(registry.write_mode_for_role("governor"), "proposal_only")
         self.assertIn("retrieve_context", registry.operations_for_role("consumer"))
-        self.assertEqual(write_mode_for("propose_update"), "proposal_only")
-        self.assertEqual(get_role("consumer")["write_mode"], "read_only")
-        self.assertTrue(list_operation_roles())
+        self.assertEqual(
+            registry.operation_specs["propose_update"]["write_mode"], "proposal_only"
+        )
+        self.assertEqual(registry.role_specs["consumer"]["write_mode"], "read_only")
+        self.assertTrue(registry.role_specs)
         self.assertIn("evidence_coverage", registry.quality_metric_specs)
         self.assertTrue(registry.semantic_terms())
         self.assertTrue(registry.narrative_chains("l3_brand"))
@@ -47,8 +48,8 @@ class L1ContractTests(unittest.TestCase):
         self.assertIn("opportunity", registry.entity_types("l2_industry"))
         self.assertIn("brand_claim", registry.entity_types("l3_brand"))
         self.assertIn("responds_to", registry.relation_types("l3_brand"))
-        self.assertTrue(list_profiles())
-        self.assertTrue(list_policies())
+        self.assertTrue(registry.profiles)
+        self.assertTrue(registry.policy_specs)
         self.assertEqual(registry.retrieval_contract["meta"]["version"], "1.0.0")
 
     def test_business_ontology_requires_a_profile(self):

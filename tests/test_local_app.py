@@ -323,6 +323,41 @@ class LocalAppSmokeTests(unittest.TestCase):
         self.assertEqual(build.relations[0]["relation_type"], "offers")
         self.assertEqual(build.relations[0]["properties"]["extraction"], ["llm:structured"])
 
+    def test_invalid_llm_ontology_payload_uses_rule_fallback(self):
+        settings = RuntimeSettings(
+            llm_provider="openai-compatible",
+            llm_base_url="https://example.test/v1",
+            llm_model="test-model",
+        )
+        response = json.dumps({
+            "entities": [
+                {"id": "ent_brand_acme", "type": "brand", "canonical_name": "Acme"},
+            ],
+            "relations": [{
+                "subject": "ent_brand_acme",
+                "relation": "offers",
+                "object": "ent_missing",
+                "entity_type_subject": "brand",
+                "entity_type_object": "product",
+                "confidence": 0.9,
+            }],
+            "statements": [],
+        }, ensure_ascii=False)
+        with patch.object(OpenAICompatibleClient, "chat", return_value=response):
+            build = KnowledgeBuildPipeline(settings).build(
+                document_id="doc-invalid-ontology", content="Acme 公司提供 CRM 平台。",
+                units=[{"unit_id": "unit-invalid-ontology", "text": "Acme 公司提供 CRM 平台。"}],
+                layer="l3_brand", brand_id="Acme", tenant_id="local",
+                content_hash="hash-invalid-ontology",
+            )
+
+        methods = [method for candidate in build.candidates for method in candidate["extraction_method"]]
+        self.assertTrue(build.llm_attempted)
+        self.assertFalse(build.llm_used)
+        self.assertEqual(build.llm_fallback_count, 1)
+        self.assertIn("LLM ontology validation failed", build.llm_error or "")
+        self.assertTrue(any(method.startswith("fallback:") for method in methods))
+
     def test_llm_extraction_marks_rule_fallbacks(self):
         settings = RuntimeSettings(
             llm_provider="openai-compatible",
