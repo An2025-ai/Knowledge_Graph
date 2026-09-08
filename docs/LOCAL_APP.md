@@ -24,8 +24,9 @@ npm --prefix desktop run dev
 
 ## 数据与配置
 
-- 数据默认位于 `%LOCALAPPDATA%\BrandAtlas`。
-- `%LOCALAPPDATA%/BrandAtlas/database/knowledge.db` 保存文档、证据单元、候选、实体、关系和任务状态。
+- SQLite 数据库默认位于项目根目录的 `database/knowledge.db`，保存文档、证据单元、候选、实体、关系和任务状态。
+- 其他运行数据默认位于 `%LOCALAPPDATA%\BrandAtlas`；设置 `BRAND_ATLAS_DATA_DIR` 后，数据库也会跟随该目录。
+- 也可以使用 `BRAND_ATLAS_DATABASE_PATH` 指定数据库的绝对路径。
 - `documents/`、`vectors/`、`cache/`、`logs/`、`backups/` 预留给后续模块。
 - `config/settings.json` 只保存非敏感模型配置。
 - API Key 通过 Python `keyring` 保存到 Windows Credential Manager。
@@ -34,10 +35,23 @@ npm --prefix desktop run dev
 ## 可扩展边界
 
 - `backend/app/repositories.py`：SQLite 数据访问边界；未来可增加服务器版仓储实现。
-- `backend/app/services/ingestion.py`：文档处理用例；复用 `shared/extraction/` 和 `shared/knowledge/` 中的纯规则。
+- `backend/app/services/ingestion.py`：文档处理用例；负责导入幂等和持久化边界。
+- `backend/app/services/knowledge_pipeline.py`：新运行时的候选抽取、归一化、融合、实体解析和关系生成。
 - `backend/app/services/agent.py`：本地检索与外部 LLM 编排。
 - `backend/app/routes/`：按业务模块拆分的 HTTP 接口。
 - `frontend/src/components/`：对话、导入、图谱和设置组件独立演进。
 
-当前桌面应用默认不启动 PostgreSQL、Neo4j、Docker、Redis 或本地大模型；旧的
-服务器链路整体保留在 `legacy/`，跨运行时的纯领域能力集中在 `shared/`。
+当前桌面应用默认不启动 PostgreSQL、Neo4j、Docker、Redis 或本地大模型。旧的
+服务器实现已停用并只保留在 `legacy/` 供迁移核对；桌面版知识构建不导入旧运行时。
+
+## 知识构建流程
+
+导入文档时，桌面版会按以下顺序处理：
+
+```text
+内容解析 → 证据单元 → 规则候选 → 可选 LLM 候选 → 归一化/融合
+→ 实体解析 → 关系生成 → SQLite 落库
+```
+
+候选会保留 `evidence_refs_json`，可追溯到证据单元；同一事实在同一文档内通过稳定
+融合键去重，重新导入同一内容则直接返回重复结果。

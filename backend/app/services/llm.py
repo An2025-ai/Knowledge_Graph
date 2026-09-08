@@ -27,6 +27,11 @@ def _api_key(reference: str, override: str | None = None) -> str | None:
     return os.getenv("BRAND_ATLAS_LLM_API_KEY")
 
 
+def configured_api_key(reference: str) -> bool:
+    """Return whether the runtime has a key without exposing its value."""
+    return bool(_api_key(reference))
+
+
 class OpenAICompatibleClient:
     def __init__(self, *, base_url: str, model: str, key_reference: str, api_key: str | None = None):
         self.base_url = base_url.rstrip("/")
@@ -45,6 +50,8 @@ class OpenAICompatibleClient:
         """Make a minimal real request so the endpoint and selected model are verified."""
         if not self.base_url or not self.model:
             raise RuntimeError("请填写 LLM Base URL 和模型名称")
+        if not _api_key(self.key_reference, self.api_key):
+            raise RuntimeError("LLM API Key 未配置，请在设置中重新填写并保存")
         body = json.dumps({
             "model": self.model,
             "messages": [{"role": "user", "content": "Reply with OK only."}],
@@ -69,6 +76,8 @@ class OpenAICompatibleClient:
     def chat(self, messages: list[dict[str, str]]) -> str:
         if not self.base_url or not self.model:
             raise RuntimeError("LLM base URL and model are not configured")
+        if not _api_key(self.key_reference, self.api_key):
+            raise RuntimeError("LLM API Key 未配置，请在设置中重新填写并保存")
         body = json.dumps({"model": self.model, "messages": messages, "temperature": 0.2},
                           ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(

@@ -13,8 +13,10 @@ npm --prefix desktop install
 npm --prefix desktop run dev
 ```
 
-The dev command opens a Tauri window and starts Vite plus the local backend in
-the background. The browser-only Vite workflow remains available for UI work.
+The dev command opens a Tauri window and starts Vite. Tauri itself owns the
+local Python backend, so closing the window also terminates the backend and
+releases the SQLite database. The browser-only Vite workflow remains available
+for UI work.
 
 ## Windows installer
 
@@ -26,5 +28,6 @@ npm --prefix desktop install
 npm --prefix desktop run build
 ```
 
-The NSIS installer embeds the sidecar. Runtime data is stored in
-`%LOCALAPPDATA%\BrandAtlas`, separate from the installed application.
+The NSIS installer embeds the sidecar. The SQLite database defaults to the
+application's `database\knowledge.db`; other runtime data is stored in
+`%LOCALAPPDATA%\BrandAtlas`.

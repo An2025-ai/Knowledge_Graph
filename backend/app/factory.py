@@ -29,7 +29,7 @@ def create_app(
     knowledge = KnowledgeRepository(db)
     jobs = JobRepository(db)
     embedding = EmbeddingService(knowledge, settings)
-    ingestion = DocumentIngestionService(knowledge, embedding)
+    ingestion = DocumentIngestionService(knowledge, embedding, settings)
     manager = JobManager(jobs, ingestion)
 
     @asynccontextmanager
