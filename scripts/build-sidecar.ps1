@@ -19,6 +19,7 @@ try {
     --exclude-module IPython `
     --exclude-module matplotlib `
     --add-data "$repo\backend\app\schema.sql;backend\app" `
+    --add-data "$repo\backend\app\migrations;backend\app\migrations" `
     --add-data "$repo\common_knowledge;common_knowledge" `
     "$repo\backend\main.py"
   if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }

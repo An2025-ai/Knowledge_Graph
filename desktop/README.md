@@ -28,6 +28,8 @@ npm --prefix desktop install
 npm --prefix desktop run build
 ```
 
-The NSIS installer embeds the sidecar. The SQLite database defaults to the
-application's `database\knowledge.db`; other runtime data is stored in
-`%LOCALAPPDATA%\BrandAtlas`.
+The NSIS installer embeds the sidecar. In a packaged application, SQLite and
+the other runtime data default to `%LOCALAPPDATA%\BrandAtlas`, with the
+database at `%LOCALAPPDATA%\BrandAtlas\database\knowledge.db`. The
+development-only Tauri debug process explicitly uses the repository's
+`database\knowledge.db` unless an environment override is supplied.

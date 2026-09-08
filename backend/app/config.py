@@ -1,8 +1,8 @@
 """Local application configuration and user-data paths.
 
-The SQLite database is kept in the repository/application directory so it is
-easy to inspect and back up. Other runtime data remains under ``LOCALAPPDATA``
-by default and can be overridden with ``BRAND_ATLAS_DATA_DIR``.
+Production data uses the operating system's writable user-data directory by
+default. ``BRAND_ATLAS_DATABASE_PATH`` may override only the database file;
+``BRAND_ATLAS_DATA_DIR`` overrides the complete runtime data root.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import secrets
 import json
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,19 +26,12 @@ def default_data_dir() -> Path:
     return Path.home() / ".local" / "share" / "BrandAtlas"
 
 
-def project_root() -> Path:
-    """Return the application/repository root containing ``backend``."""
-    return Path(__file__).resolve().parents[2]
-
-
 def default_database_path(data_root: Path) -> Path:
-    """Use a project-local DB by default, while preserving managed overrides."""
+    """Resolve the DB without depending on the source or PyInstaller directory."""
     configured = os.getenv("BRAND_ATLAS_DATABASE_PATH")
     if configured:
         return Path(configured).expanduser().resolve()
-    if os.getenv("BRAND_ATLAS_DATA_DIR"):
-        return data_root / "database" / "knowledge.db"
-    return project_root() / "database" / "knowledge.db"
+    return data_root / "database" / "knowledge.db"
 
 
 @dataclass(frozen=True)
@@ -141,6 +135,20 @@ def persist_settings(paths: AppPaths, settings: RuntimeSettings) -> None:
         "embedding_model": settings.embedding_model,
         "api_key_reference": settings.api_key_reference,
     }
-    (paths.config / "settings.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    target = paths.config / "settings.json"
+    temp_fd, temp_name = tempfile.mkstemp(
+        prefix=".settings-", suffix=".tmp", dir=paths.config
     )
+    try:
+        with os.fdopen(temp_fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, target)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+        raise

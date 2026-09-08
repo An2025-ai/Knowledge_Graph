@@ -25,6 +25,43 @@ def normalized_name(name: str) -> str:
     return re.sub(r"\s+", " ", (name or "").strip().casefold())
 
 
+def _merge_entity_properties(
+    existing: dict[str, Any], incoming: dict[str, Any]
+) -> dict[str, Any]:
+    """Merge entity metadata without replacing provenance from another document."""
+    existing = existing if isinstance(existing, dict) else {}
+    incoming = incoming if isinstance(incoming, dict) else {}
+    merged = {**existing, **incoming}
+    source_ids: list[str] = []
+    for value in (
+        existing.get("source_document_ids", []),
+        [existing.get("source_document_id")] if existing.get("source_document_id") else [],
+        incoming.get("source_document_ids", []),
+        [incoming.get("source_document_id")] if incoming.get("source_document_id") else [],
+    ):
+        values = value if isinstance(value, list) else [value]
+        for source_id in values:
+            if source_id and str(source_id) not in source_ids:
+                source_ids.append(str(source_id))
+    if source_ids:
+        merged["source_document_id"] = source_ids[0]
+        merged["source_document_ids"] = source_ids
+    for key in ("aliases", "evidence_refs"):
+        existing_values = existing.get(key, [])
+        incoming_values = incoming.get(key, [])
+        if isinstance(existing_values, list) or isinstance(incoming_values, list):
+            merged_values: list[Any] = []
+            for values in (
+                existing_values if isinstance(existing_values, list) else [],
+                incoming_values if isinstance(incoming_values, list) else [],
+            ):
+                for item in values:
+                    if item not in merged_values:
+                        merged_values.append(item)
+            merged[key] = merged_values
+    return merged
+
+
 class KnowledgeRepository:
     """Persistence boundary used by services and API routes.
 
@@ -75,10 +112,11 @@ class KnowledgeRepository:
 
             # Re-importing the same document is deterministic and does not
             # leave stale extraction rows behind.
-            conn.execute("DELETE FROM evidence_spans WHERE document_id=?", (document["id"],))
-            conn.execute("DELETE FROM evidence_units WHERE document_id=?", (document["id"],))
-            conn.execute("DELETE FROM knowledge_candidates WHERE document_id=?", (document["id"],))
+            conn.execute("DELETE FROM relations WHERE document_id=?", (document["id"],))
             conn.execute("DELETE FROM statements WHERE document_id=?", (document["id"],))
+            conn.execute("DELETE FROM knowledge_candidates WHERE document_id=?", (document["id"],))
+            conn.execute("DELETE FROM evidence_units WHERE document_id=?", (document["id"],))
+            conn.execute("DELETE FROM evidence_spans WHERE document_id=?", (document["id"],))
 
             for span in spans:
                 conn.execute(
@@ -125,6 +163,15 @@ class KnowledgeRepository:
             entity_ids: set[str] = set()
             for entity in entities:
                 entity_ids.add(entity["id"])
+                incoming_properties = entity.get("properties", {})
+                existing = conn.execute(
+                    "SELECT properties_json FROM entities WHERE id=?",
+                    (entity["id"],),
+                ).fetchone()
+                properties = _merge_entity_properties(
+                    json_loads(existing["properties_json"], {}) if existing else {},
+                    incoming_properties,
+                )
                 conn.execute(
                     """INSERT INTO entities
                     (id,type,name,normalized_name,layer,brand_id,tenant_id,properties_json,status,
@@ -136,7 +183,7 @@ class KnowledgeRepository:
                     (
                         entity["id"], entity["type"], entity["name"],
                         normalized_name(entity["name"]), entity["layer"], entity.get("brand_id"),
-                        entity.get("tenant_id"), self.db.json(entity.get("properties", {})),
+                        entity.get("tenant_id"), self.db.json(properties),
                         entity.get("status", "active"), entity.get("created_at", now), now,
                     ),
                 )
@@ -171,10 +218,21 @@ class KnowledgeRepository:
 
             # Outbox is retained even though the first desktop projection is
             # read directly from SQLite. It gives a clean seam for sync/export.
+            # Keep an unprocessed aggregate event idempotent across reprocesses.
             for entity_id in entity_ids:
                 conn.execute(
-                    "INSERT INTO graph_outbox(aggregate_type,aggregate_id,event_type,payload_json,created_at) VALUES (?,?,?,?,?)",
-                    ("entity", entity_id, "upsert", "{}", now),
+                    """INSERT INTO graph_outbox
+                    (aggregate_type,aggregate_id,event_type,payload_json,created_at)
+                    SELECT ?,?,?,?,?
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM graph_outbox
+                        WHERE aggregate_type=? AND aggregate_id=?
+                          AND event_type=? AND processed_at IS NULL
+                    )""",
+                    (
+                        "entity", entity_id, "upsert", "{}", now,
+                        "entity", entity_id, "upsert",
+                    ),
                 )
 
     def graph(self, layer: str | None = None, brand_id: str | None = None, limit: int = 500) -> dict[str, Any]:

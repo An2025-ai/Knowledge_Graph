@@ -15,12 +15,21 @@ from backend.app.config import RuntimeSettings
 from backend.app.database import LocalDatabase
 from backend.app.factory import create_app
 from backend.app.repositories import KnowledgeRepository
+from backend.app.runtime_settings import SettingsStore
 from backend.app.services.ingestion import DocumentIngestionService
 from backend.app.services.knowledge_pipeline import KnowledgeBuildPipeline
 from backend.app.services.llm import OpenAICompatibleClient
 
 
 class LocalAppSmokeTests(unittest.TestCase):
+    @staticmethod
+    def _paths(root: Path) -> AppPaths:
+        return AppPaths(
+            root, root / "database" / "knowledge.db", root / "documents",
+            root / "vectors", root / "cache", root / "logs", root / "backups",
+            root / "config",
+        )
+
     def test_tauri_cors_preflight_is_allowed_without_token(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -71,6 +80,92 @@ class LocalAppSmokeTests(unittest.TestCase):
             self.assertEqual(response.json()["embedding"]["status"], "skipped")
             self.assertEqual(llm_response.json()["status"], "skipped")
             self.assertEqual(embedding_response.json()["status"], "skipped")
+
+    def test_settings_hot_reload_reaches_all_model_services_without_restart(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = self._paths(root)
+            app = create_app(paths=paths, settings=RuntimeSettings(token="test-token"))
+            headers = {"Authorization": "Bearer test-token"}
+
+            with TestClient(app) as client:
+                initial = client.get("/api/settings", headers=headers)
+                self.assertEqual(initial.status_code, 200)
+                self.assertEqual(initial.json()["llm_provider"], "none")
+
+                with patch("keyring.set_password") as set_password:
+                    updated = client.put(
+                        "/api/settings",
+                        headers=headers,
+                        json={
+                            "llm_provider": "openai-compatible",
+                            "llm_base_url": "https://llm.example/v1",
+                            "llm_model": "hot-llm",
+                            "embedding_provider": "openai-compatible",
+                            "embedding_base_url": "https://embedding.example/v1",
+                            "embedding_model": "hot-embedding",
+                            "api_key": "test-secret",
+                        },
+                    )
+                self.assertEqual(updated.status_code, 200)
+                self.assertEqual(updated.json()["settings"]["llm_model"], "hot-llm")
+                set_password.assert_called_once()
+
+                llm_candidates = [{
+                    "candidate_type": "statement",
+                    "candidate_payload": {"value": "模型生成的事实"},
+                    "confidence": 0.9,
+                    "generator": "llm:structured",
+                }]
+                with patch.object(
+                    KnowledgeBuildPipeline, "_llm_extract", return_value=llm_candidates
+                ) as extract, patch(
+                    "backend.app.services.embedding.ExternalEmbeddingClient"
+                ) as embedding_client:
+                    embedding_client.return_value.embed.return_value = [[0.1, 0.2]]
+                    result = app.state.ingestion.import_document(
+                        title="热更新测试", content="Acme 提供模型产品。",
+                        file_path=None, source_type="test", layer="l3_brand",
+                        brand_id="Acme", tenant_id="local",
+                    )
+
+                self.assertTrue(result["llm_attempted"])
+                self.assertTrue(result["llm_used"])
+                self.assertEqual(extract.call_args.args[-1].llm_model, "hot-llm")
+                embedding_settings = embedding_client.call_args.args[0]
+                self.assertEqual(embedding_settings.embedding_model, "hot-embedding")
+
+                with patch("backend.app.services.agent.OpenAICompatibleClient") as llm_client:
+                    llm_client.return_value.chat.return_value = "模型回答"
+                    answer = app.state.agent.answer("请总结")
+                self.assertEqual(answer["mode"], "external_llm")
+                self.assertEqual(llm_client.call_args.kwargs["model"], "hot-llm")
+
+            persisted = json.loads((paths.config / "settings.json").read_text(encoding="utf-8"))
+            self.assertNotIn("api_key", persisted)
+            self.assertNotIn("test-secret", json.dumps(persisted, ensure_ascii=False))
+
+    def test_settings_store_keeps_memory_and_disk_unchanged_when_save_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = self._paths(root).ensure()
+            initial = RuntimeSettings(token="test-token")
+            store = SettingsStore(initial, paths)
+            store.replace(initial)
+            before = (paths.config / "settings.json").read_text(encoding="utf-8")
+            updated = RuntimeSettings(token="test-token", llm_provider="openai-compatible")
+
+            with patch(
+                "backend.app.runtime_settings.persist_settings",
+                side_effect=OSError("disk unavailable"),
+            ):
+                with self.assertRaises(OSError):
+                    store.replace(updated)
+
+            self.assertEqual(store.snapshot(), initial)
+            self.assertEqual(
+                (paths.config / "settings.json").read_text(encoding="utf-8"), before
+            )
 
     def test_import_builds_local_graph_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as temp:

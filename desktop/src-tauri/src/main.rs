@@ -99,10 +99,22 @@ fn main() {
                         "--token",
                         &state.session.token,
                     ])
-                    .current_dir(repo_root)
+                    .current_dir(&repo_root)
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null());
+                // Keep the existing project-local DB convenient for Tauri
+                // development, but only set it explicitly in debug mode.
+                // Published Sidecars use the OS user-data directory from the
+                // backend configuration. Explicit caller overrides win.
+                if std::env::var_os("BRAND_ATLAS_DATABASE_PATH").is_none()
+                    && std::env::var_os("BRAND_ATLAS_DATA_DIR").is_none()
+                {
+                    command.env(
+                        "BRAND_ATLAS_DATABASE_PATH",
+                        repo_root.join("database").join("knowledge.db"),
+                    );
+                }
                 #[cfg(windows)]
                 command.creation_flags(0x08000000); // CREATE_NO_WINDOW
                 let child = command.spawn()?;

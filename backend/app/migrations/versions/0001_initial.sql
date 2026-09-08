@@ -1,4 +1,4 @@
-PRAGMA foreign_keys = ON;
+-- Initial local SQLite schema before the runtime-field migration.
 
 CREATE TABLE IF NOT EXISTS schema_versions (
     version TEXT PRIMARY KEY,
@@ -54,7 +54,6 @@ CREATE TABLE IF NOT EXISTS knowledge_candidates (
     metric_json TEXT NOT NULL DEFAULT '{}',
     statement_json TEXT NOT NULL DEFAULT '{}',
     evidence_text TEXT NOT NULL,
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
     confidence REAL NOT NULL DEFAULT 0.5,
     extraction_method_json TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'pending',
@@ -70,7 +69,6 @@ CREATE TABLE IF NOT EXISTS entities (
     brand_id TEXT,
     tenant_id TEXT,
     properties_json TEXT NOT NULL DEFAULT '{}',
-    status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE(type, normalized_name, layer, brand_id)
@@ -115,7 +113,6 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
     current_stage TEXT NOT NULL DEFAULT 'queued',
     status TEXT NOT NULL DEFAULT 'queued',
     progress INTEGER NOT NULL DEFAULT 0,
-    payload_json TEXT NOT NULL DEFAULT '{}',
     result_json TEXT NOT NULL DEFAULT '{}',
     error TEXT,
     created_at TEXT NOT NULL,
@@ -127,7 +124,6 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     citations_json TEXT NOT NULL DEFAULT '[]',
-    mode TEXT NOT NULL DEFAULT 'unknown',
     created_at TEXT NOT NULL
 );
 

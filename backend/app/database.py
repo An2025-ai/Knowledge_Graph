@@ -40,23 +40,20 @@ class LocalDatabase:
         finally:
             conn.close()
 
-    def initialize(self, schema_path: Path) -> None:
-        schema = Path(schema_path).read_text(encoding="utf-8")
-        with self.transaction() as conn:
-            conn.executescript(schema)
-            # Forward-compatible desktop migrations for databases created by
-            # an earlier development build.
-            for table, column, definition in (
-                ("entities", "status", "TEXT NOT NULL DEFAULT 'active'"),
-                ("pipeline_jobs", "payload_json", "TEXT NOT NULL DEFAULT '{}'"),
-                ("knowledge_candidates", "evidence_refs_json", "TEXT NOT NULL DEFAULT '[]'"),
-                ("chat_messages", "mode", "TEXT NOT NULL DEFAULT 'unknown'"),
-            ):
-                existing = {
-                    row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
-                }
-                if column not in existing:
-                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+    def initialize(self, schema_path: Path | None = None) -> None:
+        """Apply all bundled migrations before the application starts.
+
+        ``schema_path`` remains in the signature for callers from the first
+        desktop runtime. The migration directory is now the source of truth;
+        ``schema.sql`` is retained as a complete inspection/snapshot file.
+        """
+        del schema_path
+        from .migrations.runner import MigrationRunner
+
+        MigrationRunner(
+            self,
+            Path(__file__).with_name("migrations") / "versions",
+        ).run()
 
     def query(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         # sqlite3.Connection.__exit__ commits/rolls back but does not close the

@@ -10,6 +10,7 @@ from typing import Any
 
 from ..config import RuntimeSettings
 from ..repositories import KnowledgeRepository
+from ..runtime_settings import SettingsStore
 
 
 class ExternalEmbeddingClient:
@@ -75,14 +76,21 @@ class ExternalEmbeddingClient:
 class EmbeddingService:
     """Embedding use case; storage can later move from JSON to sqlite-vec."""
 
-    def __init__(self, repository: KnowledgeRepository, settings: RuntimeSettings):
+    def __init__(
+        self,
+        repository: KnowledgeRepository,
+        settings: RuntimeSettings | None = None,
+        *,
+        settings_store: SettingsStore | None = None,
+    ):
         self.repository = repository
-        self.settings = settings
+        self.settings_store = settings_store or SettingsStore(settings or RuntimeSettings())
 
     def index_units(self, units: list[dict[str, Any]]) -> int:
-        if self.settings.embedding_provider != "openai-compatible" or not units:
+        settings = self.settings_store.snapshot()
+        if settings.embedding_provider != "openai-compatible" or not units:
             return 0
-        client = ExternalEmbeddingClient(self.settings)
+        client = ExternalEmbeddingClient(settings)
         texts = [(unit.get("text") or "").strip() for unit in units]
         vectors = client.embed(texts)
         written = 0

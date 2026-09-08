@@ -24,10 +24,10 @@ npm --prefix desktop run dev
 
 ## 数据与配置
 
-- SQLite 数据库默认位于项目根目录的 `database/knowledge.db`，保存文档、证据单元、候选、实体、关系和任务状态。
-- 其他运行数据默认位于 `%LOCALAPPDATA%\BrandAtlas`；设置 `BRAND_ATLAS_DATA_DIR` 后，数据库也会跟随该目录。
-- 也可以使用 `BRAND_ATLAS_DATABASE_PATH` 指定数据库的绝对路径。
-- `documents/`、`vectors/`、`cache/`、`logs/`、`backups/` 预留给后续模块。
+- SQLite 数据库默认位于 `%LOCALAPPDATA%\BrandAtlas\database\knowledge.db`，保存文档、证据单元、候选、实体、关系和任务状态。
+- `documents/`、`vectors/`、`cache/`、`logs/`、`backups/` 和 `config/` 也位于 `%LOCALAPPDATA%\BrandAtlas` 下。
+- 设置 `BRAND_ATLAS_DATA_DIR` 会将完整数据根目录切换到指定位置；设置 `BRAND_ATLAS_DATABASE_PATH` 只切换数据库文件，且优先级更高。
+- Tauri Debug 开发模式会显式将数据库指定为项目目录下的 `database/knowledge.db`，发布 Sidecar 不使用该路径。
 - `config/settings.json` 只保存非敏感模型配置。
 - API Key 通过 Python `keyring` 保存到 Windows Credential Manager。
 - 本地 API 每个请求都要求 `Authorization: Bearer <token>`，健康检查除外。

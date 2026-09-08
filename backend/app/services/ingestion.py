@@ -16,6 +16,7 @@ from shared.knowledge.registry import get_common_registry
 
 from ..config import RuntimeSettings
 from ..repositories import KnowledgeRepository, stable_id, utc_now
+from ..runtime_settings import SettingsStore
 from .embedding import EmbeddingService
 from .knowledge_pipeline import KnowledgeBuildPipeline
 
@@ -33,10 +34,13 @@ class DocumentIngestionService:
         repository: KnowledgeRepository,
         embedding: EmbeddingService | None = None,
         settings: RuntimeSettings | None = None,
+        *,
+        settings_store: SettingsStore | None = None,
     ):
         self.repository = repository
         self.embedding = embedding
-        self.pipeline = KnowledgeBuildPipeline(settings)
+        self.settings_store = settings_store or SettingsStore(settings or RuntimeSettings())
+        self.pipeline = KnowledgeBuildPipeline(settings_store=self.settings_store)
 
     def import_document(
         self,

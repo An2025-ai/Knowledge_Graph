@@ -28,6 +28,7 @@ from shared.knowledge.registry import get_common_registry
 
 from ..config import RuntimeSettings
 from ..repositories import stable_id
+from ..runtime_settings import SettingsStore
 from .llm import OpenAICompatibleClient
 
 
@@ -45,8 +46,13 @@ class KnowledgeBuild:
 class KnowledgeBuildPipeline:
     """Build graph-ready rows from evidence units without legacy imports."""
 
-    def __init__(self, settings: RuntimeSettings | None = None):
-        self.settings = settings or RuntimeSettings()
+    def __init__(
+        self,
+        settings: RuntimeSettings | None = None,
+        *,
+        settings_store: SettingsStore | None = None,
+    ):
+        self.settings_store = settings_store or SettingsStore(settings or RuntimeSettings())
 
     def build(
         self,
@@ -61,7 +67,8 @@ class KnowledgeBuildPipeline:
     ) -> KnowledgeBuild:
         get_common_registry().require_profile(layer)
         raw: list[dict[str, Any]] = []
-        llm_attempted = self._llm_enabled()
+        settings = self.settings_store.snapshot()
+        llm_attempted = self._llm_enabled(settings)
         llm_used = False
         llm_fallback_count = 0
         llm_errors: list[str] = []
@@ -83,7 +90,7 @@ class KnowledgeBuildPipeline:
                 # evidence unit gets a model request while the configured
                 # endpoint is available; only a failed request falls back to
                 # deterministic extraction for that unit.
-                llm_candidates = self._llm_extract(text, layer)
+                llm_candidates = self._llm_extract(text, layer, settings)
             except Exception as exc:
                 llm_candidates = []
                 llm_errors.append(str(exc))
@@ -303,18 +310,25 @@ class KnowledgeBuildPipeline:
             })
         return relations
 
-    def _llm_enabled(self) -> bool:
-        return self.settings.llm_provider == "openai-compatible" and bool(
-            self.settings.llm_base_url and self.settings.llm_model
+    def _llm_enabled(self, settings: RuntimeSettings | None = None) -> bool:
+        current = settings or self.settings_store.snapshot()
+        return current.llm_provider == "openai-compatible" and bool(
+            current.llm_base_url and current.llm_model
         )
 
-    def _llm_extract(self, text: str, profile_id: str) -> list[dict[str, Any]]:
+    def _llm_extract(
+        self,
+        text: str,
+        profile_id: str,
+        settings: RuntimeSettings | None = None,
+    ) -> list[dict[str, Any]]:
         if not text.strip():
             return []
+        current = settings or self.settings_store.snapshot()
         client = OpenAICompatibleClient(
-            base_url=self.settings.llm_base_url,
-            model=self.settings.llm_model,
-            key_reference=self.settings.api_key_reference,
+            base_url=current.llm_base_url,
+            model=current.llm_model,
+            key_reference=current.api_key_reference,
         )
         response = client.chat([
             {"role": "system", "content": build_extraction_prompt(profile_id)},

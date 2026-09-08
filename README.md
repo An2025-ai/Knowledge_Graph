@@ -68,7 +68,8 @@ Knowledge_Graph/
 │   ├── visualize/                   # 旧 PG/Neo4j 可视化导出
 │   └── docker-compose.yml           # 旧 PG + Neo4j 服务
 ├── tests/                           # 桌面版和 shared 运行时测试
-├── scripts/                         # 桌面开发、Sidecar 和构建脚本
+├── scripts/                         # 桌面开发、Sidecar、构建和维护脚本
+│   └── maintenance/                 # 数据库备份、校验和路径检查
 ├── docs/                            # 架构、启动和本地应用说明
 ├── requirements-desktop.txt         # 桌面版依赖
 └── requirements.txt                 # 历史依赖清单，不用于桌面版
@@ -115,18 +116,21 @@ npm --prefix desktop run dev
 
 命令会直接打开 Tauri 独立窗口。开发阶段由脚本自动启动 Vite 和本地 FastAPI Sidecar；用户不需要访问 Web 端口。
 
-SQLite 数据库默认保存在项目目录：
+SQLite 数据库默认保存在操作系统的用户数据目录：
 
 ```text
-database\knowledge.db
+%LOCALAPPDATA%\BrandAtlas\database\knowledge.db
 ```
 
-其他缓存、文档、日志和备份默认保存在 `%LOCALAPPDATA%\BrandAtlas`。可通过
-`BRAND_ATLAS_DATA_DIR` 或 `BRAND_ATLAS_DATABASE_PATH` 覆盖默认位置。
+文档、向量、缓存、日志、备份和设置也位于 `%LOCALAPPDATA%\BrandAtlas` 下。
+`BRAND_ATLAS_DATABASE_PATH` 只覆盖数据库文件，`BRAND_ATLAS_DATA_DIR` 覆盖完整
+数据根目录，前者优先。Tauri 开发模式为了便于查看项目数据，会显式使用项目目录
+下的 `database\knowledge.db`；发布版不会设置这个开发覆盖路径。
 
 模型配置在桌面端设置界面中填写。LLM 和 Embedding 有独立的测试按钮；Embedding 未配置时，规则抽取、图谱构建和对话仍可以继续运行。
 
 更详细的桌面开发说明见 [docs/LOCAL_APP.md](docs/LOCAL_APP.md)，打包说明见 [desktop/README.md](desktop/README.md)。
+数据备份、数据库校验、故障排查和发布验收见 [docs/maintenance/](docs/maintenance/)。
 
 ## legacy 目录状态
 

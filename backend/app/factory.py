@@ -14,6 +14,7 @@ from .database import LocalDatabase
 from .jobs import JobManager
 from .repositories import JobRepository, KnowledgeRepository
 from .routes import agent, documents, graph, system
+from .runtime_settings import SettingsStore
 from .services.agent import AgentService
 from .services.embedding import EmbeddingService
 from .services.ingestion import DocumentIngestionService
@@ -24,12 +25,15 @@ def create_app(
 ) -> FastAPI:
     paths = (paths or AppPaths.from_environment()).ensure()
     settings = settings or load_settings(paths)
+    settings_store = SettingsStore(settings, paths)
     db = LocalDatabase(paths.database)
     db.initialize(Path(__file__).with_name("schema.sql"))
     knowledge = KnowledgeRepository(db)
     jobs = JobRepository(db)
-    embedding = EmbeddingService(knowledge, settings)
-    ingestion = DocumentIngestionService(knowledge, embedding, settings)
+    embedding = EmbeddingService(knowledge, settings_store=settings_store)
+    ingestion = DocumentIngestionService(
+        knowledge, embedding, settings_store=settings_store
+    )
     manager = JobManager(jobs, ingestion)
 
     @asynccontextmanager
@@ -44,11 +48,13 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.paths = paths
-    app.state.settings = settings
+    app.state.settings_store = settings_store
     app.state.db = db
     app.state.knowledge = knowledge
     app.state.jobs = manager
-    app.state.agent = AgentService(knowledge, settings)
+    app.state.ingestion = ingestion
+    app.state.embedding = embedding
+    app.state.agent = AgentService(knowledge, settings_store=settings_store)
 
     app.add_middleware(
         CORSMiddleware,
@@ -72,7 +78,7 @@ def create_app(
             return await call_next(request)
         # Health remains public so the desktop shell can discover readiness.
         if request.url.path.startswith("/api/") and request.url.path != "/api/health":
-            expected = request.app.state.settings.token
+            expected = request.app.state.settings_store.snapshot().token
             received = request.headers.get("authorization", "")
             if expected and received != f"Bearer {expected}":
                 return JSONResponse(status_code=401, content={"detail": "invalid local session token"})
