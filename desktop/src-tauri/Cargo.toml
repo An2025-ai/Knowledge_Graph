@@ -1,6 +1,6 @@
 [package]
 name = "brand-atlas-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Brand Atlas local-first knowledge workspace"
 authors = ["Brand Atlas"]
 edition = "2021"

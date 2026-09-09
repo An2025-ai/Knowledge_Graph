@@ -62,6 +62,30 @@ def _merge_entity_properties(
     return merged
 
 
+_OVERVIEW_MARKERS = (
+    "知识库",
+    "数据库",
+    "资料",
+    "文档",
+    "内容",
+    "总结",
+    "概括",
+    "介绍",
+    "知晓",
+    "知道",
+)
+
+_ENTITY_TYPE_MARKERS = {
+    "产品": {"product", "solution", "service"},
+    "能力": {"capability", "service"},
+    "功能": {"capability", "service"},
+    "客户": {"customer", "audience"},
+    "用户": {"customer", "audience"},
+    "行业": {"industry", "organization", "audience"},
+    "市场": {"industry", "organization", "audience"},
+}
+
+
 class KnowledgeRepository:
     """Persistence boundary used by services and API routes.
 
@@ -318,7 +342,10 @@ class KnowledgeRepository:
         }
 
     def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
-        pattern = f"%{query.strip()}%"
+        query = query.strip()
+        if not query:
+            return []
+        pattern = f"%{query}%"
         entities = self.db.query(
             "SELECT id,type,name,layer,brand_id,properties_json FROM entities "
             "WHERE name LIKE ? OR type LIKE ? ORDER BY updated_at DESC LIMIT ?",
@@ -330,7 +357,7 @@ class KnowledgeRepository:
             "WHERE s.statement_text LIKE ? ORDER BY s.created_at DESC LIMIT ?",
             (pattern, limit),
         )
-        return [
+        items = [
             {"kind": "entity", "id": row["id"], "title": row["name"], "type": row["type"],
              "layer": row["layer"], "snippet": f"{row['type']} · {row['name']}"}
             for row in entities
@@ -339,6 +366,98 @@ class KnowledgeRepository:
              "type": row["statement_class"], "snippet": row["statement_text"]}
             for row in statements
         ]
+        if items or not self._is_overview_query(query):
+            return items
+        return self._workspace_overview(query, limit)
+
+    @staticmethod
+    def _is_overview_query(query: str) -> bool:
+        return any(marker in query for marker in _OVERVIEW_MARKERS) or any(
+            marker in query for marker in _ENTITY_TYPE_MARKERS
+        )
+
+    @staticmethod
+    def _overview_entity_types(query: str) -> set[str]:
+        types: set[str] = set()
+        for marker, values in _ENTITY_TYPE_MARKERS.items():
+            if marker in query:
+                types.update(values)
+        return types
+
+    def _workspace_overview(self, query: str, limit: int) -> list[dict[str, Any]]:
+        """Return a small, intent-aware snapshot when exact search is empty.
+
+        This is deliberately a bounded keyword fallback, not a replacement for
+        semantic or vector retrieval. It gives broad workspace questions useful
+        local context while keeping unrelated questions empty.
+        """
+        limit = max(1, limit)
+        entity_limit = max(1, limit // 2)
+        relation_limit = max(1, limit // 4) if any(
+            marker in query for marker in ("知识库", "数据库", "总结", "概括", "关系", "服务")
+        ) else 0
+        statement_limit = max(0, limit - entity_limit - relation_limit)
+        types = sorted(self._overview_entity_types(query))
+        type_filter = ""
+        type_params: tuple[Any, ...] = ()
+        if types:
+            placeholders = ",".join("?" for _ in types)
+            type_filter = f" AND type IN ({placeholders})"
+            type_params = tuple(types)
+        entities = self.db.query(
+            "SELECT id,type,name,layer,brand_id,properties_json FROM entities "
+            "WHERE status = 'active'" + type_filter +
+            " ORDER BY updated_at DESC LIMIT ?",
+            type_params + (entity_limit,),
+        )
+        items: list[dict[str, Any]] = [
+            {"kind": "entity", "id": row["id"], "title": row["name"], "type": row["type"],
+             "layer": row["layer"], "snippet": f"{row['type']} · {row['name']}"}
+            for row in entities
+        ]
+        if relation_limit:
+            relations = self.db.query(
+                "SELECT r.id,r.relation_type,r.confidence,r.created_at, "
+                "s.id AS source_id,s.name AS source_name,s.layer AS source_layer, "
+                "t.name AS target_name "
+                "FROM relations r "
+                "JOIN entities s ON s.id=r.source_id "
+                "JOIN entities t ON t.id=r.target_id "
+                "ORDER BY r.created_at DESC LIMIT ?",
+                (relation_limit,),
+            )
+            items.extend(
+                {
+                    "kind": "relation",
+                    "id": row["id"],
+                    "title": f"{row['source_name']} → {row['target_name']}",
+                    "type": row["relation_type"],
+                    "layer": row["source_layer"],
+                    "snippet": (
+                        f"{row['source_name']} -[{row['relation_type']}]-> "
+                        f"{row['target_name']}"
+                    ),
+                }
+                for row in relations
+            )
+        if statement_limit:
+            statements = self.db.query(
+                "SELECT s.id,s.statement_text,s.statement_class,e.name AS subject_name "
+                "FROM statements s LEFT JOIN entities e ON e.id=s.subject_id "
+                "ORDER BY s.created_at DESC LIMIT ?",
+                (statement_limit,),
+            )
+            items.extend(
+                {
+                    "kind": "statement",
+                    "id": row["id"],
+                    "title": row["subject_name"] or "陈述",
+                    "type": row["statement_class"],
+                    "snippet": row["statement_text"],
+                }
+                for row in statements
+            )
+        return items[:limit]
 
     def save_embedding(
         self, *, source_id: str, source_type: str, model: str,

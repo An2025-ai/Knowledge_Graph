@@ -20,9 +20,8 @@ on Windows and the standard user data directory on other systems. Set
 `BRAND_ATLAS_DATA_DIR` to override the complete data root. The database path
 override has priority.
 
-The API is intentionally independent from the retired PostgreSQL/Neo4j
-implementation under `legacy/`. It imports only dependency-light domain
-primitives from `shared/`; this package is the embedded desktop runtime.
+The API imports only dependency-light domain primitives from `shared/`; this
+package is the embedded desktop runtime.
 
 Document ingestion is implemented by `app/application/services/knowledge_pipeline.py`:
 evidence units are turned into rule/optional-LLM candidates, normalized, fused,

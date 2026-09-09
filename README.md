@@ -58,29 +58,16 @@ Knowledge_Graph/
 │   ├── policies/                    # 证据、冲突、上下文、晋升策略
 │   ├── contracts/                   # 治理和运行协议
 │   └── schema_profiles/             # Profile 和抽取规则
-├── legacy/                          # 已停用的旧实现，仅作迁移参考
-│   ├── database/                    # 旧 PostgreSQL Schema 和 L1 发布器
-│   ├── core/                        # PG DB、知识写入服务、旧持久化适配器
-│   ├── clients/                     # 旧 Embedding / NER 客户端
-│   ├── industry/                    # 旧 L2 行业 Pipeline
-│   ├── brand/                       # 旧 L3 品牌 Pipeline
-│   ├── fusion/                      # 旧跨文档融合
-│   ├── promotion/                   # 旧门禁晋升
-│   ├── neo4j/                       # 旧图谱投影和一致性检查
-│   ├── migrations/                  # 旧 PG 迁移执行器
-│   ├── visualize/                   # 旧 PG/Neo4j 导出与可视化工具
-│   │   └── tools/                   # 旧版 JSON 图 HTML 渲染工具
-│   └── docker-compose.yml           # 旧 PG + Neo4j 服务
 ├── tests/                           # 桌面版和 shared 运行时测试
 ├── scripts/                         # 开发、构建和维护脚本
 │   ├── dev/                          # 桌面和浏览器开发启动
 │   ├── build/                        # Sidecar、安装包和历史构建脚本
 │   └── maintenance/                 # 数据库和生成物维护
-├── docs/                            # 架构、迁移和运维说明
+├── docs/                            # 架构、决策和运维说明
 │   ├── architecture/
-│   ├── migration/
 │   ├── maintenance/
-│   └── decisions/
+│   ├── decisions/
+│   └── releases/
 ├── requirements-desktop.txt         # 桌面版依赖
 └── requirements.txt                 # 历史依赖清单，不用于桌面版
 ```
@@ -95,8 +82,8 @@ frontend → backend api → application → infrastructure → SQLite / Model A
 shared extraction → backend knowledge pipeline → SQLite
 ```
 
-`shared/` 不依赖 `backend/`、PostgreSQL、Neo4j 或模型客户端。桌面版运行时也不导入
-`legacy/`；这样后续新增桌面模块或存储适配器时，边界保持清晰。
+`shared/` 不依赖 `backend/`、PostgreSQL、Neo4j 或模型客户端。这样后续新增桌面模块
+或存储适配器时，边界保持清晰。
 
 ## 当前知识构建链路
 
@@ -142,12 +129,7 @@ SQLite 数据库默认保存在操作系统的用户数据目录：
 更详细的桌面开发说明见 [docs/architecture/LOCAL_APP.md](docs/architecture/LOCAL_APP.md)，打包说明见 [desktop/README.md](desktop/README.md)。
 内部 Python 导入兼容政策见 [docs/architecture/PYTHON_IMPORT_COMPATIBILITY.md](docs/architecture/PYTHON_IMPORT_COMPATIBILITY.md)。
 数据备份、数据库校验、故障排查和发布验收见 [docs/maintenance/](docs/maintenance/)。
-
-## legacy 目录状态
-
-`legacy/` 是已停用的历史实现，仅用于核对迁移结果和保留历史资料，不再作为产品运行时，
-也不再接受功能维护。新的桌面版不需要 PostgreSQL、Neo4j、Docker 或旧版依赖；后续功能
-应添加到 `backend/`、`shared/`、`frontend/` 或 `desktop/` 的新边界中。
+0.1.1 更新内容见 [docs/releases/0.1.1.md](docs/releases/0.1.1.md)。
 
 ## 测试
 
@@ -156,6 +138,5 @@ python -m unittest discover -s tests -p "test_*.py"
 npm --prefix frontend run build
 ```
 
-测试重点覆盖桌面版本地 SQLite 链路和 `shared/` 纯规则能力；仓库中保留的历史回归测试
-只用于迁移期间的行为校验。构建生成的 `build/`、`dist/`、Tauri `target/` 和 Sidecar
-文件属于产物，不属于核心源码。
+测试重点覆盖桌面版本地 SQLite 链路、Application 用例和 `shared/` 纯规则能力。构建生成
+的 `build/`、`dist/`、Tauri `target/` 和 Sidecar 文件属于产物，不属于核心源码。

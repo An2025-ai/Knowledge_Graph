@@ -13,7 +13,7 @@ Task 01 的原始记录保留在下文；后续任务已经更新了运行路径
 - 开发版可由 `BRAND_ATLAS_DATABASE_PATH` 或 `BRAND_ATLAS_DATA_DIR` 显式覆盖。
 - 当前数据库迁移说明见 [DATABASE.md](DATABASE.md)。
 - 路径、备份和校验入口见 [BACKUP_AND_RESTORE.md](BACKUP_AND_RESTORE.md) 及 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。
-- 当前全量 Python 测试为 93 项；具体发布验收以 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) 为准。
+- 当前全量 Python 测试为 69 项；具体发布验收以 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) 为准。
 
 ## 基线范围
 
@@ -32,7 +32,7 @@ Task 01 的原始记录保留在下文；后续任务已经更新了运行路径
 基线建立时工作区并非完全干净，以下两项是任务开始前已经存在的用户改动，本任务未处理：
 
 - 删除：`docs_AUDIT_ACTION_PLAN.md`
-- 新增但未跟踪（当时）：`Brand_Atlas_Phase1_AI_Task_Plan.md`；当前任务书已归档到 `docs/migration/Brand_Atlas_Phase1_AI_Task_Plan.md`
+- 其余基线前改动均不属于本次清理范围。
 
 本任务只新增本文件。
 
@@ -201,7 +201,7 @@ npm --prefix desktop run build
 4. `prepare-tauri-sidecar.ps1` 根据 Rust target triple 将 sidecar 放入 `desktop/src-tauri/binaries/`
 5. Tauri 的 `beforeBuildCommand` 构建 `frontend/dist/`
 6. Tauri 根据 `desktop/src-tauri/tauri.conf.json` 生成 NSIS 安装包
-7. 当前桌面应用版本为 `0.1.0`
+7. 当前桌面应用版本为 `0.1.1`
 
 ## 当前未在本任务中验证的项目
 

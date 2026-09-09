@@ -41,8 +41,7 @@ npm --prefix desktop run dev
 - `backend/app/api/routes/`：按业务模块拆分的 HTTP 接口。
 - `frontend/src/features/`：对话、导入、图谱和设置组件按功能独立演进。
 
-当前桌面应用默认不启动 PostgreSQL、Neo4j、Docker、Redis 或本地大模型。旧的
-服务器实现已停用并只保留在 `legacy/` 供迁移核对；桌面版知识构建不导入旧运行时。
+当前桌面应用默认不启动 PostgreSQL、Neo4j、Docker、Redis 或本地大模型。
 
 ## 知识构建流程
 

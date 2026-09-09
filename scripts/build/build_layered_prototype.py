@@ -23,7 +23,7 @@ OUT_DIR = ROOT / "legacy" / "visualize" / "output"
 
 LAYER_NAMES = {"l1": "L1 通用定义层", "l2": "L2 行业实例层", "l3": "L3 品牌实例层"}
 
-# Node color / shape by entity type (mirrors scripts/build/render_graph.py TYPE_STYLE).
+# Node color / shape by entity type (mirrors the archived JSON renderer TYPE_STYLE).
 TYPE_STYLE = {
     "industry": "#7C4DFF", "category": "#5C6BC0", "product": "#26A69A",
     "brand": "#EF5350", "organization": "#AB47BC", "competitor": "#FF7043",

@@ -38,7 +38,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                 {row["name"] for row in db.query("PRAGMA table_info(pipeline_jobs)")},
             )
 
-    def test_transitional_legacy_database_is_upgraded(self):
+    def test_transitional_database_is_upgraded(self):
         with tempfile.TemporaryDirectory() as temp:
             db = LocalDatabase(Path(temp) / "knowledge.db")
             connection = db.connect()
@@ -71,7 +71,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                 {row["name"] for row in db.query("PRAGMA table_info(chat_messages)")},
             )
 
-    def test_current_snapshot_with_legacy_marker_is_normalized(self):
+    def test_current_snapshot_with_previous_marker_is_normalized(self):
         with tempfile.TemporaryDirectory() as temp:
             db = LocalDatabase(Path(temp) / "knowledge.db")
             connection = db.connect()

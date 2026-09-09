@@ -15,8 +15,7 @@ FastAPI Python Sidecar 提供本机 API，SQLite 保存本地数据，`shared/` 
 
 采用模块化单体（modular monolith）作为长期结构。后端仍然是一个可部署的
 FastAPI Sidecar，内部按 API、Application、Infrastructure 和领域能力划分；前端按
-产品功能组织；`shared/` 和 `common_knowledge/` 保持独立边界；`legacy/` 只作为
-只读行为参考。
+产品功能组织；`shared/` 和 `common_knowledge/` 保持独立边界。
 
 本轮 R1 只建立目录骨架和包初始化文件，不移动现有实现、不修改 import。后续迁移
 必须以独立的小步提交完成。
@@ -45,13 +44,6 @@ FastAPI Sidecar 统一负责 SQLite、文件系统、知识构建、Agent 运行
 且不会因为更换存储或供应商而改变领域逻辑。
 
 `common_knowledge/` 是 YAML 规则的事实源，不承载 Python 运行时代码。
-
-## `legacy/` 的只读参考边界
-
-`legacy/` 保留旧系统的实现、Schema 和历史资料，仅用于核对旧版行为、迁移结果和
-兼容性样例。新版不得从 `legacy/` 导入运行时代码，也不把旧版数据库或常驻服务重新
-引入桌面产品。需要兼容旧行为时，在新版 `shared/` 或后端边界内重新实现，并用测试
-固定期望行为。
 
 ## API、Application、Infrastructure 的职责
 
@@ -88,7 +80,7 @@ Factory、测试和路由内部引用均已同步，Application 和 Infrastructu
 因此后续按一个边界一个提交推进，例如先迁移 API routes，再迁移 application services，
 最后迁移 infrastructure providers。每批只调整 import、构建收集路径和对应测试；每批
 都必须通过 Python 测试、前端构建、`cargo check`，必要时重新验证 Sidecar，再进入下一批。
-在迁移期间保留可回滚的兼容导入，但不让 `legacy/` 进入新版运行链。
+在迁移期间保留可回滚的兼容导入，但不让历史实现进入新版运行链。
 
 ## R1 结果与后续约束
 

@@ -222,7 +222,7 @@ class LocalAppSmokeTests(unittest.TestCase):
             self.assertEqual(result["candidate_count"], 2)
             self.assertEqual(repository.stats()["candidates"], 2)
 
-    def test_import_rebuilds_old_style_entity_fusion_without_legacy_runtime(self):
+    def test_import_rebuilds_entity_fusion(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             paths = AppPaths(
