@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from backend.app.application.services.agent import AgentService
+from backend.app.application.services.retrieval import RetrievalService
 from backend.app.config import RuntimeSettings
 from backend.app.infrastructure.database import LocalDatabase
 from backend.app.infrastructure.providers.llm import OpenAICompatibleClient
@@ -42,12 +43,13 @@ class AgentRetrievalTests(unittest.TestCase):
             VALUES (?,?,?,?,?)""",
             ("statement-1", "brand-1", "Acme 提供 CRM 平台。", "observation", "2"),
         )
+        self.retrieval = RetrievalService(self.repository)
 
     def tearDown(self):
         self.temp_dir.cleanup()
 
     def test_workspace_overview_returns_local_context_for_generic_question(self):
-        items = self.repository.search("你是否知晓数据库中的内容", limit=8)
+        items = self.retrieval.search("你是否知晓数据库中的内容", limit=8)
 
         self.assertTrue(items)
         self.assertIn("Acme", {item["title"] for item in items})
@@ -55,14 +57,28 @@ class AgentRetrievalTests(unittest.TestCase):
         self.assertTrue(any(item["kind"] == "statement" for item in items))
 
     def test_product_intent_returns_product_entities_without_exact_match(self):
-        items = self.repository.search("这份资料里有哪些产品？", limit=8)
+        items = self.retrieval.search("当前知识库有哪些产品？", limit=8)
 
         self.assertTrue(any(item["title"] == "CRM 平台" for item in items))
         self.assertTrue(all(item["type"] in {"product", "solution", "service"}
                             for item in items if item["kind"] == "entity"))
 
     def test_unrelated_question_does_not_dump_the_workspace(self):
-        self.assertEqual(self.repository.search("量子计算的历史", limit=8), [])
+        self.assertEqual(self.retrieval.search("你知道量子计算吗？", limit=8), [])
+        self.assertEqual(self.retrieval.search("量子计算的历史", limit=8), [])
+        self.assertEqual(
+            self.retrieval.search("当前知识库中有量子计算吗？", limit=8), []
+        )
+
+    def test_unrelated_brand_constraint_does_not_fall_back_to_overview(self):
+        self.assertEqual(
+            self.retrieval.search("不存在品牌的产品有哪些？", limit=8), []
+        )
+
+    def test_unmatched_document_constraint_does_not_fall_back_to_overview(self):
+        self.assertEqual(
+            self.retrieval.search("文档 missing-doc 中有哪些产品？", limit=8), []
+        )
 
     def test_generic_question_sends_local_overview_to_llm(self):
         settings = RuntimeSettings(

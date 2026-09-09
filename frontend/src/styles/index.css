@@ -60,8 +60,15 @@ select { color: #a8c0c4; background: #10252f; border: 1px solid #25434e; border-
 .message-content { max-width: 75%; }
 .message-bubble { font-size: 13px; line-height: 1.85; color: #c7d9dc; padding: 13px 17px; background: #112630; border: 1px solid #1b3b46; border-radius: 3px 12px 12px 12px; }
 .user .message-bubble { background: #1a3a3d; border-color: #2a5959; border-radius: 12px 3px 12px 12px; color: #d8ece9; }
-.source-strip { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; color: #668892; font-size: 10px; }
+.source-strip { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; margin-top: 8px; color: #668892; font-size: 10px; }
+.source-item { display: flex; flex-direction: column; gap: 4px; }
 .source-strip button { border: 1px solid #244550; border-radius: 10px; color: #8ec4be; background: transparent; padding: 4px 8px; font-size: 10px; }
+.citation-details { width: min(360px, 100%); border: 1px solid #1f414b; border-radius: 7px; background: rgba(8, 25, 32, .72); color: #82a5aa; font-size: 10px; }
+.citation-details summary { cursor: pointer; padding: 5px 8px; color: #9ac8bd; }
+.citation-list { display: grid; gap: 6px; padding: 0 8px 8px; }
+.citation-card { margin: 0; padding: 7px 8px; border-left: 2px solid var(--teal); background: rgba(18, 48, 56, .55); }
+.citation-meta, .citation-location { color: #6f9298; font-size: 9px; }
+.citation-quote { color: #bfd2d2; line-height: 1.6; margin: 4px 0; white-space: pre-wrap; }
 .suggestions { display: flex; gap: 7px; padding: 0 0 13px; flex-wrap: wrap; }
 .suggestions button { background: transparent; color: #72939c; border: 1px solid #26444e; padding: 7px 10px; border-radius: 15px; font-size: 10px; }
 .suggestions button:hover { border-color: var(--teal); color: var(--teal); }
@@ -88,3 +95,7 @@ select { color: #a8c0c4; background: #10252f; border: 1px solid #25434e; border-
 .connection-warning { margin-top: 8px; padding: 9px 11px; color: #ffd89a; background: rgba(243,181,98,.09); border: 1px solid rgba(243,181,98,.3); border-radius: 8px; font-size: 12px; line-height: 1.6; }
 .provider-test-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
 @media (max-width: 1180px) { .app-shell { grid-template-columns: 225px minmax(560px, 1fr) 205px; }.conversation { padding-left: 35px; padding-right: 35px; } }
+.graph-edge { cursor: pointer; }
+.graph-edge-evidence { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 11px 15px; border-top: 1px solid #1c3a46; background: rgba(11, 31, 39, .76); }
+.graph-edge-evidence b { display: block; margin-top: 4px; color: #c8dddd; font-size: 12px; }
+.graph-edge-evidence .citation-details { grid-column: 1 / -1; width: 100%; }

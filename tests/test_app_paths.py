@@ -20,7 +20,10 @@ class AppPathsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td, self._environment(LOCALAPPDATA=td):
             paths = AppPaths.from_environment()
 
-            expected_root = Path(td).resolve() / "BrandAtlas"
+            if os.name == "nt":
+                expected_root = Path(td).resolve() / "BrandAtlas"
+            else:
+                expected_root = Path.home() / ".local" / "share" / "BrandAtlas"
             self.assertEqual(paths.root, expected_root)
             self.assertEqual(paths.database, expected_root / "database" / "knowledge.db")
 
@@ -55,7 +58,12 @@ class AppPathsTests(unittest.TestCase):
                 paths = AppPaths.from_environment()
 
             self.assertEqual(paths.database, database.resolve())
-            self.assertEqual(paths.root, (Path(td) / "BrandAtlas").resolve())
+            expected_root = (
+                (Path(td) / "BrandAtlas").resolve()
+                if os.name == "nt"
+                else Path.home() / ".local" / "share" / "BrandAtlas"
+            )
+            self.assertEqual(paths.root, expected_root)
             self.assertEqual(paths.documents, paths.root / "documents")
             self.assertEqual(paths.config, paths.root / "config")
 

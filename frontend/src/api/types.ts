@@ -1,3 +1,16 @@
+export type EvidenceCitation = {
+  id: string;
+  document_id: string;
+  document_title?: string | null;
+  evidence_unit_id?: string;
+  evidence_span_ids: string[];
+  quote: string;
+  span_texts: string[];
+  char_start?: number | null;
+  char_end?: number | null;
+  heading_path?: string[];
+};
+
 export type GraphNode = {
   id: string;
   type: string;
@@ -5,6 +18,7 @@ export type GraphNode = {
   layer: string;
   brand_id?: string | null;
   properties?: Record<string, unknown>;
+  citations?: EvidenceCitation[];
 };
 
 export type GraphEdge = {
@@ -14,6 +28,7 @@ export type GraphEdge = {
   type: string;
   confidence: number;
   properties?: Record<string, unknown>;
+  citations?: EvidenceCitation[];
 };
 
 export type GraphData = {
@@ -39,6 +54,7 @@ export type SearchItem = {
   type: string;
   layer?: string;
   snippet: string;
+  citations?: EvidenceCitation[];
 };
 
 export type ChatResult = {

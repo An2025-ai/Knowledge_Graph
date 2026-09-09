@@ -54,3 +54,8 @@ npm --prefix desktop run dev
 
 候选会保留 `evidence_refs_json`，可追溯到证据单元；同一事实在同一文档内通过稳定
 融合键去重，重新导入同一内容则直接返回重复结果。
+## 证据级检索与引用
+
+检索结果会保留 `citations` 字段。每条引用包含来源文档、证据单元、原始 Span 文本、标题路径和字符位置。关系的 `properties_json.evidence_refs` 先定位到 `evidence_units`，再通过 `source_span_ids_json` 展开到原文 Span；陈述则使用 `source_span_id`。
+
+聊天来源卡片会展示原文证据，图谱中点击关系边可以展开对应引用；发送给外部 LLM 的本轮本地上下文也会带上受限长度的原文证据。若历史数据没有证据引用，则只显示关系或实体本身，不会猜测来源。

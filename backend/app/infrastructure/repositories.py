@@ -62,30 +62,6 @@ def _merge_entity_properties(
     return merged
 
 
-_OVERVIEW_MARKERS = (
-    "知识库",
-    "数据库",
-    "资料",
-    "文档",
-    "内容",
-    "总结",
-    "概括",
-    "介绍",
-    "知晓",
-    "知道",
-)
-
-_ENTITY_TYPE_MARKERS = {
-    "产品": {"product", "solution", "service"},
-    "能力": {"capability", "service"},
-    "功能": {"capability", "service"},
-    "客户": {"customer", "audience"},
-    "用户": {"customer", "audience"},
-    "行业": {"industry", "organization", "audience"},
-    "市场": {"industry", "organization", "audience"},
-}
-
-
 class KnowledgeRepository:
     """Persistence boundary used by services and API routes.
 
@@ -127,6 +103,145 @@ class KnowledgeRepository:
             field: int(row.get(field, 0) or 0)
             for field in ("spans", "units", "candidates", "relations", "statements")
         }
+
+    def evidence_citations(
+        self,
+        evidence_refs: Iterable[dict[str, Any]] | None,
+        *,
+        document_id: str | None = None,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Resolve stored evidence references to source units and spans."""
+        refs = [ref for ref in (evidence_refs or []) if isinstance(ref, dict)]
+        if not refs:
+            return []
+        limit = max(1, limit)
+        unit_ids = {
+            str(ref.get("evidence_unit_id"))
+            for ref in refs
+            if ref.get("evidence_unit_id")
+        }
+        span_ids = {
+            str(ref.get("evidence_span_id") or ref.get("span_id"))
+            for ref in refs
+            if ref.get("evidence_span_id") or ref.get("span_id")
+        }
+        quote_by_unit = {
+            str(ref["evidence_unit_id"]): str(ref.get("quote") or "")
+            for ref in refs
+            if ref.get("evidence_unit_id")
+        }
+        quote_by_span = {
+            str(ref.get("evidence_span_id") or ref.get("span_id")): str(ref.get("quote") or "")
+            for ref in refs
+            if ref.get("evidence_span_id") or ref.get("span_id")
+        }
+
+        def rows_for_ids(table: str, ids: set[str]) -> list[dict[str, Any]]:
+            if not ids:
+                return []
+            placeholders = ",".join("?" for _ in ids)
+            clauses = [f"id IN ({placeholders})"]
+            params: list[Any] = sorted(ids)
+            if document_id:
+                clauses.append("document_id=?")
+                params.append(document_id)
+            return self.db.query(
+                f"SELECT * FROM {table} WHERE " + " AND ".join(clauses),
+                tuple(params),
+            )
+
+        units = rows_for_ids("evidence_units", unit_ids)
+        unit_source_span_ids: set[str] = set()
+        for unit in units:
+            source_span_ids = json_loads(unit.get("source_span_ids_json"), []) or []
+            unit_source_span_ids.update(str(span_id) for span_id in source_span_ids if span_id)
+        span_ids.update(unit_source_span_ids)
+        spans = rows_for_ids("evidence_spans", span_ids)
+        spans_by_id = {str(row["id"]): row for row in spans}
+        citations: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+
+        for unit in units:
+            source_span_ids = json_loads(unit.get("source_span_ids_json"), []) or []
+            source_spans = [
+                spans_by_id[str(span_id)]
+                for span_id in source_span_ids
+                if str(span_id) in spans_by_id
+            ]
+            key = (str(unit.get("document_id")), str(unit["id"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            citations.append({
+                "id": f"{unit['document_id']}:{unit['id']}",
+                "document_id": unit["document_id"],
+                "document_title": self._document_title(unit["document_id"]),
+                "evidence_unit_id": unit["id"],
+                "evidence_span_ids": [str(span["id"]) for span in source_spans] or source_span_ids,
+                "quote": quote_by_unit.get(str(unit["id"])) or unit.get("text", ""),
+                "span_texts": [span["text"] for span in source_spans],
+                "char_start": min((span["char_start"] for span in source_spans), default=None),
+                "char_end": max((span["char_end"] for span in source_spans), default=None),
+                "heading_path": json_loads(unit.get("heading_path_json"), []),
+            })
+
+        for span in spans:
+            if str(span["id"]) in unit_source_span_ids:
+                continue
+            key = (str(span.get("document_id")), str(span["id"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            citations.append({
+                "id": f"{span['document_id']}:{span['id']}",
+                "document_id": span["document_id"],
+                "document_title": self._document_title(span["document_id"]),
+                "evidence_span_ids": [span["id"]],
+                "quote": quote_by_span.get(str(span["id"])) or span.get("text", ""),
+                "span_texts": [span.get("text", "")],
+                "char_start": span.get("char_start"),
+                "char_end": span.get("char_end"),
+                "heading_path": json_loads(span.get("heading_path_json"), []),
+            })
+
+        return citations[:limit]
+
+    def _document_title(self, document_id: str) -> str | None:
+        rows = self.db.query("SELECT title FROM documents WHERE id=?", (document_id,))
+        return rows[0]["title"] if rows else None
+
+    def _citations_for_properties(
+        self,
+        properties: dict[str, Any] | None,
+        *,
+        document_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        properties = properties if isinstance(properties, dict) else {}
+        refs = list(properties.get("evidence_refs") or [])
+        source_span_id = properties.get("source_span_id")
+        if source_span_id:
+            refs.append({"evidence_span_id": source_span_id})
+        return self.evidence_citations(refs, document_id=document_id)
+
+    def _attach_search_citations(
+        self,
+        items: list[dict[str, Any]],
+        entity_rows: list[dict[str, Any]],
+        statement_rows: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        for index, row in enumerate(entity_rows):
+            items[index]["citations"] = self._citations_for_properties(
+                json_loads(row.get("properties_json"), {})
+            )
+        offset = len(entity_rows)
+        for index, row in enumerate(statement_rows):
+            items[offset + index]["citations"] = self._citations_for_properties(
+                json_loads(row.get("properties_json"), {}),
+                document_id=row.get("document_id"),
+            )
+        return items
+
     def save_bundle(
         self,
         document: dict[str, Any],
@@ -300,7 +415,7 @@ class KnowledgeRepository:
             return {"nodes": [], "edges": [], "stats": {"nodes": 0, "edges": 0}}
         placeholders = ",".join("?" for _ in ids)
         relation_rows = self.db.query(
-            f"SELECT id,source_id,target_id,relation_type,confidence,properties_json "
+            f"SELECT id,source_id,target_id,relation_type,confidence,document_id,properties_json "
             f"FROM relations WHERE source_id IN ({placeholders}) AND target_id IN ({placeholders}) "
             "ORDER BY created_at DESC LIMIT ?",
             tuple(ids + ids + [limit * 2]),
@@ -310,6 +425,9 @@ class KnowledgeRepository:
                 "id": row["id"], "type": row["type"], "name": row["name"],
                 "layer": row["layer"], "brand_id": row["brand_id"],
                 "properties": json_loads(row["properties_json"], {}),
+                "citations": self._citations_for_properties(
+                    json_loads(row["properties_json"], {})
+                ),
             }
             for row in entity_rows
         ]
@@ -318,6 +436,10 @@ class KnowledgeRepository:
                 "id": row["id"], "source": row["source_id"], "target": row["target_id"],
                 "type": row["relation_type"], "confidence": row["confidence"],
                 "properties": json_loads(row["properties_json"], {}),
+                "citations": self._citations_for_properties(
+                    json_loads(row["properties_json"], {}),
+                    document_id=row["document_id"],
+                ),
             }
             for row in relation_rows
         ]
@@ -341,7 +463,28 @@ class KnowledgeRepository:
             "jobs": {row["status"]: row["count"] for row in jobs},
         }
 
-    def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+    def search(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        overview: bool = False,
+        entity_types: Iterable[str] | None = None,
+        brand_id: str | None = None,
+        document_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if overview:
+            return self._workspace_overview(
+                query, limit, entity_types=entity_types
+            )
+        if entity_types is not None or brand_id is not None or document_id is not None:
+            return self.search_scoped(
+                query,
+                limit,
+                entity_types=entity_types,
+                brand_id=brand_id,
+                document_id=document_id,
+            )
         query = query.strip()
         if not query:
             return []
@@ -352,7 +495,7 @@ class KnowledgeRepository:
             (pattern, pattern, limit),
         )
         statements = self.db.query(
-            "SELECT s.id,s.statement_text,s.statement_class,e.name AS subject_name "
+            "SELECT s.id,s.document_id,s.properties_json,s.statement_text,s.statement_class,e.name AS subject_name "
             "FROM statements s LEFT JOIN entities e ON e.id=s.subject_id "
             "WHERE s.statement_text LIKE ? ORDER BY s.created_at DESC LIMIT ?",
             (pattern, limit),
@@ -366,25 +509,97 @@ class KnowledgeRepository:
              "type": row["statement_class"], "snippet": row["statement_text"]}
             for row in statements
         ]
-        if items or not self._is_overview_query(query):
-            return items
-        return self._workspace_overview(query, limit)
+        return self._attach_search_citations(items, entities, statements)
 
-    @staticmethod
-    def _is_overview_query(query: str) -> bool:
-        return any(marker in query for marker in _OVERVIEW_MARKERS) or any(
-            marker in query for marker in _ENTITY_TYPE_MARKERS
+    def document_id_for_reference(self, reference: str) -> str | None:
+        """Resolve a user-facing document ID or title at the persistence boundary."""
+        reference = reference.strip()
+        if not reference:
+            return None
+        rows = self.db.query(
+            "SELECT id FROM documents WHERE id=? OR title=? LIMIT 1",
+            (reference, reference),
+        )
+        return rows[0]["id"] if rows else None
+
+    def search_scoped(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        entity_types: Iterable[str] | None = None,
+        brand_id: str | None = None,
+        document_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Execute a bounded search with already-resolved application filters."""
+        query = query.strip()
+        limit = max(1, limit)
+        entity_clauses = ["e.status = 'active'"]
+        entity_params: list[Any] = []
+        if query:
+            pattern = f"%{query}%"
+            entity_clauses.append("(e.name LIKE ? OR e.type LIKE ?)")
+            entity_params.extend((pattern, pattern))
+        types = sorted({str(value) for value in (entity_types or ()) if value})
+        if types:
+            placeholders = ",".join("?" for _ in types)
+            entity_clauses.append(f"e.type IN ({placeholders})")
+            entity_params.extend(types)
+        if brand_id is not None:
+            entity_clauses.append("(e.brand_id = ? OR (e.type = 'brand' AND e.name = ?))")
+            entity_params.extend((brand_id, brand_id))
+        if document_id is not None:
+            source_pattern = f'%"source_document_id": "{document_id}"%'
+            entity_clauses.append(
+                "(e.properties_json LIKE ? "
+                "OR EXISTS (SELECT 1 FROM relations r "
+                "WHERE r.document_id=? AND (r.source_id=e.id OR r.target_id=e.id)) "
+                "OR EXISTS (SELECT 1 FROM statements s "
+                "WHERE s.document_id=? AND s.subject_id=e.id))"
+            )
+            entity_params.extend((source_pattern, document_id, document_id))
+        entities = self.db.query(
+            "SELECT e.id,e.type,e.name,e.layer,e.brand_id,e.properties_json "
+            "FROM entities e WHERE " + " AND ".join(entity_clauses) +
+            " ORDER BY e.updated_at DESC LIMIT ?",
+            tuple(entity_params + [limit]),
         )
 
-    @staticmethod
-    def _overview_entity_types(query: str) -> set[str]:
-        types: set[str] = set()
-        for marker, values in _ENTITY_TYPE_MARKERS.items():
-            if marker in query:
-                types.update(values)
-        return types
+        statement_clauses = ["1=1"]
+        statement_params: list[Any] = []
+        if query:
+            statement_clauses = ["s.statement_text LIKE ?"]
+            statement_params.append(f"%{query}%")
+        if brand_id is not None:
+            statement_clauses.append("(e.name = ? OR e.brand_id = ?)")
+            statement_params.extend((brand_id, brand_id))
+        if document_id is not None:
+            statement_clauses.append("s.document_id = ?")
+            statement_params.append(document_id)
+        statements = self.db.query(
+            "SELECT s.id,s.document_id,s.properties_json,s.statement_text,s.statement_class,e.name AS subject_name "
+            "FROM statements s LEFT JOIN entities e ON e.id=s.subject_id WHERE " +
+            " AND ".join(statement_clauses) +
+            " ORDER BY s.created_at DESC LIMIT ?",
+            tuple(statement_params + [limit]),
+        )
+        return self._attach_search_citations([
+            {"kind": "entity", "id": row["id"], "title": row["name"], "type": row["type"],
+             "layer": row["layer"], "snippet": f"{row['type']} 路 {row['name']}"}
+            for row in entities
+        ] + [
+            {"kind": "statement", "id": row["id"], "title": row["subject_name"] or "闄堣堪",
+             "type": row["statement_class"], "snippet": row["statement_text"]}
+            for row in statements
+        ], entities, statements)
 
-    def _workspace_overview(self, query: str, limit: int) -> list[dict[str, Any]]:
+    def _workspace_overview(
+        self,
+        query: str,
+        limit: int,
+        *,
+        entity_types: Iterable[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Return a small, intent-aware snapshot when exact search is empty.
 
         This is deliberately a bounded keyword fallback, not a replacement for
@@ -393,11 +608,11 @@ class KnowledgeRepository:
         """
         limit = max(1, limit)
         entity_limit = max(1, limit // 2)
-        relation_limit = max(1, limit // 4) if any(
+        relation_limit = max(1, limit // 4) if entity_types is not None or any(
             marker in query for marker in ("知识库", "数据库", "总结", "概括", "关系", "服务")
         ) else 0
         statement_limit = max(0, limit - entity_limit - relation_limit)
-        types = sorted(self._overview_entity_types(query))
+        types = sorted({str(value) for value in (entity_types or ()) if value})
         type_filter = ""
         type_params: tuple[Any, ...] = ()
         if types:
@@ -415,9 +630,13 @@ class KnowledgeRepository:
              "layer": row["layer"], "snippet": f"{row['type']} · {row['name']}"}
             for row in entities
         ]
+        for item, row in zip(items, entities):
+            item["citations"] = self._citations_for_properties(
+                json_loads(row["properties_json"], {})
+            )
         if relation_limit:
             relations = self.db.query(
-                "SELECT r.id,r.relation_type,r.confidence,r.created_at, "
+                "SELECT r.id,r.relation_type,r.confidence,r.created_at,r.document_id,r.properties_json, "
                 "s.id AS source_id,s.name AS source_name,s.layer AS source_layer, "
                 "t.name AS target_name "
                 "FROM relations r "
@@ -437,12 +656,16 @@ class KnowledgeRepository:
                         f"{row['source_name']} -[{row['relation_type']}]-> "
                         f"{row['target_name']}"
                     ),
+                    "citations": self._citations_for_properties(
+                        json_loads(row["properties_json"], {}),
+                        document_id=row["document_id"],
+                    ),
                 }
                 for row in relations
             )
         if statement_limit:
             statements = self.db.query(
-                "SELECT s.id,s.statement_text,s.statement_class,e.name AS subject_name "
+                "SELECT s.id,s.document_id,s.properties_json,s.statement_text,s.statement_class,e.name AS subject_name "
                 "FROM statements s LEFT JOIN entities e ON e.id=s.subject_id "
                 "ORDER BY s.created_at DESC LIMIT ?",
                 (statement_limit,),
@@ -454,6 +677,10 @@ class KnowledgeRepository:
                     "title": row["subject_name"] or "陈述",
                     "type": row["statement_class"],
                     "snippet": row["statement_text"],
+                    "citations": self._citations_for_properties(
+                        json_loads(row["properties_json"], {}),
+                        document_id=row["document_id"],
+                    ),
                 }
                 for row in statements
             )

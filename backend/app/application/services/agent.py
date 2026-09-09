@@ -8,6 +8,7 @@ from ...config import RuntimeSettings
 from ...infrastructure.repositories import KnowledgeRepository
 from ...runtime_settings import SettingsStore
 from ...infrastructure.providers.llm import OpenAICompatibleClient
+from .retrieval import RetrievalService
 
 
 class AgentService:
@@ -17,9 +18,11 @@ class AgentService:
         settings: RuntimeSettings | None = None,
         *,
         settings_store: SettingsStore | None = None,
+        retrieval_service: RetrievalService | None = None,
     ):
         self.repository = repository
         self.settings_store = settings_store or SettingsStore(settings or RuntimeSettings())
+        self.retrieval = retrieval_service or RetrievalService(repository)
 
     def answer(self, message: str, history: list[dict[str, str]] | None = None) -> dict[str, Any]:
         settings = self.settings_store.snapshot()
@@ -32,13 +35,22 @@ class AgentService:
         hits: list[dict[str, Any]] = []
         seen: set[tuple[str, str]] = set()
         for query in queries:
-            for hit in self.repository.search(query, limit=8):
+            for hit in self.retrieval.search(query, limit=8):
                 key = (str(hit.get("kind")), str(hit.get("id")))
                 if key not in seen:
                     seen.add(key)
                     hits.append(hit)
         hits = hits[:12]
-        context_lines = [f"- {hit['title']}: {hit['snippet']}" for hit in hits]
+        context_lines = []
+        for hit in hits:
+            line = f"- {hit['title']}: {hit['snippet']}"
+            for citation in hit.get("citations", [])[:2]:
+                quote = str(citation.get("quote") or "").strip()
+                if not quote:
+                    continue
+                document = citation.get("document_title") or citation.get("document_id") or "本地文档"
+                line += f"\n  原文证据（{document}）：{quote[:1200]}"
+            context_lines.append(line)
         context = "\n".join(context_lines) if context_lines else "（本地知识库暂时没有检索到直接相关内容）"
         system = (
             "你是 Brand Atlas，用户的本地知识工作助手，而不是僵硬的问答机器人。\n"

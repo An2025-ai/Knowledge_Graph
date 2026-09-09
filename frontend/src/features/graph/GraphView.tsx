@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import type { GraphData, GraphNode } from "../../api/types";
+import type { GraphData, GraphEdge, GraphNode } from "../../api/types";
+import EvidenceCitations from "../../components/EvidenceCitations";
 
 const palette: Record<string, string> = {
   brand: "#f3b562",
@@ -16,6 +17,7 @@ function color(type: string) {
 
 export default function GraphView({ data, onSelect }: { data: GraphData; onSelect: (node: GraphNode) => void }) {
   const [hovered, setHovered] = useState<string | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
   const positions = useMemo(() => {
     const width = 760;
     const height = 460;
@@ -39,13 +41,13 @@ export default function GraphView({ data, onSelect }: { data: GraphData; onSelec
           const from = positions.get(edge.source);
           const to = positions.get(edge.target);
           if (!from || !to) return null;
-          return <g key={edge.id} className="graph-edge"><line x1={from.x} y1={from.y} x2={to.x} y2={to.y} markerEnd="url(#arrow)" /><text x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 7}>{edge.type}</text></g>;
+          return <g key={edge.id} className="graph-edge" onClick={() => setSelectedEdge(edge)} role="button" aria-label={`${edge.type} relation`}><line x1={from.x} y1={from.y} x2={to.x} y2={to.y} markerEnd="url(#arrow)" /><text x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 7}>{edge.type}</text></g>;
         })}
         {data.nodes.map((node) => {
           const point = positions.get(node.id);
           if (!point) return null;
           const active = hovered === node.id;
-          return <g key={node.id} className={`graph-node ${active ? "is-hovered" : ""}`} transform={`translate(${point.x}, ${point.y})`} onMouseEnter={() => setHovered(node.id)} onMouseLeave={() => setHovered(null)} onClick={() => onSelect(node)}>
+          return <g key={node.id} className={`graph-node ${active ? "is-hovered" : ""}`} transform={`translate(${point.x}, ${point.y})`} onMouseEnter={() => setHovered(node.id)} onMouseLeave={() => setHovered(null)} onClick={() => { setSelectedEdge(null); onSelect(node); }}>
             <circle r={active ? 27 : 22} fill={color(node.type)} filter={active ? "url(#soft-glow)" : undefined} />
             <text className="node-type">{node.type}</text>
             <text className="node-name">{node.name.length > 14 ? `${node.name.slice(0, 14)}…` : node.name}</text>
@@ -53,6 +55,7 @@ export default function GraphView({ data, onSelect }: { data: GraphData; onSelec
         })}
         {!data.nodes.length && <text x="380" y="230" textAnchor="middle" className="empty-graph">导入一份资料后，这里会出现知识关系</text>}
       </svg>
+      {selectedEdge && <div className="graph-edge-evidence"><div><span className="eyebrow">RELATION EVIDENCE</span><b>{selectedEdge.type}</b></div><button className="icon-button" onClick={() => setSelectedEdge(null)}>×</button><EvidenceCitations citations={selectedEdge.citations} /></div>}
       <div className="graph-legend">
         {Object.entries(palette).filter(([key]) => key !== "default").map(([key, value]) => <span key={key}><i style={{ background: value }} />{key}</span>)}
       </div>

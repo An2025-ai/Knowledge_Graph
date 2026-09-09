@@ -317,6 +317,92 @@ class KnowledgeBuildPipeline:
             current.llm_base_url and current.llm_model
         )
 
+    @classmethod
+    def _normalize_llm_payload(cls, payload: dict[str, Any]) -> dict[str, Any]:
+        """Normalize compatible model output before ontology validation.
+
+        The ontology validator deliberately works with the canonical wire
+        shape: entity ``type`` fields and relation endpoints represented by
+        entity IDs.  Compatible models may instead use ``entity_type`` /
+        ``name`` aliases and return an endpoint as an ID, a name, or a nested
+        object.  Resolve those equivalent forms here so validation does not
+        reject otherwise usable model output.
+        """
+        normalized = dict(payload)
+        collections = {
+            key: payload.get(key, []) or []
+            for key in ("entities", "relations", "statements")
+        }
+        for key, value in collections.items():
+            if not isinstance(value, list):
+                raise ValueError(f"LLM extraction field '{key}' must be an array")
+            if any(not isinstance(item, dict) for item in value):
+                raise ValueError(f"LLM extraction field '{key}' must contain objects")
+
+        entities: list[dict[str, Any]] = []
+        entity_by_id: dict[str, dict[str, str]] = {}
+        entity_by_name: dict[str, dict[str, str]] = {}
+        for index, item in enumerate(collections["entities"]):
+            entity = dict(item)
+            entity_type = entity.get("type") or entity.get("entity_type")
+            name = entity.get("canonical_name") or entity.get("name")
+            entity_id = entity.get("id") or entity.get("entity_id")
+            if entity_id is None and name:
+                # A stable local ID lets name-only entity declarations
+                # participate in the same validator contract as ID-based
+                # declarations.  This ID is internal to the parsed payload.
+                entity_id = f"llm-entity-{index}"
+            if entity_id is not None:
+                entity["id"] = str(entity_id)
+            if entity_type is not None:
+                entity["type"] = entity_type
+            if name is not None:
+                entity["canonical_name"] = name
+            entities.append(entity)
+
+            if entity_id is None or not name:
+                continue
+            resolved = {
+                "id": str(entity_id),
+                "name": normalize_text(str(name)),
+                "entity_type": str(entity_type or ""),
+            }
+            entity_by_id[str(entity_id)] = resolved
+            entity_by_name[normalize_name(str(name))] = resolved
+
+        relations: list[dict[str, Any]] = []
+        for item in collections["relations"]:
+            relation = dict(item)
+            relation["relation"] = item.get("relation") or item.get("type")
+            for endpoint_key, type_key in (
+                ("subject", "subject_type"),
+                ("object", "object_type"),
+            ):
+                endpoint = item.get(endpoint_key)
+                type_hint = item.get(type_key) or item.get(
+                    "entity_type_subject" if endpoint_key == "subject" else "entity_type_object"
+                )
+                name, entity_type = cls._resolve_relation_endpoint(
+                    endpoint, type_hint, entity_by_id, entity_by_name
+                )
+                resolved = entity_by_name.get(normalize_name(name)) if name else None
+                if resolved:
+                    relation[endpoint_key] = resolved["id"]
+                    relation[type_key] = entity_type or resolved["entity_type"]
+                else:
+                    # Keep an unresolved scalar visible to the validator so
+                    # it reports a normal ontology error and triggers the
+                    # existing per-unit fallback path.
+                    relation[endpoint_key] = name or str(endpoint or "")
+                    if entity_type:
+                        relation[type_key] = entity_type
+            relations.append(relation)
+
+        normalized["entities"] = entities
+        normalized["relations"] = relations
+        normalized["statements"] = collections["statements"]
+        return normalized
+
     def _llm_extract(
         self,
         text: str,
@@ -339,6 +425,7 @@ class KnowledgeBuildPipeline:
             },
         ])
         payload = self._parse_json(response)
+        payload = self._normalize_llm_payload(payload)
         validation = validate_ontology(payload, profile_id=profile_id)
         if not validation.ok:
             detail = "; ".join(validation.errors[:8])
