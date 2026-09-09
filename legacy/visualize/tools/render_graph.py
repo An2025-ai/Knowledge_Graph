@@ -6,7 +6,7 @@ and produces:
   - a focused subgraph around the e-commerce finance industry nodes
 
 Usage:
-    python scripts/build/render_graph.py [--focused]
+    python legacy/visualize/tools/render_graph.py [--focused]
 """
 from __future__ import annotations
 
@@ -16,9 +16,13 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-from pyvis.network import Network
+try:
+    from pyvis.network import Network
+except ImportError:
+    # Keep --help usable without the optional historical visualization stack.
+    Network = None
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 JSON_PATH = ROOT / "legacy" / "visualize" / "output" / "knowledge_graph.json"
 OUT_DIR = ROOT / "legacy" / "visualize" / "output"
 
@@ -45,16 +49,26 @@ TYPE_STYLE = {
 REL_KEEP = None  # keep all in full view
 
 
+def _require_pyvis():
+    if Network is None:
+        raise SystemExit(
+            "This legacy visualization tool requires optional dependency pyvis. "
+            "Install it with: python -m pip install pyvis; see requirements.txt."
+        )
+    return Network
+
 def _style(node_type: str) -> dict:
     return TYPE_STYLE.get(node_type, {"color": "#90A4AE", "shape": "dot"})
 
 
 def build_network() -> tuple[Network, dict, list]:
+    network_type = _require_pyvis()
+
     data = json.loads(JSON_PATH.read_text(encoding="utf-8"))
     nodes = data["nodes"]
     edges = data["edges"]
     node_by_id = {n["id"]: n for n in nodes}
-    net = Network(
+    net = network_type(
         height="92vh",
         width="100%",
         directed=True,
@@ -120,6 +134,7 @@ def render_full() -> str:
 def render_focused() -> str:
     """Subgraph around the e-commerce finance industry nodes (only entities whose
     entity_id mentions 电商业财, plus their direct neighbors)."""
+    network_type = _require_pyvis()
     data = json.loads(JSON_PATH.read_text(encoding="utf-8"))
     nodes, edges = data["nodes"], data["edges"]
     node_by_id = {n["id"]: n for n in nodes}
@@ -142,7 +157,7 @@ def render_focused() -> str:
         if e["subject_id"] in selected or e["object_id"] in selected:
             selected.add(e["subject_id"])
             selected.add(e["object_id"])
-    net = Network(
+    net = network_type(
         height="92vh", width="100%", directed=True, bgcolor="#ffffff", font_color="#1a1a2e"
     )
     net.barnes_hut(gravity=-2500, central_gravity=0.3, spring_length=130, spring_strength=0.015)
@@ -163,10 +178,11 @@ LAYER_STYLE = {
 
 def render_layers() -> str:
     """Render the graph colored by L1/L2/L3 layer, emphasizing cross-layer edges."""
+    network_type = _require_pyvis()
     data = json.loads(JSON_PATH.read_text(encoding="utf-8"))
     nodes, edges = data["nodes"], data["edges"]
     node_by_id = {n["id"]: n for n in nodes}
-    net = Network(
+    net = network_type(
         height="92vh", width="100%", directed=True, bgcolor="#ffffff", font_color="#1a1a2e"
     )
     net.barnes_hut(gravity=-3000, central_gravity=0.3, spring_length=120, spring_strength=0.01)

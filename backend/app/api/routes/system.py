@@ -5,8 +5,8 @@ from dataclasses import replace
 from fastapi import APIRouter, HTTPException, Request
 
 from ..schemas import ProviderTestRequest, SettingsRequest, TestSettingsRequest
-from ..infrastructure.providers.embedding import ExternalEmbeddingClient
-from ..infrastructure.providers.llm import OpenAICompatibleClient, configured_api_key
+from ...infrastructure.providers.embedding import ExternalEmbeddingClient
+from ...infrastructure.providers.llm import OpenAICompatibleClient, configured_api_key
 
 router = APIRouter(tags=["system"])
 

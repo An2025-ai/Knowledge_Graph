@@ -110,12 +110,13 @@ class DocumentIngestionService:
         content_hash = _sha256(content)
         existing = self.repository.document_by_hash(content_hash)
         if existing and document_id is None:
+            counts = self.repository.document_extraction_counts(existing["id"])
             return {
                 "document_id": existing["id"], "title": existing["title"],
                 "content_hash": content_hash, "duplicate": True,
-                "span_count": self._count("evidence_spans", existing["id"]),
-                "unit_count": self._count("evidence_units", existing["id"]),
-                "candidate_count": self._count("knowledge_candidates", existing["id"]),
+                "span_count": counts["spans"],
+                "unit_count": counts["units"],
+                "candidate_count": counts["candidates"],
             }
 
         now = utc_now()
@@ -168,12 +169,6 @@ class DocumentIngestionService:
             "llm_error": build.llm_error,
             "layer": layer, "brand_id": brand_id,
         }
-
-    def _count(self, table: str, document_id: str) -> int:
-        row = self.repository.db.query(
-            f"SELECT COUNT(*) AS count FROM {table} WHERE document_id=?", (document_id,)
-        )
-        return int(row[0]["count"]) if row else 0
 
     def _statements(
         self, doc_id: str, spans: list[dict[str, Any]],

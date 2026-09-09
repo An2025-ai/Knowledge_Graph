@@ -38,7 +38,7 @@ npm --prefix desktop run dev
 - `backend/app/application/services/ingestion.py`：文档处理用例；负责导入幂等和持久化边界。
 - `backend/app/application/services/knowledge_pipeline.py`：新运行时的候选抽取、归一化、融合、实体解析和关系生成。
 - `backend/app/application/services/agent.py`：本地检索与外部 LLM 编排。
-- `backend/app/routes/`：按业务模块拆分的 HTTP 接口。
+- `backend/app/api/routes/`：按业务模块拆分的 HTTP 接口。
 - `frontend/src/features/`：对话、导入、图谱和设置组件按功能独立演进。
 
 当前桌面应用默认不启动 PostgreSQL、Neo4j、Docker、Redis 或本地大模型。旧的

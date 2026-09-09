@@ -81,6 +81,28 @@ class KnowledgeRepository:
         rows = self.db.query("SELECT * FROM documents WHERE id=?", (document_id,))
         return rows[0] if rows else None
 
+    def list_documents(self) -> list[dict[str, Any]]:
+        return self.db.query(
+            "SELECT id,title,source_type,layer,brand_id,content_hash,status,created_at,updated_at "
+            "FROM documents ORDER BY updated_at DESC LIMIT 100"
+        )
+
+    def document_extraction_counts(self, document_id: str) -> dict[str, int]:
+        """Return fixed document-owned extraction counts."""
+        rows = self.db.query(
+            "SELECT "
+            "(SELECT COUNT(*) FROM evidence_spans WHERE document_id=?) AS spans, "
+            "(SELECT COUNT(*) FROM evidence_units WHERE document_id=?) AS units, "
+            "(SELECT COUNT(*) FROM knowledge_candidates WHERE document_id=?) AS candidates, "
+            "(SELECT COUNT(*) FROM relations WHERE document_id=?) AS relations, "
+            "(SELECT COUNT(*) FROM statements WHERE document_id=?) AS statements",
+            (document_id, document_id, document_id, document_id, document_id),
+        )
+        row = rows[0] if rows else {}
+        return {
+            field: int(row.get(field, 0) or 0)
+            for field in ("spans", "units", "candidates", "relations", "statements")
+        }
     def save_bundle(
         self,
         document: dict[str, Any],
@@ -333,6 +355,35 @@ class KnowledgeRepository:
                 model, self.db.json(vector), embedded_text, utc_now(),
             ),
         )
+
+
+class ChatRepository:
+    """Atomic persistence boundary for one user/assistant chat exchange."""
+
+    def __init__(self, db: LocalDatabase):
+        self.db = db
+
+    def save_exchange(
+        self,
+        user_message: dict[str, Any],
+        assistant_message: dict[str, Any],
+    ) -> None:
+        """Save both messages in one transaction or persist neither."""
+        with self.db.transaction() as conn:
+            for message in (user_message, assistant_message):
+                conn.execute(
+                    "INSERT INTO chat_messages"
+                    "(id,role,content,citations_json,mode,created_at) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (
+                        message["id"],
+                        message["role"],
+                        message["content"],
+                        self.db.json(message.get("citations", [])),
+                        message.get("mode", "unknown"),
+                        message["created_at"],
+                    ),
+                )
 
 
 class JobRepository:

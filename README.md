@@ -30,7 +30,9 @@ Knowledge_Graph/
 │   └── app/
 │       ├── factory.py               # 应用组装、本地鉴权、CORS
 │       ├── config.py                # 本地路径和运行配置
-│       ├── routes/                  # HTTP API：对话、文档、图谱、系统
+│       ├── api/                      # HTTP API 传输层
+│       │   ├── routes/               # 对话、文档、图谱、系统路由
+│       │   └── schemas.py           # 请求/响应模型
 │       ├── application/             # Job、Agent、导入和知识构建用例
 │       │   └── services/
 │       ├── infrastructure/          # SQLite、Repository 和模型 Provider
@@ -66,12 +68,13 @@ Knowledge_Graph/
 │   ├── promotion/                   # 旧门禁晋升
 │   ├── neo4j/                       # 旧图谱投影和一致性检查
 │   ├── migrations/                  # 旧 PG 迁移执行器
-│   ├── visualize/                   # 旧 PG/Neo4j 可视化导出
+│   ├── visualize/                   # 旧 PG/Neo4j 导出与可视化工具
+│   │   └── tools/                   # 旧版 JSON 图 HTML 渲染工具
 │   └── docker-compose.yml           # 旧 PG + Neo4j 服务
 ├── tests/                           # 桌面版和 shared 运行时测试
 ├── scripts/                         # 开发、构建和维护脚本
 │   ├── dev/                          # 桌面和浏览器开发启动
-│   ├── build/                        # Sidecar、图谱和安装包构建
+│   ├── build/                        # Sidecar、安装包和历史构建脚本
 │   └── maintenance/                 # 数据库和生成物维护
 ├── docs/                            # 架构、迁移和运维说明
 │   ├── architecture/
@@ -137,6 +140,7 @@ SQLite 数据库默认保存在操作系统的用户数据目录：
 模型配置在桌面端设置界面中填写。LLM 和 Embedding 有独立的测试按钮；Embedding 未配置时，规则抽取、图谱构建和对话仍可以继续运行。
 
 更详细的桌面开发说明见 [docs/architecture/LOCAL_APP.md](docs/architecture/LOCAL_APP.md)，打包说明见 [desktop/README.md](desktop/README.md)。
+内部 Python 导入兼容政策见 [docs/architecture/PYTHON_IMPORT_COMPATIBILITY.md](docs/architecture/PYTHON_IMPORT_COMPATIBILITY.md)。
 数据备份、数据库校验、故障排查和发布验收见 [docs/maintenance/](docs/maintenance/)。
 
 ## legacy 目录状态

@@ -12,8 +12,10 @@ from fastapi.responses import JSONResponse
 from .config import AppPaths, RuntimeSettings, load_settings
 from .infrastructure.database import LocalDatabase
 from .application.jobs import JobManager
-from .infrastructure.repositories import JobRepository, KnowledgeRepository
-from .routes import agent, documents, graph, system
+from .application.services.chat import ChatService
+from .application.services.documents import DocumentQueryService
+from .infrastructure.repositories import ChatRepository, JobRepository, KnowledgeRepository
+from .api.routes import agent, documents, graph, system
 from .runtime_settings import SettingsStore
 from .application.services.agent import AgentService
 from .infrastructure.providers.embedding import EmbeddingService
@@ -49,12 +51,14 @@ def create_app(
     )
     app.state.paths = paths
     app.state.settings_store = settings_store
-    app.state.db = db
     app.state.knowledge = knowledge
     app.state.jobs = manager
     app.state.ingestion = ingestion
     app.state.embedding = embedding
-    app.state.agent = AgentService(knowledge, settings_store=settings_store)
+    agent_service = AgentService(knowledge, settings_store=settings_store)
+    app.state.agent = agent_service
+    app.state.document_queries = DocumentQueryService(knowledge)
+    app.state.chat = ChatService(agent_service, ChatRepository(db))
 
     app.add_middleware(
         CORSMiddleware,

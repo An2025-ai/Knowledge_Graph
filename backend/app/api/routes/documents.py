@@ -9,10 +9,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 @router.get("")
 def list_documents(request: Request):
-    return request.app.state.db.query(
-        "SELECT id,title,source_type,layer,brand_id,content_hash,status,created_at,updated_at "
-        "FROM documents ORDER BY updated_at DESC LIMIT 100"
-    )
+    return request.app.state.document_queries.list_documents()
 
 
 @router.get("/{document_id}")

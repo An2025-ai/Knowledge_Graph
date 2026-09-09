@@ -160,10 +160,13 @@ python scripts/maintenance/fix_html_cdn.py
 
 | 脚本 | 作用 |
 |------|------|
-| `scripts/build/render_graph.py` | 直接渲染 JSON 为图谱（使用本地 assets 颜色映射） |
+| `legacy/visualize/tools/render_graph.py` | 直接渲染 JSON 为图谱（使用本地 assets 颜色映射） |
 | `scripts/build/build_layered_prototype.py` | 由 export 的 JSON 产出分层 2D HTML |
 | `scripts/maintenance/fix_html_stale.py` / `scripts/maintenance/fix_html_cdn.py` | 清理旧 HTML 的失效/外部脚本引用 |
 
+`legacy/visualize/tools/render_graph.py` 已归档为历史工具，只读取旧版导出的 `legacy/visualize/output/knowledge_graph.json`，不读取新版 SQLite。它只生成 HTML，不修改输入 JSON；验证时应将输入和输出路径指向临时目录，避免覆盖仓库中已有导出物。
+
+该工具依赖历史依赖清单 `requirements.txt` 中的可选 `pyvis`，不属于 `requirements-desktop.txt`。未安装 `pyvis` 时，`--help` 仍可用；实际渲染会提示执行 `python -m pip install pyvis`。桌面版 Sidecar/Tauri 构建链路不调用此工具。
 ## 8. 测试与验证
 
 ```bash

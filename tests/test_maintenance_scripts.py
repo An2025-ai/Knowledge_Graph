@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,7 +27,7 @@ class MaintenanceScriptTests(unittest.TestCase):
             repository / "scripts" / "build" / "prepare-tauri-sidecar.ps1",
             repository / "scripts" / "build" / "create-tauri-icon.py",
             repository / "scripts" / "build" / "build_layered_prototype.py",
-            repository / "scripts" / "build" / "render_graph.py",
+            repository / "legacy" / "visualize" / "tools" / "render_graph.py",
             repository / "scripts" / "maintenance" / "fix_html_stale.py",
             repository / "scripts" / "maintenance" / "fix_html_cdn.py",
         )
@@ -40,12 +42,25 @@ class MaintenanceScriptTests(unittest.TestCase):
             repository / "scripts" / "create-tauri-icon.py",
             repository / "scripts" / "build_layered_prototype.py",
             repository / "scripts" / "render_graph.py",
+            repository / "scripts" / "build" / "render_graph.py",
             repository / "scripts" / "fix_html_stale.py",
             repository / "scripts" / "fix_html_cdn.py",
         )
         for path in old_paths:
             self.assertFalse(path.exists(), path)
 
+    def test_archived_render_graph_help_works_without_optional_dependency(self):
+        repository = Path(__file__).resolve().parents[1]
+        tool = repository / "legacy" / "visualize" / "tools" / "render_graph.py"
+        result = subprocess.run(
+            [sys.executable, str(tool), "--help"],
+            cwd=repository,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--focused", result.stdout)
     def test_backup_uses_sqlite_backup_api_and_is_readable(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

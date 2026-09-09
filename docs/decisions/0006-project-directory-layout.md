@@ -1,6 +1,6 @@
 # ADR 0006：项目目录布局与模块边界
 
-- 状态：Accepted for the R1 skeleton
+- 状态：Accepted; R1 skeleton and D2 API migration completed
 - 日期：2026-09-08
 - 范围：Brand Atlas 桌面版运行时、前端和维护工具
 
@@ -63,7 +63,7 @@ frontend → API → Application → shared
                        └→ Infrastructure → SQLite / 文件系统 / 外部模型 API
 ```
 
-- `backend/app/routes/`：HTTP 路由、请求/响应 DTO、鉴权和协议适配。它不直接写 SQL，
+- `backend/app/api/routes/`：HTTP 路由、请求/响应 DTO、鉴权和协议适配。它不直接写 SQL，
   也不实现知识抽取细节。
 - `backend/app/application/`：面向用户用例的编排和服务接口。它协调领域能力、
   Repository 与 Provider 抽象，不绑定 FastAPI Request，也不把具体 SQL 塞进用例。
@@ -73,8 +73,9 @@ frontend → API → Application → shared
 - `frontend/`：只依赖稳定的 HTTP API 契约，不导入 Python 内部模块或 SQLite。
 - `desktop/`：只负责桌面窗口、前端产物和 Sidecar 生命周期，不承载业务抽取规则。
 
-当前 HTTP 路由实现仍位于 `backend/app/routes/`；Application 和 Infrastructure 已按
-目标职责分别位于 `backend/app/application/` 与 `backend/app/infrastructure/`。R8
+D2 已将 HTTP 路由和请求/响应模型迁移到 `backend/app/api/routes/` 与 `backend/app/api/schemas.py`；
+Factory、测试和路由内部引用均已同步，Application 和 Infrastructure 已按目标职责分别位于
+`backend/app/application/` 与 `backend/app/infrastructure/`。R8
 已清理 `services/`、`jobs.py`、`database.py` 和 `repositories.py` 等临时兼容入口，
 后续若迁移 HTTP 路由，应单独调整 import、请求边界和测试，不能把这次清理当作 API
 目录迁移。
